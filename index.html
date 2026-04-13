@@ -96,6 +96,18 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 </style>
 </head>
 <body>
+  <div style="max-width:1320px;margin:20px auto;padding:0 20px;">
+  <div style="background:#ffffff;border:1px solid #eadfd6;border-radius:20px;padding:16px;">
+    <div id="loginBox">
+      <div style="font-size:18px;font-weight:800;margin-bottom:10px;">登入系統</div>
+      <input id="loginEmail" placeholder="Email" style="width:200px;margin-right:10px;">
+      <input id="loginPassword" type="password" placeholder="密碼" style="width:200px;margin-right:10px;">
+      <button onclick="loginTest()">登入</button>
+    </div>
+
+    <div id="loginInfo" style="margin-top:10px;color:#6b7280;"></div>
+  </div>
+</div>
 <div class="wrap">
   <div class="hero">
     <div>
@@ -877,6 +889,17 @@ init();
     location.reload();
   }
   initAuth();
+  function loginTest() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+
+  if (!email || !password) {
+    document.getElementById('loginInfo').innerText = '請輸入帳號與密碼';
+    return;
+  }
+
+  document.getElementById('loginInfo').innerText = '登入成功（測試模式）';
+}
 </script>
 </body>
 </html>
