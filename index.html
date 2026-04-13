@@ -1,47 +1,3 @@
-Skip to content
-chiangching317-ctrl
-oba-hair-pos
-Repository navigation
-Code
-Issues
-Pull requests
-Actions
-Projects
-Wiki
-Security and quality
-Insights
-Settings
-Commit 4f2a5a2
-chiangching317-ctrl
-chiangching317-ctrl
-authored
-18 hours ago
-·
-·
-Verified
-Add files via upload
-main
-1 parent 
-fadd0a4
- commit 
-4f2a5a2
-File tree
-Filter files…
-index.html
-1 file changed
-+793
--0
-lines changed
-Search within code
- 
-Customizable line height
-The default line height has been increased for improved accessibility. You can choose to enable a more compact line height from the view settings menu.
-
-‎index.html‎
-+793
-Lines changed: 793 additions & 0 deletions
-Original file line number	Diff line number	Diff line change
-@@ -0,0 +1,793 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -148,12 +104,14 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     </div>
     <div class="pill">現金 / 轉帳 / LINE Pay　｜　抽成已套用</div>
   </div>
+
   <div class="tabs">
     <button class="tab active" data-tab="cashier">收款出單</button>
     <button class="tab" data-tab="assign">刷單入業績</button>
     <button class="tab locked" data-tab="report">報表 🔒</button>
     <button class="tab locked" data-tab="manage">員工 / 品項 / 密碼 🔒</button>
   </div>
+
   <div class="panel" id="tab-cashier">
     <div class="shell">
       <div class="card">
@@ -170,6 +128,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
           <button class="btn btn-danger" id="btnRefundQuick">🧾 查單 / 退票</button>
         </div>
       </div>
+
       <div class="card">
         <div class="section-title">本單明細</div>
         <div class="bill" id="cashierBill"></div>
@@ -190,6 +149,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       </div>
     </div>
   </div>
+
   <div class="panel hidden" id="tab-assign">
     <div class="shell">
       <div class="card">
@@ -215,6 +175,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         <div class="section-title" style="font-size:18px">我的今日單號列表</div>
         <div class="small-list" id="myTodayOrderList">今天還沒有單</div>
       </div>
+
       <div class="card">
         <div class="section-title">單據內容</div>
         <div class="bill" id="assignPreview">請先掃描或輸入單號</div>
@@ -227,6 +188,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       </div>
     </div>
   </div>
+
   <div class="panel hidden" id="tab-report">
     <div class="stack">
       <div class="card">
@@ -243,6 +205,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
           <div class="stat"><div class="k">LINE Pay總額</div><div class="v" id="dayLine">$0</div></div>
         </div>
       </div>
+
       <div class="card">
         <div class="section-title">本月報表</div>
         <div class="stats">
@@ -257,6 +220,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
           <div class="stat"><div class="k">LINE Pay總額</div><div class="v" id="monthLine">$0</div></div>
         </div>
       </div>
+
       <div class="card">
         <div class="section-title">設計師統計</div>
         <div class="stats">
@@ -265,6 +229,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
           <div class="stat"><div class="k">資料匯出</div><div class="v"><button class="btn btn-soft" id="btnExport">匯出</button></div></div>
         </div>
       </div>
+
       <div class="card">
         <div class="row" style="justify-content:space-between">
           <div class="section-title">今日紀錄</div>
@@ -274,6 +239,7 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
       </div>
     </div>
   </div>
+
   <div class="panel hidden" id="tab-manage">
     <div class="stack">
       <div class="card">
@@ -283,10 +249,12 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
         </div>
         <div class="note">第一次點進管理區時會先要求你自訂密碼。</div>
       </div>
+
       <div class="card">
         <div class="section-title">員工資料 / 抽成設定</div>
         <div id="staffCards"></div>
       </div>
+
       <div class="card">
         <div class="section-title">品項管理</div>
         <div class="grid3">
@@ -300,10 +268,15 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
     </div>
   </div>
 </div>
+
 <dialog id="payDialog"><div class="modal"><h3>確認收款與出單</h3><div id="paySummary" class="note"></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnConfirmPay">確認收款並列印</button><button class="btn btn-soft" id="btnCancelPay">取消</button></div></div></dialog>
+
 <dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="note">掃描條碼後會自動顯示單據內容，再按確認退票。</div><div class="space"></div><div class="label">掃描 / 輸入單號</div><input id="refundOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-000001" /><div class="space"></div><div class="label">退票原因</div><textarea id="refundReason" placeholder="例如：客人取消、重開單、操作錯誤"></textarea><div class="space"></div><div id="refundPreview" class="bill">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
+
 <dialog id="receiptDialog"><div class="modal"><h3>品牌單據預覽</h3><div class="note">單據底部有條碼，掃描後可查單、退票、刷單。</div><div class="space"></div><div class="receiptWrap"><div id="printArea" class="receipt"></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPrint">列印單據</button><button class="btn btn-soft" id="btnCloseReceipt">關閉</button></div></div></dialog>
+
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="note" id="pwdNote">報表、員工資料、品項管理都要密碼。</div><div class="space"></div><input id="pwdOld" class="input" type="password" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
+
 <script>
 const KEY = 'oba_hair_v8_pro';
 const defaultState = {
@@ -327,9 +300,11 @@ const defaultState = {
   orders: [],
   refunds: []
 };
+
 let state = loadState();
 let pendingLockedTab = '';
 let pwdMode = 'enter';
+
 function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
 function loadState(){
   try{
@@ -422,6 +397,7 @@ document.getElementById('btnPwdOk').onclick = ()=>{
   }
 };
 document.getElementById('btnChangePwd').onclick = ()=> openPassword('change');
+
 function renderCashier(){
   document.getElementById('todayText').textContent = todayStr();
   document.getElementById('nextOrderNo').textContent = currentOrderNo();
@@ -522,6 +498,7 @@ function openReceipt(order){
 }
 document.getElementById('btnPrint').onclick = ()=> window.print();
 document.getElementById('btnCloseReceipt').onclick = ()=> document.getElementById('receiptDialog').close();
+
 function renderAssign(){
   const sel = document.getElementById('assignDesigner');
   const currentVal = sel.value || 'JEAN';
@@ -533,6 +510,7 @@ function renderAssign(){
 document.getElementById('assignDesigner').onchange = ()=>{ renderAssignPreview(); renderMyStats(); };
 document.getElementById('assignOrderNo').addEventListener('input', ()=>{ renderAssignPreview(); renderMyStats(); });
 document.getElementById('assignOrderNo').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAssignOrder').click(); } });
+
 function renderAssignPreview(){
   const code = document.getElementById('assignOrderNo').value.trim();
   const order = state.orders.find(o=>o.id===code);
@@ -572,6 +550,7 @@ document.getElementById('btnAssignOrder').onclick = ()=>{
   renderReport();
   alert('已成功掛入業績');
 };
+
 function openRefund(code=''){
   document.getElementById('refundOrderNo').value = code;
   document.getElementById('refundReason').value = '';
@@ -584,6 +563,7 @@ document.getElementById('btnAssignRefund').onclick = ()=> openRefund(document.ge
 document.getElementById('btnCloseRefund').onclick = ()=> document.getElementById('refundDialog').close();
 document.getElementById('refundOrderNo').addEventListener('input', renderRefundPreview);
 document.getElementById('refundOrderNo').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); renderRefundPreview(); } });
+
 function renderRefundPreview(){
   const code = document.getElementById('refundOrderNo').value.trim();
   const order = state.orders.find(o=>o.id===code);
@@ -621,6 +601,7 @@ document.getElementById('btnDoRefund').onclick = ()=>{
   document.getElementById('refundDialog').close();
   alert('已完成退票');
 };
+
 function renderMyStats(){
   const id = document.getElementById('assignDesigner').value || 'JEAN';
   const today = todayStr(), month = monthStr();
@@ -639,33 +620,39 @@ function renderMyStats(){
     box.innerHTML = todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join('');
   }
 }
+
 function renderReport(){
   const today = todayStr(), month = monthStr();
   const dayOrders = state.orders.filter(o=>o.date===today && !o.refunded);
   const monthOrders = state.orders.filter(o=>o.date.startsWith(month) && !o.refunded);
   const dayRefunds = state.refunds.filter(r=>r.date===today);
   const monthRefunds = state.refunds.filter(r=>r.date.startsWith(month));
+
   const sumByMethod = (orders, method)=>orders.filter(o=>o.paymentMethod===method).reduce((s,o)=>s+o.total,0);
   const designerStats = (id, orders)=>({
     sales: orders.filter(o=>o.assignedDesignerId===id).reduce((s,o)=>s+o.total,0),
     comm: orders.filter(o=>o.assignedDesignerId===id).reduce((s,o)=>s+o.commission,0)
   });
+
   document.getElementById('daySales').textContent = money(dayOrders.reduce((s,o)=>s+o.total,0));
   document.getElementById('dayRefund').textContent = money(dayRefunds.reduce((s,o)=>s+o.total,0));
   document.getElementById('dayCount').textContent = dayOrders.length;
   document.getElementById('dayCash').textContent = money(sumByMethod(dayOrders,'現金'));
   document.getElementById('dayTransfer').textContent = money(sumByMethod(dayOrders,'轉帳'));
   document.getElementById('dayLine').textContent = money(sumByMethod(dayOrders,'LINE Pay'));
+
   document.getElementById('monthSales').textContent = money(monthOrders.reduce((s,o)=>s+o.total,0));
   document.getElementById('monthRefund').textContent = money(monthRefunds.reduce((s,o)=>s+o.total,0));
   document.getElementById('monthCount').textContent = monthOrders.length;
   document.getElementById('monthCash').textContent = money(sumByMethod(monthOrders,'現金'));
   document.getElementById('monthTransfer').textContent = money(sumByMethod(monthOrders,'轉帳'));
   document.getElementById('monthLine').textContent = money(sumByMethod(monthOrders,'LINE Pay'));
+
   const jean = designerStats('JEAN', monthOrders);
   const alan = designerStats('ALAN', monthOrders);
   document.getElementById('jeanStats').textContent = `${money(jean.sales)} / ${money(jean.comm)}`;
   document.getElementById('alanStats').textContent = `${money(alan.sales)} / ${money(alan.comm)}`;
+
   const rows = [
     ...dayOrders.map(o=>({kind:'sale', ...o})),
     ...dayRefunds.map(r=>({kind:'refund', ...r}))
@@ -703,6 +690,7 @@ function renderReport(){
     }).join('')}
   `;
 }
+
 function renderManage(){
   const names = activeItems().map(i=>i.name);
   document.getElementById('staffCards').innerHTML = state.staff.map(s=>`
@@ -718,6 +706,7 @@ function renderManage(){
       </div>
     </div>
   `).join('');
+
   document.getElementById('itemManageList').innerHTML = state.items.map(i=>`
     <div class="card" style="margin-bottom:10px">
       <div class="grid3">
@@ -775,6 +764,7 @@ document.getElementById('btnAddItem').onclick = ()=>{
   renderManage();
   alert('已新增品項');
 };
+
 document.getElementById('btnExport').onclick = ()=>{
   const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
   const a = document.createElement('a');
@@ -790,6 +780,7 @@ document.getElementById('btnResetAll').onclick = ()=>{
   saveState();
   init();
 };
+
 function init(){
   renderCashier();
   renderAssign();
@@ -800,11 +791,3 @@ init();
 </script>
 </body>
 </html>
-0 commit comments
-Comments
-0
- (0)
-Comment
-You're not receiving notifications from this thread.
-
-There are no files selected for viewing
