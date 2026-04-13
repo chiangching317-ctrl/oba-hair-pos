@@ -789,5 +789,93 @@ function init(){
 }
 init();
 </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+  window.AUTH_CONFIG = {
+    supabaseUrl: '',
+    supabaseAnonKey: '',
+    appName: 'OBA Hair POS'
+  };
+
+  window.AUTH_STATE = {
+    client: null,
+    user: null,
+    profile: null,
+    ready: false
+  };
+
+  function hasRole(allowedRoles = []) {
+    const role = window.AUTH_STATE?.profile?.role;
+    return allowedRoles.includes(role);
+  }
+
+  function isOwner() {
+    return window.AUTH_STATE?.profile?.role === 'owner';
+  }
+
+  function isBoss() {
+    return window.AUTH_STATE?.profile?.role === 'boss';
+  }
+
+  function isManager() {
+    return window.AUTH_STATE?.profile?.role === 'manager';
+  }
+
+  function isDesigner() {
+    return window.AUTH_STATE?.profile?.role === 'designer';
+  }
+
+  async function initAuth() {
+    const { supabaseUrl, supabaseAnonKey } = window.AUTH_CONFIG;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.log('AUTH 暫未啟用：尚未填入 Supabase 設定');
+      window.AUTH_STATE.ready = true;
+      return;
+    }
+
+    const { createClient } = window.supabase;
+    const client = createClient(supabaseUrl, supabaseAnonKey);
+    window.AUTH_STATE.client = client;
+
+    const { data: userResult, error: userError } = await client.auth.getUser();
+
+    if (userError) {
+      console.error('取得使用者失敗', userError);
+      window.AUTH_STATE.ready = true;
+      return;
+    }
+
+    const user = userResult?.user || null;
+    window.AUTH_STATE.user = user;
+
+    if (!user) {
+      window.AUTH_STATE.ready = true;
+      return;
+    }
+
+    const { data: profile, error: profileError } = await client
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError) {
+      console.error('取得 profiles 失敗', profileError);
+      window.AUTH_STATE.ready = true;
+      return;
+    }
+
+    window.AUTH_STATE.profile = profile || null;
+    window.AUTH_STATE.ready = true;
+  }
+
+  async function signOutAuth() {
+    if (!window.AUTH_STATE.client) return;
+    await window.AUTH_STATE.client.auth.signOut();
+    location.reload();
+  }
+</script>
 </body>
 </html>
