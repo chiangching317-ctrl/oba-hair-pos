@@ -788,6 +788,14 @@ function init(){
   renderManage();
 }
 init();
+  async function checkLogin() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    showLogin();
+  }
+}
+
+checkLogin();
 </script>
 </body>
 </html>
