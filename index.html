@@ -408,18 +408,14 @@ if (pwdMode === 'boss_or_owner') {
     return;
   }
 
-  if (oldPwd === BOSS_PASSWORD) {
-    document.getElementById('passwordDialog').close();
-setActiveTab(pendingLockedTab);
-focusScanIfNeeded(pendingLockedTab);
-lockEditButtons();
-return;
-    window.USER_ROLE = 'boss';
-    document.getElementById('passwordDialog').close();
-    setActiveTab(pendingLockedTab);
-    focusScanIfNeeded(pendingLockedTab);
-    return;
-  }
+if (oldPwd === BOSS_PASSWORD) {
+  window.USER_ROLE = 'boss';
+  document.getElementById('passwordDialog').close();
+  setActiveTab(pendingLockedTab);
+  focusScanIfNeeded(pendingLockedTab);
+ lockEditButtons();
+  return;
+}
 
   alert('密碼錯誤');
   return;
