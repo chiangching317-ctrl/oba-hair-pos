@@ -356,8 +356,12 @@ function calcCommission(order, staffId){
 function setActiveTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));
+ 
   document.getElementById('tab-'+name).classList.remove('hidden');
+  if (window.USER_ROLE === 'boss') {
+  setTimeout(lockEditButtons, 0);
 }
+
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick = () => {
     const name = tab.dataset.tab;
@@ -366,6 +370,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
      openPassword(name === 'report' ? 'boss_or_owner' : 'owner_only');
       return;
     }
+    
     setActiveTab(name);
     focusScanIfNeeded(name);
   };
