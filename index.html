@@ -967,23 +967,45 @@ lockEditButtons();
   });
 }
   function lockEditButtons() {
+  // 所有按鈕（除了 tab）
   document.querySelectorAll('button').forEach(btn => {
     if (btn.classList.contains('tab')) return;
-
     btn.disabled = true;
-    btn.style.opacity = '0.4';
+    btn.style.opacity = '0.45';
     btn.style.cursor = 'not-allowed';
   });
 
+  // 所有輸入框
   document.querySelectorAll('input, textarea, select').forEach(el => {
     el.disabled = true;
+    el.readOnly = true;
     el.style.opacity = '0.7';
     el.style.cursor = 'not-allowed';
   });
 
+  // contenteditable
   document.querySelectorAll('[contenteditable="true"]').forEach(el => {
     el.setAttribute('contenteditable', 'false');
   });
+
+  // 收款出單：卡片不能點
+  document.querySelectorAll('#tab-cashier .card, #tab-cashier [onclick]').forEach(el => {
+    el.style.pointerEvents = 'none';
+    el.style.cursor = 'not-allowed';
+  });
+
+  // 刷單入業績：全部鎖
+  document.querySelectorAll('#tab-assign *').forEach(el => {
+    el.style.pointerEvents = 'none';
+    el.style.opacity = '0.7';
+  });
+
+  // 管理頁整頁鎖
+  const managePanel = document.getElementById('tab-manage');
+  if (managePanel) {
+    managePanel.style.pointerEvents = 'none';
+    managePanel.style.opacity = '0.7';
+  }
 }
 </script>
 </body>
