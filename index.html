@@ -953,29 +953,36 @@ if (isBossView) {
   }
 
   window.USER_ROLE = 'boss';
-
+lockEditButtons();
   document.addEventListener('DOMContentLoaded', () => {
     lockEditButtons();
   });
 }
-if (isBossView) {
-  
-    const form = document.querySelector('.card form');
-    if (form) form.style.display = 'none';
 
-    document.querySelectorAll('button').forEach(btn => {
-      const text = btn.innerText || '';
-      if (
-        text.includes('新增') ||
-        text.includes('刪除') ||
-        text.includes('修改') ||
-        text.includes('開單') ||
-        text.includes('送出')
-      ) {
-        btn.style.display = 'none';
+
+     
       }
 
 
+  });
+}
+  function lockEditButtons() {
+  document.querySelectorAll('button').forEach(btn => {
+    if (btn.classList.contains('tab')) return;
+
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+    btn.style.cursor = 'not-allowed';
+  });
+
+  document.querySelectorAll('input, textarea, select').forEach(el => {
+    el.disabled = true;
+    el.style.opacity = '0.7';
+    el.style.cursor = 'not-allowed';
+  });
+
+  document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+    el.setAttribute('contenteditable', 'false');
   });
 }
 </script>
