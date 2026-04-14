@@ -363,7 +363,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
     const name = tab.dataset.tab;
     if(tab.classList.contains('locked')){
       pendingLockedTab = name;
-      openPassword('enter');
+     openPassword(name === 'report' ? 'boss_or_owner' : 'owner_only');
       return;
     }
     setActiveTab(name);
@@ -375,6 +375,7 @@ function focusScanIfNeeded(name){
 }
 function openPassword(mode){
   pwdMode = mode;
+  window.USER_ROLE = null;
   document.getElementById('pwdOld').value = '';
   document.getElementById('pwdNew').value = '';
   document.getElementById('pwdNewWrap').classList.toggle('hidden', mode!=='change');
@@ -394,6 +395,48 @@ document.getElementById('btnPwdOk').onclick = ()=>{
     alert('密碼已修改');
     return;
   }
+  const BOSS_PASSWORD = '269527';
+
+if (pwdMode === 'boss_or_owner') {
+  if (oldPwd === state.managementPassword) {
+    window.USER_ROLE = 'owner';
+    document.getElementById('passwordDialog').close();
+    setActiveTab(pendingLockedTab);
+    focusScanIfNeeded(pendingLockedTab);
+
+ 
+    return;
+  }
+
+  if (oldPwd === BOSS_PASSWORD) {
+    document.getElementById('passwordDialog').close();
+setActiveTab(pendingLockedTab);
+focusScanIfNeeded(pendingLockedTab);
+lockEditButtons();
+return;
+    window.USER_ROLE = 'boss';
+    document.getElementById('passwordDialog').close();
+    setActiveTab(pendingLockedTab);
+    focusScanIfNeeded(pendingLockedTab);
+    return;
+  }
+
+  alert('密碼錯誤');
+  return;
+}
+
+if (pwdMode === 'owner_only') {
+  if (oldPwd !== state.managementPassword) {
+    alert('密碼錯誤');
+    return;
+  }
+
+  window.USER_ROLE = 'owner';
+  document.getElementById('passwordDialog').close();
+  setActiveTab(pendingLockedTab);
+  focusScanIfNeeded(pendingLockedTab);
+  return;
+}
   if(!state.managementPassword){
     if(!oldPwd){ alert('請先設定密碼'); return; }
     state.managementPassword = oldPwd;
