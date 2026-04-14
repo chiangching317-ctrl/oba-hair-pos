@@ -905,8 +905,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const isBossView = urlParams.get('view') === 'boss';
 
 if (isBossView) {
-  document.addEventListener('DOMContentLoaded', () => {
-
+  
     const form = document.querySelector('.card form');
     if (form) form.style.display = 'none';
 
@@ -921,7 +920,7 @@ if (isBossView) {
       ) {
         btn.style.display = 'none';
       }
-    });
+
 
   });
 }
