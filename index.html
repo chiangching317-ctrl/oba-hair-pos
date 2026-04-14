@@ -900,6 +900,31 @@ init();
 
   document.getElementById('loginInfo').innerText = '登入成功（測試模式）';
 }
+  // 判斷是否為老闆模式
+const urlParams = new URLSearchParams(window.location.search);
+const isBossView = urlParams.get('view') === 'boss';
+
+if (isBossView) {
+  document.addEventListener('DOMContentLoaded', () => {
+
+    const form = document.querySelector('.card form');
+    if (form) form.style.display = 'none';
+
+    document.querySelectorAll('button').forEach(btn => {
+      const text = btn.innerText || '';
+      if (
+        text.includes('新增') ||
+        text.includes('刪除') ||
+        text.includes('修改') ||
+        text.includes('開單') ||
+        text.includes('送出')
+      ) {
+        btn.style.display = 'none';
+      }
+    });
+
+  });
+}
 </script>
 </body>
 </html>
