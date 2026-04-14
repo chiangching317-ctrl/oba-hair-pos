@@ -998,6 +998,11 @@ lockEditButtons();
     el.style.pointerEvents = 'none';
     el.style.cursor = 'not-allowed';
   });
+    // 🔥 老闆模式：整個收款區鎖死
+const cashier = document.querySelector('#tab-cashier');
+if (cashier) {
+  cashier.style.pointerEvents = 'none';
+}
 
   // 刷單入業績：全部鎖
   document.querySelectorAll('#tab-assign *').forEach(el => {
