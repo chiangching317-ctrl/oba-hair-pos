@@ -942,7 +942,22 @@ init();
   // 判斷是否為老闆模式
 const urlParams = new URLSearchParams(window.location.search);
 const isBossView = urlParams.get('view') === 'boss';
+const BOSS_VIEW_PASSWORD =  '269527';
 
+if (isBossView) {
+  const input = prompt('請輸入老闆查看密碼');
+
+  if (input !== BOSS_VIEW_PASSWORD) {
+    document.body.innerHTML = '<div style="padding:40px;font-size:20px;">密碼錯誤，無法查看</div>';
+    throw new Error('Boss view password denied');
+  }
+
+  window.USER_ROLE = 'boss';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    lockEditButtons();
+  });
+}
 if (isBossView) {
   
     const form = document.querySelector('.card form');
