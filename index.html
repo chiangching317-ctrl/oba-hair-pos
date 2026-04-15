@@ -523,6 +523,8 @@ document.getElementById('btnConfirmPay').onclick = ()=>{
     items: clone(state.cart),
     total: state.cart.reduce((s,i)=>s+i.price,0),
     paymentMethod: state.pendingPay,
+    cashierId: CURRENT_CASHIER?.id || '',
+cashierName: CURRENT_CASHIER?.name || '',
     assignedDesignerId: '',
     assignedDesignerName: '',
     commission: 0,
