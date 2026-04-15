@@ -960,19 +960,7 @@ if (isBossView) {
     const form = document.querySelector('.card form');
     if (form) form.style.display = 'none';
 
-    document.querySelectorAll('button').forEach(btn => {
-      const text = btn.innerText || '';
-      if (
-        text.includes('新增') ||
-        text.includes('刪除') ||
-        text.includes('修改') ||
-        text.includes('開單') ||
-        text.includes('送出')
-      ) {
-        btn.style.display = 'none';
-      }
-        });
-  }
+  
 let CURRENT_CASHIER = null;
 const CASHIER_LIST = {
 
