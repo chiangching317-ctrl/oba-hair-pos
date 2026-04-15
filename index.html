@@ -520,7 +520,9 @@ document.querySelectorAll('[data-pay]').forEach(btn=>{
   if(CURRENT_CASHIER){
   if(state.cart.length===0){ alert('請先加入項目'); return; }
   state.pendingPay = btn.dataset.pay;
-  return;
+document.getElementById('paySummary').textContent = '單號：' + currentOrderNo() + '｜總金額：' + money(state.cart.reduce((s,i)=>s+i.price,0)) + '｜收款方式：' + btn.dataset.pay;
+document.getElementById('payDialog').showModal();
+    return;
 }  
   let pin = window.prompt("請輸入收銀PIN");
     const cashier = CASHIER_LIST[pin];
