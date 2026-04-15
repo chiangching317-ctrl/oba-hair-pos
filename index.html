@@ -321,7 +321,12 @@ const defaultState = {
 let state = loadState();
 let pendingLockedTab = '';
 let pwdMode = 'enter';
+let CURRENT_CASHIER = null;
 
+const CASHIER_LIST = {
+  "1234": { id: "JEAN", name: "JEAN" },
+  "5678": { id: "ALAN", name: "ALAN" }
+};
 function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
 function loadState(){
   try{
@@ -497,7 +502,9 @@ document.querySelectorAll('[data-pay]').forEach(btn=>{
   btn.onclick = ()=>{
    
   let pin = window.prompt("請輸入收銀PIN");
-    if (pin !== "1234") { alert("PIN錯誤"); return; }
+    const cashier = CASHIER_LIST[pin];
+if (!cashier) { alert("PIN錯誤"); return; }
+CURRENT_CASHIER = cashier;
     if(state.cart.length===0){ alert('請先加入項目'); return; }
     const method = btn.dataset.pay;
     state.pendingPay = method;
