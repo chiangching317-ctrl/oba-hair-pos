@@ -96,25 +96,13 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 </style>
 </head>
 <body>
-  <div style="max-width:1320px;margin:20px auto;padding:0 20px;">
-  <div style="background:#ffffff;border:1px solid #eadfd6;border-radius:20px;padding:16px;">
-    <div id="loginBox">
-      <div style="font-size:18px;font-weight:800;margin-bottom:10px;">登入系統</div>
-      <input id="loginEmail" placeholder="Email" style="width:200px;margin-right:10px;">
-      <input id="loginPassword" type="password" placeholder="密碼" style="width:200px;margin-right:10px;">
-      <button onclick="loginTest()">登入</button>
-    </div>
-
-    <div id="loginInfo" style="margin-top:10px;color:#6b7280;"></div>
-  </div>
-</div>
 <div class="wrap">
   <div class="hero">
     <div>
       <h1 class="title">OBA Hair 收銀系統</h1>
       <div class="sub">80mm 單據、單號條碼、掃描查單 / 退票 / 刷單、設計師即時業績、管理區密碼保護。</div>
     </div>
-    <div class="pill">現金 / 轉帳 / LINE Pay　｜　抽成已套用</div>
+    <div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 未登入收銀PIN</div>
   </div>
 
   <div class="tabs">
@@ -290,11 +278,6 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="note" id="pwdNote">報表、員工資料、品項管理都要密碼。</div><div class="space"></div><input id="pwdOld" class="input" type="password" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 
 <script>
-  // 🔒 限制只能在你的網址使用
-if (!location.hostname.includes('chiangching317-ctrl.github.io')) {
-  document.body.innerHTML = '未授權使用';
-  throw new Error('Unauthorized');
-}
 const KEY = 'oba_hair_v8_pro';
 const defaultState = {
   managementPassword: '',
@@ -302,8 +285,8 @@ const defaultState = {
   cart: [],
   pendingPay: '',
   staff: [
-    {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}},
-    {id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7, '護髮':0.7, '加價':0.7, '隔離':0.7}}
+    {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}, permissions:['report','manage']},
+    {id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7, '護髮':0.7, '加價':0.7, '隔離':0.7}, permissions:[]}
   ],
   items: [
     {id:'cut', name:'cut', price:300, active:true},
@@ -324,9 +307,10 @@ let pwdMode = 'enter';
 let CURRENT_CASHIER = null;
 
 const CASHIER_LIST = {
-  "1234": { id: "JEAN", name: "JEAN" },
-  "5678": { id: "ALAN", name: "ALAN" }
+  '1234': { id: 'JEAN', name: 'JEAN' },
+  '5678': { id: 'ALAN', name: 'ALAN' }
 };
+
 function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
 function loadState(){
   try{
@@ -363,35 +347,51 @@ function calcCommission(order, staffId){
     return sum + Math.round(item.price * rate);
   }, 0);
 }
+function updateCashierDisplay(){
+  const el = document.getElementById('cashierDisplay');
+  if(!el) return;
+  el.textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 目前經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 未登入收銀PIN';
+}
 function setActiveTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===name));
   document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));
   document.getElementById('tab-'+name).classList.remove('hidden');
 }
+function focusScanIfNeeded(name){
+  if(name==='assign') setTimeout(()=>document.getElementById('assignOrderNo').focus(), 50);
+}
+function requireCashier(){
+  if(CURRENT_CASHIER) return true;
+  const pin = window.prompt('請輸入收銀PIN');
+  const cashier = CASHIER_LIST[pin];
+  if(!cashier){ alert('PIN錯誤'); return false; }
+  CURRENT_CASHIER = cashier;
+  updateCashierDisplay();
+  return true;
+}
+
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick = () => {
     const name = tab.dataset.tab;
     if(tab.classList.contains('locked')){
       pendingLockedTab = name;
-     openPassword(name === 'report' ? 'boss_or_owner' : 'owner_only');
+      openPassword(name);
       return;
     }
     setActiveTab(name);
     focusScanIfNeeded(name);
   };
 });
-function focusScanIfNeeded(name){
-  if(name==='assign') setTimeout(()=>document.getElementById('assignOrderNo').focus(), 50);
-}
-function openPassword(mode){
-  pwdMode = mode;
-  window.USER_ROLE = null;
+
+function openPassword(targetTab){
+  pwdMode = targetTab;
   document.getElementById('pwdOld').value = '';
   document.getElementById('pwdNew').value = '';
-  document.getElementById('pwdNewWrap').classList.toggle('hidden', mode!=='change');
-  document.getElementById('pwdTitle').textContent = mode==='change' ? '修改管理密碼' : (state.managementPassword ? '輸入管理密碼' : '第一次設定管理密碼');
+  document.getElementById('pwdNewWrap').classList.add('hidden');
+  document.getElementById('pwdTitle').textContent = state.managementPassword ? '輸入管理密碼' : '第一次設定管理密碼';
   document.getElementById('passwordDialog').showModal();
 }
+
 document.getElementById('btnPwdCancel').onclick = ()=> document.getElementById('passwordDialog').close();
 document.getElementById('btnPwdOk').onclick = ()=>{
   const oldPwd = document.getElementById('pwdOld').value.trim();
@@ -405,55 +405,16 @@ document.getElementById('btnPwdOk').onclick = ()=>{
     alert('密碼已修改');
     return;
   }
-  const BOSS_PASSWORD = '269527';
 
-if (pwdMode === 'boss_or_owner') {
-  if (oldPwd === state.managementPassword) {
-    window.USER_ROLE = 'owner';
-    document.getElementById('passwordDialog').close();
-    setActiveTab(pendingLockedTab);
-    focusScanIfNeeded(pendingLockedTab);
-
- 
-    return;
-  }
-
-  if (oldPwd === BOSS_PASSWORD) {
-    document.getElementById('passwordDialog').close();
-setActiveTab(pendingLockedTab);
-focusScanIfNeeded(pendingLockedTab);
-lockEditButtons();
-return;
-    window.USER_ROLE = 'boss';
-    document.getElementById('passwordDialog').close();
-    setActiveTab(pendingLockedTab);
-    focusScanIfNeeded(pendingLockedTab);
-    return;
-  }
-
-  alert('密碼錯誤');
-  return;
-}
-
-if (pwdMode === 'owner_only') {
-  if (oldPwd !== state.managementPassword) {
-    alert('密碼錯誤');
-    return;
-  }
-
-  window.USER_ROLE = 'owner';
-  document.getElementById('passwordDialog').close();
-  setActiveTab(pendingLockedTab);
-  focusScanIfNeeded(pendingLockedTab);
-  return;
-}
   if(!state.managementPassword){
     if(!oldPwd){ alert('請先設定密碼'); return; }
     state.managementPassword = oldPwd;
     saveState();
-  }else{
-    if(oldPwd !== state.managementPassword){ alert('密碼錯誤'); return; }
+  }else if(oldPwd !== state.managementPassword){
+    alert('密碼錯誤');
+    return;
   }
+
   document.getElementById('passwordDialog').close();
   if(pendingLockedTab){
     setActiveTab(pendingLockedTab);
@@ -461,7 +422,14 @@ if (pwdMode === 'owner_only') {
     pendingLockedTab = '';
   }
 };
-document.getElementById('btnChangePwd').onclick = ()=> openPassword('change');
+document.getElementById('btnChangePwd').onclick = ()=>{
+  pwdMode = 'change';
+  document.getElementById('pwdOld').value = '';
+  document.getElementById('pwdNew').value = '';
+  document.getElementById('pwdNewWrap').classList.remove('hidden');
+  document.getElementById('pwdTitle').textContent = '修改管理密碼';
+  document.getElementById('passwordDialog').showModal();
+};
 
 function renderCashier(){
   document.getElementById('todayText').textContent = todayStr();
@@ -493,18 +461,16 @@ function renderCart(){
   document.getElementById('cashierTotal').textContent = money(total);
   document.getElementById('cashierStatus').textContent = total>0 ? '待收款' : '未結帳';
 }
+
 document.getElementById('btnClearCart').onclick = ()=>{
   state.cart = [];
   saveState();
   renderCart();
 };
+
 document.querySelectorAll('[data-pay]').forEach(btn=>{
   btn.onclick = ()=>{
-   
-  let pin = window.prompt("請輸入收銀PIN");
-    const cashier = CASHIER_LIST[pin];
-if (!cashier) { alert("PIN錯誤"); return; }
-CURRENT_CASHIER = cashier;
+    if(!requireCashier()) return;
     if(state.cart.length===0){ alert('請先加入項目'); return; }
     const method = btn.dataset.pay;
     state.pendingPay = method;
@@ -514,6 +480,7 @@ CURRENT_CASHIER = cashier;
     document.getElementById('payDialog').showModal();
   };
 });
+
 document.getElementById('btnCancelPay').onclick = ()=> document.getElementById('payDialog').close();
 document.getElementById('btnConfirmPay').onclick = ()=>{
   const order = {
@@ -524,7 +491,7 @@ document.getElementById('btnConfirmPay').onclick = ()=>{
     total: state.cart.reduce((s,i)=>s+i.price,0),
     paymentMethod: state.pendingPay,
     cashierId: CURRENT_CASHIER?.id || '',
-cashierName: CURRENT_CASHIER?.name || '',
+    cashierName: CURRENT_CASHIER?.name || '',
     assignedDesignerId: '',
     assignedDesignerName: '',
     commission: 0,
@@ -542,6 +509,7 @@ cashierName: CURRENT_CASHIER?.name || '',
   document.getElementById('payDialog').close();
   openReceipt(order);
 };
+
 function openReceipt(order){
   const area = document.getElementById('printArea');
   area.innerHTML = `
@@ -552,7 +520,7 @@ function openReceipt(order){
     <div class="r"><span>日期</span><span>${order.date}</span></div>
     <div class="r"><span>時間</span><span>${order.time}</span></div>
     <div class="r"><span>收款</span><span>${order.paymentMethod}</span></div>
-   <div class="r"><span>經手人</span><span>${order.cashierName || '-'}</span></div>
+    <div class="r"><span>經手人</span><span>${order.cashierName || '-'}</span></div>
     <div class="line"></div>
     ${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}
     <div class="line"></div>
@@ -569,6 +537,7 @@ function openReceipt(order){
     }catch(e){}
   }, 10);
 }
+
 document.getElementById('btnPrint').onclick = ()=> window.print();
 document.getElementById('btnCloseReceipt').onclick = ()=> document.getElementById('receiptDialog').close();
 
@@ -580,6 +549,7 @@ function renderAssign(){
   renderMyStats();
   setTimeout(()=>document.getElementById('assignOrderNo').focus(), 50);
 }
+
 document.getElementById('assignDesigner').onchange = ()=>{ renderAssignPreview(); renderMyStats(); };
 document.getElementById('assignOrderNo').addEventListener('input', ()=>{ renderAssignPreview(); renderMyStats(); });
 document.getElementById('assignOrderNo').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); document.getElementById('btnAssignOrder').click(); } });
@@ -607,6 +577,7 @@ function renderAssignPreview(){
   document.getElementById('assignShowCommission').textContent = money(commission);
   document.getElementById('myThisOrder').textContent = `${money(order.total)} / ${money(commission)}`;
 }
+
 document.getElementById('btnAssignOrder').onclick = ()=>{
   const code = document.getElementById('assignOrderNo').value.trim();
   const staffId = document.getElementById('assignDesigner').value || 'JEAN';
@@ -631,6 +602,7 @@ function openRefund(code=''){
   document.getElementById('refundDialog').showModal();
   setTimeout(()=>document.getElementById('refundOrderNo').focus(), 50);
 }
+
 document.getElementById('btnRefundQuick').onclick = ()=> openRefund('');
 document.getElementById('btnAssignRefund').onclick = ()=> openRefund(document.getElementById('assignOrderNo').value.trim());
 document.getElementById('btnCloseRefund').onclick = ()=> document.getElementById('refundDialog').close();
@@ -651,6 +623,7 @@ function renderRefundPreview(){
     <div class="bill-row"><div>狀態</div><div>${order.refunded ? '已退票' : '可退票'}</div></div>
   `;
 }
+
 document.getElementById('btnDoRefund').onclick = ()=>{
   const code = document.getElementById('refundOrderNo').value.trim();
   const reason = document.getElementById('refundReason').value.trim();
@@ -702,10 +675,12 @@ function renderReport(){
   const monthRefunds = state.refunds.filter(r=>r.date.startsWith(month));
 
   const sumByMethod = (orders, method)=>orders.filter(o=>o.paymentMethod===method).reduce((s,o)=>s+o.total,0);
-  const designerStats = (id, orders)=>({
-    sales: orders.filter(o=>o.assignedDesignerId===id).reduce((s,o)=>s+o.total,0),
-    comm: orders.filter(o=>o.assignedDesignerId===id).reduce((s,o)=>s+o.commission,0)
-  });
+  const designerStats = (id, orders)=>(
+    {
+      sales: orders.filter(o=>o.assignedDesignerId===id).reduce((s,o)=>s+o.total,0),
+      comm: orders.filter(o=>o.assignedDesignerId===id).reduce((s,o)=>s+o.commission,0)
+    }
+  );
 
   document.getElementById('daySales').textContent = money(dayOrders.reduce((s,o)=>s+o.total,0));
   document.getElementById('dayRefund').textContent = money(dayRefunds.reduce((s,o)=>s+o.total,0));
@@ -793,6 +768,7 @@ function renderManage(){
     </div>
   `).join('');
 }
+
 window.updateRule = function(staffId, itemName, value){
   const s = state.staff.find(x=>x.id===staffId);
   if(!s) return;
@@ -825,6 +801,7 @@ window.updateItemActive = function(id,val){
   renderCashier();
   renderManage();
 };
+
 document.getElementById('btnAddItem').onclick = ()=>{
   const name = document.getElementById('newItemName').value.trim();
   const price = Number(document.getElementById('newItemPrice').value||0);
@@ -846,6 +823,7 @@ document.getElementById('btnExport').onclick = ()=>{
   a.click();
   URL.revokeObjectURL(a.href);
 };
+
 document.getElementById('btnResetAll').onclick = ()=>{
   if(!confirm('確定要清空全部資料嗎？')) return;
   localStorage.removeItem(KEY);
@@ -855,136 +833,13 @@ document.getElementById('btnResetAll').onclick = ()=>{
 };
 
 function init(){
+  updateCashierDisplay();
   renderCashier();
   renderAssign();
   renderReport();
   renderManage();
 }
 init();
-</script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script>
-  window.AUTH_CONFIG = {
-    supabaseUrl: '',
-    supabaseAnonKey: '',
-    appName: 'OBA Hair POS'
-  };
-
-  window.AUTH_STATE = {
-    client: null,
-    user: null,
-    profile: null,
-    ready: false
-  };
-
-  function hasRole(allowedRoles = []) {
-    const role = window.AUTH_STATE?.profile?.role;
-    return allowedRoles.includes(role);
-  }
-
-  function isOwner() {
-    return window.AUTH_STATE?.profile?.role === 'owner';
-  }
-
-  function isBoss() {
-    return window.AUTH_STATE?.profile?.role === 'boss';
-  }
-
-  function isManager() {
-    return window.AUTH_STATE?.profile?.role === 'manager';
-  }
-
-  function isDesigner() {
-    return window.AUTH_STATE?.profile?.role === 'designer';
-  }
-
-  async function initAuth() {
-    const { supabaseUrl, supabaseAnonKey } = window.AUTH_CONFIG;
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.log('AUTH 暫未啟用：尚未填入 Supabase 設定');
-      window.AUTH_STATE.ready = true;
-      return;
-    }
-
-    const { createClient } = window.supabase;
-    const client = createClient(supabaseUrl, supabaseAnonKey);
-    window.AUTH_STATE.client = client;
-
-    const { data: userResult, error: userError } = await client.auth.getUser();
-
-    if (userError) {
-      console.error('取得使用者失敗', userError);
-      window.AUTH_STATE.ready = true;
-      return;
-    }
-
-    const user = userResult?.user || null;
-    window.AUTH_STATE.user = user;
-
-    if (!user) {
-      window.AUTH_STATE.ready = true;
-      return;
-    }
-
-    const { data: profile, error: profileError } = await client
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError) {
-      console.error('取得 profiles 失敗', profileError);
-      window.AUTH_STATE.ready = true;
-      return;
-    }
-
-    window.AUTH_STATE.profile = profile || null;
-    window.AUTH_STATE.ready = true;
-  }
-
-  async function signOutAuth() {
-    if (!window.AUTH_STATE.client) return;
-    await window.AUTH_STATE.client.auth.signOut();
-    location.reload();
-  }
-  initAuth();
-  function loginTest() {
-  const email = document.getElementById('loginEmail').value;
-  const password = document.getElementById('loginPassword').value;
-
-  if (!email || !password) {
-    document.getElementById('loginInfo').innerText = '請輸入帳號與密碼';
-    return;
-  }
-
-  document.getElementById('loginInfo').innerText = '登入成功（測試模式）';
-}
-  // 判斷是否為老闆模式
-const urlParams = new URLSearchParams(window.location.search);
-const isBossView = urlParams.get('view') === 'boss';
-
-if (isBossView) {
-  
-    const form = document.querySelector('.card form');
-    if (form) form.style.display = 'none';
-
-    document.querySelectorAll('button').forEach(btn => {
-      const text = btn.innerText || '';
-      if (
-        text.includes('新增') ||
-        text.includes('刪除') ||
-        text.includes('修改') ||
-        text.includes('開單') ||
-        text.includes('送出')
-      ) {
-        btn.style.display = 'none';
-      }
-
-
-  });
-}
 </script>
 </body>
 </html>
