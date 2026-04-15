@@ -972,45 +972,6 @@ if (isBossView) {
 
   });
 }
-  973 });
-974 }
-
-
-
-// 🔒 收銀一定要輸入經手人
-let CURRENT_CASHIER = null;
-
-const CASHIER_LIST = {
-  "1234": "小明",
-  "5678": "小華"
-};
-
-function requireCashier() {
-  let pin = prompt("請輸入收銀人PIN");
-
-  if (!CASHIER_LIST[pin]) {
-    alert("❌ PIN錯誤，不能收款");
-    return false;
-  }
-
-  CURRENT_CASHIER = CASHIER_LIST[pin];
-  alert("✅ 收銀人：" + CURRENT_CASHIER);
-  return true;
-}
-document.addEventListener('click', function(e){
-  const btn = e.target.closest('button');
-  if (!btn) return;
-
-  if (btn.innerText.includes('確認收款')) {
-    if (!requireCashier()) {
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      return;
-    }
-  }
-}, true);
-
-975 </script>
 </script>
 </body>
 </html>
