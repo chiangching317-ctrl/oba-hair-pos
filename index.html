@@ -552,6 +552,7 @@ function openReceipt(order){
     <div class="r"><span>日期</span><span>${order.date}</span></div>
     <div class="r"><span>時間</span><span>${order.time}</span></div>
     <div class="r"><span>收款</span><span>${order.paymentMethod}</span></div>
+   <div class="r"><span>經手人</span><span>${order.cashierName || '-'}</span></div>
     <div class="line"></div>
     ${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}
     <div class="line"></div>
