@@ -955,6 +955,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const isBossView = urlParams.get('view') === 'boss';
 
 if (isBossView) {
+  return;
   
     const form = document.querySelector('.card form');
     if (form) form.style.display = 'none';
@@ -970,7 +971,10 @@ if (isBossView) {
       ) {
         btn.style.display = 'none';
       }
-
+        });
+  }
+let CURRENT_CASHIER = null;
+const CASHIER_LIST = {
 
 
   "1234": "小明",
