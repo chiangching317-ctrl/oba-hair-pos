@@ -302,9 +302,10 @@ const defaultState = {
   cart: [],
   pendingPay: '',
   staff: [
- {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}, permissions:['report','staff','item','password']},
-{id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7}, permissions:[]}
- ],
+    {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}},
+    {id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7, '護髮':0.7, '加價':0.7, '隔離':0.7}}
+  ],
+  items: [
     {id:'cut', name:'cut', price:300, active:true},
     {id:'color', name:'染髮', price:700, active:true},
     {id:'perm', name:'燙髮', price:800, active:true},
@@ -370,44 +371,15 @@ function setActiveTab(name){
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick = () => {
     const name = tab.dataset.tab;
- if(tab.classList.contains('locked')){
-  const me = CURRENT_CASHIER;
-   const staff = me ? state.staff.find(s=>s.id===me.id) : null;
-  if(!staff || !staff.permissions || !staff.permissions.includes(name)){
-    alert('你沒有權限進入這個功能');
-     return;
-   }
-}
+    if(tab.classList.contains('locked')){
+      pendingLockedTab = name;
+     openPassword(name === 'report' ? 'boss_or_owner' : 'owner_only');
+      return;
     }
-  const me = CURRENT_CASHIER;
-const staff = me ? state.staff.find(s=>s.id===me.id) : null;
-
-document.querySelectorAll('.tab').forEach(tab=>{
-  const name = tab.dataset.tab;
-
-  if(tab.classList.contains('locked')){
-    if(!staff || !staff.permissions || !staff.permissions.includes(name)){
-      tab.style.opacity = '0.3';
-      tab.style.pointerEvents = 'none';
-    }
-  }
-});
     setActiveTab(name);
     focusScanIfNeeded(name);
   };
-const me = CURRENT_CASHIER;
-const staff = me ? state.staff.find(s=>s.id===me.id) : null;
-
-document.querySelectorAll('.tab').forEach(tab=>{
-  const name = tab.dataset.tab;
-  if(tab.classList.contains('locked')){
-    if(!staff || !staff.permissions || !staff.permissions.includes(name)){
-      tab.style.opacity = '0.3';
-      tab.style.pointerEvents = 'none';
-    }
-  }
 });
-                                          });
 function focusScanIfNeeded(name){
   if(name==='assign') setTimeout(()=>document.getElementById('assignOrderNo').focus(), 50);
 }
@@ -528,14 +500,7 @@ document.getElementById('btnClearCart').onclick = ()=>{
 };
 document.querySelectorAll('[data-pay]').forEach(btn=>{
   btn.onclick = ()=>{
-
-  if(CURRENT_CASHIER){
-  if(state.cart.length===0){ alert('請先加入項目'); return; }
-  state.pendingPay = btn.dataset.pay;
-document.getElementById('paySummary').textContent = '單號：' + currentOrderNo() + '｜總金額：' + money(state.cart.reduce((s,i)=>s+i.price,0)) + '｜收款方式：' + btn.dataset.pay;
-document.getElementById('payDialog').showModal();
-    return;
-}  
+   
   let pin = window.prompt("請輸入收銀PIN");
     const cashier = CASHIER_LIST[pin];
 if (!cashier) { alert("PIN錯誤"); return; }
@@ -995,17 +960,6 @@ init();
   }
 
   document.getElementById('loginInfo').innerText = '登入成功（測試模式）';
-   
-
-// 🔓 解鎖所有按鈕（關鍵）
-document.querySelectorAll("button").forEach(btn => {
-    btn.disabled = false;
-});
-
-// 🔓 額外保險（有鎖 class 的也解開）
-document.querySelectorAll(".locked").forEach(el => {
-    el.classList.remove("locked");
-});
 }
   // 判斷是否為老闆模式
 const urlParams = new URLSearchParams(window.location.search);
