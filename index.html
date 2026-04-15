@@ -383,7 +383,19 @@ document.querySelectorAll('.tab').forEach(tab=>{
     setActiveTab(name);
     focusScanIfNeeded(name);
   };
+const me = CURRENT_CASHIER;
+const staff = me ? state.staff.find(s=>s.id===me.id) : null;
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  const name = tab.dataset.tab;
+  if(tab.classList.contains('locked')){
+    if(!staff || !staff.permissions || !staff.permissions.includes(name)){
+      tab.style.opacity = '0.3';
+      tab.style.pointerEvents = 'none';
+    }
+  }
 });
+                                          });
 function focusScanIfNeeded(name){
   if(name==='assign') setTimeout(()=>document.getElementById('assignOrderNo').focus(), 50);
 }
@@ -504,7 +516,12 @@ document.getElementById('btnClearCart').onclick = ()=>{
 };
 document.querySelectorAll('[data-pay]').forEach(btn=>{
   btn.onclick = ()=>{
-   
+
+  if(CURRENT_CASHIER){
+  if(state.cart.length===0){ alert('請先加入項目'); return; }
+  state.pendingPay = btn.dataset.pay;
+  return;
+}  
   let pin = window.prompt("請輸入收銀PIN");
     const cashier = CASHIER_LIST[pin];
 if (!cashier) { alert("PIN錯誤"); return; }
