@@ -302,8 +302,8 @@ const defaultState = {
   cart: [],
   pendingPay: '',
   staff: [
-    {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}},
-    {id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7, '護髮':0.7, '加價':0.7, '隔離':0.7}}
+ {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}, permissions:['report','staff','item','password']},
+{id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7, '護髮':0.7, '加價':0.7, '隔離':0.7}, permissions:[]},
   ],
   items: [
     {id:'cut', name:'cut', price:300, active:true},
