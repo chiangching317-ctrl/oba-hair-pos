@@ -380,6 +380,19 @@ document.querySelectorAll('.tab').forEach(tab=>{
    }
 }
     }
+  const me = CURRENT_CASHIER;
+const staff = me ? state.staff.find(s=>s.id===me.id) : null;
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  const name = tab.dataset.tab;
+
+  if(tab.classList.contains('locked')){
+    if(!staff || !staff.permissions || !staff.permissions.includes(name)){
+      tab.style.opacity = '0.3';
+      tab.style.pointerEvents = 'none';
+    }
+  }
+});
     setActiveTab(name);
     focusScanIfNeeded(name);
   };
