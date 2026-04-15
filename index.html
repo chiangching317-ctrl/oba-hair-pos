@@ -372,12 +372,12 @@ document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick = () => {
     const name = tab.dataset.tab;
     374 if(tab.classList.contains('locked')){
-375   const me = CURRENT_CASHIER;
-376   const staff = me ? state.staff.find(s=>s.id===me.id) : null;
-377   if(!staff || !staff.permissions || !staff.permissions.includes(name)){
-378     alert('沒有權限');
-379     return;
-380   }
+  const me = CURRENT_CASHIER;
+   const staff = me ? state.staff.find(s=>s.id===me.id) : null;
+  if(!staff || !staff.permissions || !staff.permissions.includes(name)){
+    alert('沒有權限');
+     return;
+   }
 }
     }
     setActiveTab(name);
