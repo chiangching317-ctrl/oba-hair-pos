@@ -303,8 +303,8 @@ const defaultState = {
   pendingPay: '',
   staff: [
  {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}, permissions:['report','staff','item','password']},
-{id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7}, permissions:[]},
-  items: [
+{id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7}, permissions:[]}
+ ],
     {id:'cut', name:'cut', price:300, active:true},
     {id:'color', name:'染髮', price:700, active:true},
     {id:'perm', name:'燙髮', price:800, active:true},
