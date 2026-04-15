@@ -515,6 +515,7 @@ document.getElementById('btnConfirmPay').onclick = ()=>{
     paymentMethod: state.pendingPay,
     assignedDesignerId: '',
     assignedDesignerName: '',
+    if (!requireCashier()) return;
     commission: 0,
     assignedAt: '',
     refunded: false,
@@ -546,6 +547,7 @@ function openReceipt(order){
     <div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div>
     <div class="line"></div>
     <svg id="receiptBarcode"></svg>
+    if (!requireCashier()) return;
     <div class="center">${order.id}</div>
     <div class="center" style="margin-top:4px">謝謝光臨</div>
   `;
@@ -970,17 +972,7 @@ if (isBossView) {
       }
 
 
-  });
-}
-  973 });
-974 }
 
-
-
-// 🔒 收銀一定要輸入經手人
-let CURRENT_CASHIER = null;
-
-const CASHIER_LIST = {
   "1234": "小明",
   "5678": "小華"
 };
