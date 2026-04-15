@@ -303,7 +303,7 @@ const defaultState = {
   pendingPay: '',
   staff: [
  {id:'JEAN', name:'JEAN', role:'manager', active:true, rules:{default:0.5}, permissions:['report','staff','item','password']},
-{id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7, '護髮':0.7, '加價':0.7, '隔離':0.7}, permissions:[]},
+{id:'ALAN', name:'ALAN', role:'staff', active:true, rules:{default:0.5, '染髮':0.7, '燙髮':0.7, '護髮':0.7, '加價':0.7, '隔離':0.7}, permissions:[]},permissions:[]
   ],
   items: [
     {id:'cut', name:'cut', price:300, active:true},
@@ -371,11 +371,11 @@ function setActiveTab(name){
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick = () => {
     const name = tab.dataset.tab;
-    374 if(tab.classList.contains('locked')){
+ if(tab.classList.contains('locked')){
   const me = CURRENT_CASHIER;
    const staff = me ? state.staff.find(s=>s.id===me.id) : null;
   if(!staff || !staff.permissions || !staff.permissions.includes(name)){
-    alert('沒有權限');
+    alert('你沒有權限進入這個功能');
      return;
    }
 }
