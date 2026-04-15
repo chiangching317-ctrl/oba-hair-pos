@@ -290,6 +290,11 @@ dialog::backdrop{background:rgba(0,0,0,.35)}
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="note" id="pwdNote">報表、員工資料、品項管理都要密碼。</div><div class="space"></div><input id="pwdOld" class="input" type="password" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 
 <script>
+  // 🔒 限制只能在你的網址使用
+if (!location.hostname.includes('chiangching317-ctrl.github.io')) {
+  document.body.innerHTML = '未授權使用';
+  throw new Error('Unauthorized');
+}
 const KEY = 'oba_hair_v8_pro';
 const defaultState = {
   managementPassword: '',
