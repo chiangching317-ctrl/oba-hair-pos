@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V2.3 PIN收款版</title>
+<title>OBA Hair 平板營運版 V2.1</title>
 <style>
 :root{--bg:#f8f4f1;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#eadfd6;--brand:#9ed8cf;--ok:#e7f6ec;--danger:#fde8e8;--radius:24px}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;background:linear-gradient(180deg,#fcfaf8 0%,var(--bg) 100%);color:var(--ink)}
@@ -77,7 +77,7 @@ dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow
         </div>
         <div class="space"></div>
         <div class="label">收款方式</div>
-        <div class="row"><button class="btn btn-ok" data-pay="現金">現金</button><button class="btn btn-soft" data-pay="轉帳">轉帳</button><button class="btn btn-primary" data-pay="LINE Pay">LINE Pay</button></div>
+        <div class="row"><button class="btn btn-ok" data-pay="現金">現金</button><button class="btn btn-soft" data-pay="轉帳">轉帳</button><button class="btn btn-primary" data-pay="LINE Pay">LINE Pay</button><button class="btn btn-soft" id="btnRedeemOpen">集點卡兌換</button></div>
         <div class="note">每一張單收款時都要重新輸入收銀 PIN，避免沿用上一位經手人。</div>
       </div>
     </div>
@@ -161,6 +161,24 @@ dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow
 <dialog id="itemPickDialog"><div class="modal"><h3 id="itemPickTitle">選擇品項</h3><div class="chip-grid" id="itemPickGrid"></div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseItemPick">取消</button></div></div></dialog>
 <dialog id="payDialog"><div class="modal"><h3>確認收款與出單</h3><div id="paySummary" class="note"></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnConfirmPay">確認收款並列印</button><button class="btn btn-soft" id="btnCancelPay">取消</button></div></div></dialog>
 <dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input id="refundOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-000001" /><div class="space"></div><div class="label">退票原因</div><select id="refundReason" class="select"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input id="refundReasonOther" class="input hidden" placeholder="請輸入其他原因" /><div class="space"></div><div id="refundPreview" class="bill">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
+
+<dialog id="redeemDialog"><div class="modal">
+  <h3>集點卡兌換</h3>
+  <div class="note">0 元票，需刷單入業績</div>
+  <div class="space"></div>
+  <div class="grid2">
+    <div><div class="label">客人名稱</div><input id="redeemCustomer" class="input" placeholder="請輸入客人名稱" /></div>
+    <div><div class="label">UID 後4碼</div><input id="redeemUid4" class="input" maxlength="4" placeholder="例如 0Ksl" /></div>
+  </div>
+  <div class="space"></div>
+  <div><div class="label">兌換項目</div><select id="redeemItemSelect" class="select"></select></div>
+
+  <div class="space"></div>
+  <div class="row">
+    <button class="btn btn-primary" id="btnRedeemSubmit">確認出票</button>
+    <button class="btn btn-soft" id="btnRedeemCancel">取消</button>
+  </div>
+</div></dialog>
 <dialog id="receiptDialog"><div class="modal"><h3>品牌單據預覽</h3><div class="space"></div><div class="receiptWrap"><div id="printArea" class="receipt"></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPrint">列印單據</button><button class="btn btn-soft" id="btnCloseReceipt">關閉</button></div></div></dialog>
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 
@@ -233,7 +251,7 @@ $('#btnClearCart').onclick=()=>{state.cart=[];CURRENT_CASHIER=null;saveState();r
 document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.cart.length===0){alert('請先加入項目');return} CURRENT_CASHIER=null; updateCashierDisplay(); if(!requireCashier())return; const method=btn.dataset.pay; state.pendingPay=method; $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(state.cart.reduce((s,i)=>s+i.price,0))}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`; $('#payDialog').showModal()})
 $('#btnCancelPay').onclick=()=>$('#payDialog').close();
 $('#btnConfirmPay').onclick=()=>{const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
-function openReceipt(order){$('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>收款</span><span>${order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div><div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><div class="center">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptDialog').showModal()}
+function openReceipt(order){$('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>類型</span><span>${order.paymentMethod==='集點卡兌換'?'集點卡0元票':order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div><div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><div class="center">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptDialog').showModal()}
 $('#btnPrint').onclick=()=>window.print(); $('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay(); $('#receiptDialog').close();};
 
 function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats()}
@@ -253,7 +271,7 @@ function renderReport(){const today=todayStr(), month=monthStr();const dayOrders
 
 function applyPresetPermissions(s){if(s.owner){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all'];return} if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
 function renderManage(){const names=activeItems().map(i=>i.name);$('#staffCards').innerHTML=state.staff.map(s=>`<div class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><div><div class="section-title" style="font-size:18px;margin-bottom:4px">${s.name}${s.owner?' 👑':''}</div><div class="note">店內職位：${s.role} ｜ 系統身份：${s.systemRole}</div></div><div>${s.active?'<span class="badge badge-ok">啟用中</span>':'<span class="badge badge-off">停用</span>'}</div></div><div class="space"></div><div class="grid4"><div><div class="label">姓名</div><input class="input" value="${s.name||''}" onchange="updateStaffField('${s.id}','name',this.value)"></div><div><div class="label">暱稱</div><input class="input" value="${s.nickname||''}" onchange="updateStaffField('${s.id}','nickname',this.value)"></div><div><div class="label">電話</div><input class="input" value="${s.phone||''}" onchange="updateStaffField('${s.id}','phone',this.value)"></div><div><div class="label">住址</div><input class="input" value="${s.address||''}" onchange="updateStaffField('${s.id}','address',this.value)"></div></div><div class="space"></div><div class="grid4"><div><div class="label">到職日</div><input class="input" type="date" value="${s.joinDate||''}" onchange="updateStaffField('${s.id}','joinDate',this.value)"></div><div><div class="label">年資</div><div class="pill">${getYearsText(s.joinDate)}</div></div><div><div class="label">PIN</div><input class="input" inputmode="numeric" value="${s.pin||''}" onchange="updateStaffField('${s.id}','pin',this.value)"></div><div><div class="label">是否在職</div><select class="select" onchange="updateStaffActive('${s.id}',this.value)"><option value="true" ${s.active?'selected':''}>在職</option><option value="false" ${!s.active?'selected':''}>離職</option></select></div></div><div class="space"></div><div class="grid2"><div><div class="label">店內職位</div><select class="select" onchange="updateStaffField('${s.id}','role',this.value)"><option ${s.role==='店長'?'selected':''}>店長</option><option ${s.role==='老闆'?'selected':''}>老闆</option><option ${s.role==='設計師'?'selected':''}>設計師</option><option ${s.role==='助理'?'selected':''}>助理</option><option ${s.role==='收銀員'?'selected':''}>收銀員</option></select></div><div><div class="label">系統身份</div><select class="select" onchange="updateSystemRole('${s.id}',this.value)" ${s.owner?'disabled':''}><option ${s.systemRole==='擁有者'?'selected':''}>擁有者</option><option ${s.systemRole==='管理者'?'selected':''}>管理者</option><option ${s.systemRole==='一般員工'?'selected':''}>一般員工</option><option ${s.systemRole==='僅查看者'?'selected':''}>僅查看者</option></select></div></div><div class="space"></div><div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} ${s.owner?'disabled':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div><div class="space"></div><div class="row"><button class="btn btn-soft" onclick="updateSystemRoleByRole('${s.id}')">依身份自動套權限</button><button class="btn btn-danger" onclick="deleteStaff('${s.id}')" ${s.owner?'disabled':''}>刪除此員工</button></div></div>`).join('');
-$('#itemManageList').innerHTML=state.items.map(i=>`<div class="card" style="margin-bottom:10px"><div class="grid4"><input class="input" value="${i.category||''}" onchange="updateItemField('${i.id}','category',this.value)"><input class="input" value="${i.name}" onchange="updateItemField('${i.id}','name',this.value)"><input class="input" type="number" value="${i.price}" onchange="updateItemField('${i.id}','price',this.value)"><select class="select" onchange="updateItemField('${i.id}','active',this.value)"><option value="true" ${i.active?'selected':''}>啟用</option><option value="false" ${!i.active?'selected':''}>停用</option></select></div></div>`).join('')}
+$('#itemManageList').innerHTML=state.items.map(i=>`<div class="card" style="margin-bottom:10px"><div class="grid4"><input class="input" value="${i.category||''}" onchange="updateItemField('${i.id}','category',this.value)"><input class="input" value="${i.name}" onchange="updateItemField('${i.id}','name',this.value)"><input class="input" type="number" value="${i.price}" onchange="updateItemField('${i.id}','price',this.value)"><select class="select" onchange="updateItemField('${i.id}','active',this.value)"><option value="true" ${i.active?'selected':''}>啟用</option><option value="false" ${!i.active?'selected':''}>停用</option></select></div><div class="space"></div><div class="grid2"><div><div class="label">集點卡兌換</div><select class="select" onchange="updateItemField('${i.id}','redeemable',this.value)"><option value="false" ${!i.redeemable?'selected':''}>不可兌換</option><option value="true" ${i.redeemable?'selected':''}>可兌換</option></select></div></div></div>`).join('')}
 window.updateStaffField=(staffId,field,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; saveState(); renderAssign(); renderManage(); updateCashierDisplay()}
 window.updateStaffActive=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('擁有者不可停用');return} s.active=value==='true'; saveState(); renderAssign(); renderManage()}
 window.updateSystemRole=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; applyPresetPermissions(s); saveState(); renderManage()}
@@ -261,7 +279,7 @@ window.updateSystemRoleByRole=(staffId)=>{const s=state.staff.find(x=>x.id===sta
 window.togglePermission=(staffId,key,checked)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); saveState(); renderManage()}
 window.deleteStaff=(id)=>{const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('擁有者不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); saveState(); renderAssign(); renderManage()}
 document.getElementById('btnAddStaff').onclick=()=>{const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); saveState(); renderAssign(); renderManage(); alert('已新增員工，請補完整資料與權限')}
-window.updateItemField=(id,field,val)=>{const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active')i[field]=val==='true'; else i[field]=val; saveState(); renderCashier(); renderManage()}
+window.updateItemField=(id,field,val)=>{const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; saveState(); renderCashier(); renderManage()}
 document.getElementById('btnAddItem').onclick=()=>{const name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!name||!price){alert('請輸入品項名稱與價格');return} state.items.push({id:'item'+Date.now(),category:'其他',name,price,active:true,quick:false}); $('#newItemName').value=''; $('#newItemPrice').value=''; saveState(); renderCashier(); renderManage(); alert('已新增品項')}
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
 $('#btnResetAll').onclick=()=>{if(!confirm('確定要清空全部資料嗎？'))return; localStorage.removeItem(KEY); state=clone(defaultState); saveState(); init()}
@@ -273,6 +291,75 @@ function applyDeviceMode(){
     setActiveTab('cashier');
   }
 }
+
+function getRedeemableItems(){
+  return activeItems().filter(i => i.active && (i.redeemable===true || i.redeemable==='true' || i.redeem==='Y' || i.redeem===true));
+}
+function getRedeemItemFallback(){
+  const items = activeItems().filter(i=>i.active);
+  return items.slice(0, 8);
+}
+function openRedeemDialog(){
+  const itemSel = $('#redeemItemSelect');
+  const redeemItems = getRedeemableItems();
+  const itemsToShow = redeemItems.length ? redeemItems : getRedeemItemFallback();
+  itemSel.innerHTML = itemsToShow.map(i => `<option value="${i.id}">${i.name}｜${money(i.price)}</option>`).join('');
+  $('#redeemCustomer').value = '';
+  $('#redeemUid4').value = '';
+  $('#redeemDialog').showModal();
+  setTimeout(function(){
+    const el = $('#redeemCustomer');
+    if(el){ el.focus(); el.click(); }
+  },150);
+}
+function submitRedeem(){
+  const customer = $('#redeemCustomer').value.trim();
+  const uid4 = $('#redeemUid4').value.trim();
+  const itemId = $('#redeemItemSelect').value;
+  if(!customer || !uid4 || !itemId){
+    alert('請填完整資料');
+    return;
+  }
+  const item = activeItems().find(i => i.id===itemId);
+  if(!item){ alert('資料讀取失敗'); return; }
+  const order = {
+    id: currentOrderNo(),
+    date: todayStr(),
+    time: nowTime(),
+    items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
+    total: 0,
+    paymentMethod: '集點卡兌換',
+    cashierId: '',
+    cashierName: '集點卡兌換',
+    assignedDesignerId: '',
+    assignedDesignerName: '',
+    commission: 0,
+    assignedAt: '',
+    refunded: false,
+    createdAt: new Date().toISOString(),
+    redeemMeta: {
+      customer,
+      uid4,
+      sourcePrice: Number(item.price || 0),
+      redeemType: true
+    }
+  };
+  state.orders.unshift(order);
+  state.nextNo += 1;
+  saveState();
+  renderCashier();
+  renderAssign();
+  renderReport();
+  $('#redeemDialog').close();
+  openReceipt(order);
+  alert('已開立集點卡0元票，請至刷單入業績頁籤完成登錄');
+}
+document.addEventListener('click', function(e){
+  if(e.target && e.target.id === 'btnRedeemOpen') openRedeemDialog();
+  if(e.target && e.target.id === 'btnRedeemCancel') $('#redeemDialog').close();
+  if(e.target && e.target.id === 'btnRedeemSubmit') submitRedeem();
+});
+
 function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode)}
 init();
 </script>
