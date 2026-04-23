@@ -271,7 +271,22 @@ document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.c
 $('#btnCancelPay').onclick=()=>$('#payDialog').close();
 $('#btnConfirmPay').onclick=()=>{const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
 function openReceipt(order){$('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>類型</span><span>${order.paymentMethod==='集點卡兌換'?'集點卡0元票':order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div><div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><div class="center">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptDialog').showModal()}
-$('#btnPrint').onclick=()=>window.print(); $('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay(); $('#receiptDialog').close();};
+$('#btnPrint').onclick = async () => {
+  const receiptText = document.querySelector('#printArea')?.innerText?.trim() || '';
+  const isAndroid = /Android/i.test(navigator.userAgent);
+
+  if (isAndroid && navigator.share) {
+    try {
+      await navigator.share({
+        title: 'OBA Hair 收據',
+        text: receiptText
+      });
+      return;
+    } catch (e) {}
+  }
+
+  window.print();
+};
 
 function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats()}
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
