@@ -44,6 +44,56 @@ dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow
 .access-title{font-size:26px;font-weight:900;margin:0 0 8px}
 .access-sub{color:var(--muted);margin:0 0 16px;font-size:14px}
 .hidden-gate{display:none!important}
+  #printArea{
+  width:72mm;
+  max-width:72mm;
+  margin:0 auto;
+  padding:2mm;
+  font-size:18px;
+  line-height:1.5;
+  color:#000;
+  background:#fff;
+}
+
+#printArea h3{
+  font-size:22px;
+  text-align:center;
+  margin:0 0 6px 0;
+}
+
+#printArea .center{
+  text-align:center;
+  margin-bottom:8px;
+}
+
+#printArea div,
+#printArea td,
+#printArea span,
+#printArea p{
+  font-size:18px !important;
+  line-height:1.5 !important;
+}
+
+@media print{
+  @page{
+    size:80mm auto;
+    margin:0;
+  }
+
+  body{
+    margin:0 !important;
+    background:#fff !important;
+  }
+
+  #printArea{
+    width:72mm !important;
+    max-width:72mm !important;
+    padding:2mm !important;
+    font-size:18px !important;
+    line-height:1.5 !important;
+    box-sizing:border-box;
+  }
+}
 </style>
 </head>
 <body>
