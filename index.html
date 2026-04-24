@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V10.1</title>
+<title>OBA Hair 店內專用系統 V10.2</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <style>
 :root{--bg:#f8f4f1;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#eadfd6;--brand:#9ed8cf;--ok:#e7f6ec;--danger:#fde8e8;--radius:24px}
@@ -28,16 +28,17 @@ dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow
 .receiptWrap{display:flex;justify-content:center}.receipt{width:76mm;background:#fff;color:#111;padding:4mm;font-family:"Courier New",monospace;line-height:1.45}.receipt h3{text-align:center;margin:0 0 8px;font-size:18px}.receipt .center{text-align:center}.receipt .line{border-top:1px dashed #333;margin:8px 0}.receipt .r{display:flex;justify-content:space-between;gap:8px}
 .permission-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 
-@media (max-width:768px){
-  .wrap{padding:12px}
-  .hero{margin-bottom:12px}
-  .title{font-size:28px}
-  .tabs{display:none}
-  #tab-cashier,#tab-report,#tab-manage{display:none!important}
-  #tab-assign{display:block!important}
-  .pill{padding:8px 12px;font-size:13px}
-  .section-title{font-size:20px}
-}
+/* V10.2：手機專用鎖定刷單模式。平板即使直放也保留完整收銀功能。 */
+body.phone-mode .tabs{display:none}
+body.phone-mode #tab-cashier,
+body.phone-mode #tab-report,
+body.phone-mode #tab-manage{display:none!important}
+body.phone-mode #tab-assign{display:block!important}
+body.phone-mode .wrap{padding:12px}
+body.phone-mode .hero{margin-bottom:12px}
+body.phone-mode .title{font-size:28px}
+body.phone-mode .pill{padding:8px 12px;font-size:13px}
+body.phone-mode .section-title{font-size:20px}
 
 
 .access-gate{position:fixed;inset:0;background:rgba(248,244,241,.98);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
@@ -78,7 +79,7 @@ dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow
     <div class="row">
       <button class="btn btn-primary" id="btnAccessEnter">進入系統</button>
     </div>
-    <div class="note">員工手機建議只使用刷單入業績頁。報表與管理頁仍需管理密碼。</div>
+    <div class="note">員工手機會自動鎖定刷單入業績頁；平板與電腦保留收銀系統。</div>
   </div>
 </div>
 <div class="wrap">
@@ -323,12 +324,23 @@ window.updateItemField=(id,field,val)=>{const i=state.items.find(x=>x.id===id);i
 document.getElementById('btnAddItem').onclick=()=>{const name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!name||!price){alert('請輸入品項名稱與價格');return} state.items.push({id:'item'+Date.now(),category:'其他',name,price,active:true,quick:false}); $('#newItemName').value=''; $('#newItemPrice').value=''; saveState(); renderCashier(); renderManage(); alert('已新增品項')}
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
 $('#btnResetAll').onclick=()=>{if(!confirm('確定要清空全部資料嗎？'))return; localStorage.removeItem(KEY); state=clone(defaultState); saveState(); init()}
+function isPhoneDevice(){
+  const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
+  const lw = Math.max(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
+  const ua = navigator.userAgent || '';
+  const isAndroidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
+  const isiPhone = /iPhone|iPod/i.test(ua);
+  const sizeLooksPhone = sw <= 600 && lw <= 1100;
+  return isiPhone || isAndroidPhone || sizeLooksPhone;
+}
 function applyDeviceMode(){
-  const mobile = window.innerWidth <= 768;
-  if(mobile){
+  const phoneOnly = isPhoneDevice();
+  document.body.classList.toggle('phone-mode', phoneOnly);
+  if(phoneOnly){
     setActiveTab('assign');
   }else{
-    setActiveTab('cashier');
+    const active = document.querySelector('.tab.active')?.dataset?.tab || 'cashier';
+    setActiveTab(active);
   }
 }
 
