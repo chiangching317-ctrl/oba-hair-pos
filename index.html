@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V10.3</title>
+<title>OBA Hair 店內專用系統 V10.3.1</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
 :root{--bg:#f8f4f1;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#eadfd6;--brand:#9ed8cf;--ok:#e7f6ec;--danger:#fde8e8;--radius:24px}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;background:linear-gradient(180deg,#fcfaf8 0%,var(--bg) 100%);color:var(--ink)}
@@ -240,6 +241,7 @@ body.phone-mode .section-title{font-size:20px}
     </div>
   </div>
 </div></dialog>
+<input id="cameraScanFile" class="hidden" type="file" accept="image/*" capture="environment" />
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 
 <script>
@@ -481,11 +483,61 @@ document.addEventListener('keydown',function(e){
   }
 });
 
-let scanStream=null, scanTimer=null, barcodeDetector=null;
+let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null;
+function fillScannedCode(raw){
+  const code = String(raw||'').trim();
+  if(!code) return false;
+  const m = code.match(/OBA-?\d{6}/i);
+  const finalCode = m ? m[0].toUpperCase().replace('OBA','OBA') : code;
+  $('#assignOrderNo').value = finalCode;
+  $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
+  setTimeout(()=>$('#assignOrderNo').focus(),80);
+  return true;
+}
+function isIOSDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1)}
+function openPhotoScan(){
+  const input = $('#cameraScanFile');
+  if(!input){alert('找不到相機上傳元件，請重新整理頁面。');return;}
+  input.value='';
+  input.click();
+}
+async function decodePhotoFile(file){
+  if(!file) return;
+  if(!window.ZXing){
+    alert('相機解碼套件尚未載入，請確認網路後重新整理頁面。也可先手動輸入單號。');
+    return;
+  }
+  const status=$('#scanStatus');
+  try{
+    if(status) status.textContent='正在讀取照片條碼...';
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = async function(){
+      try{
+        zxingReader = zxingReader || new ZXing.BrowserMultiFormatReader();
+        const result = await zxingReader.decodeFromImageElement(img);
+        URL.revokeObjectURL(url);
+        const text = result && result.text ? result.text : '';
+        if(fillScannedCode(text)) alert('已帶入單號：' + $('#assignOrderNo').value);
+        else alert('有拍到照片，但沒有讀到條碼，請靠近一點重新拍。');
+      }catch(err){
+        URL.revokeObjectURL(url);
+        console.log(err);
+        alert('沒有讀到條碼，請讓條碼在畫面中間、光線亮一點，再拍一次。');
+      }
+    };
+    img.onerror = function(){URL.revokeObjectURL(url); alert('照片讀取失敗，請再試一次。')};
+    img.src = url;
+  }catch(e){
+    console.log(e);
+    alert('相機照片辨識失敗，請改手動輸入單號。');
+  }
+}
 async function startCameraScan(){
   const dialog=$('#cameraScanDialog'), video=$('#scanVideo'), status=$('#scanStatus');
-  if(!('BarcodeDetector' in window)){
-    alert('這支手機瀏覽器不支援相機條碼辨識，請改用手動輸入或外接掃描器。');
+  // iPhone Safari 對即時條碼辨識支援不穩，改用系統相機拍照後解碼，成功率更高。
+  if(isIOSDevice() || !('BarcodeDetector' in window)){
+    openPhotoScan();
     return;
   }
   try{
@@ -503,10 +555,8 @@ async function startCameraScan(){
         if(codes && codes.length){
           const raw = String(codes[0].rawValue||'').trim();
           if(raw){
-            $('#assignOrderNo').value = raw;
-            $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
+            fillScannedCode(raw);
             stopCameraScan();
-            setTimeout(()=>$('#assignOrderNo').focus(),80);
           }
         }
       }catch(e){ console.log(e); }
@@ -514,7 +564,7 @@ async function startCameraScan(){
   }catch(e){
     console.log(e);
     stopCameraScan();
-    alert('相機無法開啟，請確認已允許 Chrome 使用相機。');
+    openPhotoScan();
   }
 }
 function stopCameraScan(){
@@ -526,6 +576,9 @@ function stopCameraScan(){
 document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCameraScan') startCameraScan();
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
+});
+document.addEventListener('change',function(e){
+  if(e.target && e.target.id==='cameraScanFile') decodePhotoFile(e.target.files && e.target.files[0]);
 });
 
 function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()}}
