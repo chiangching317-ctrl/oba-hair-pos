@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V10.3.2</title>
+<title>OBA Hair 店內專用系統 V10.3.3</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -279,6 +279,39 @@ function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.get
 function monthStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function nowTime(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`}
 function currentOrderNo(){return 'OBA-'+String(state.nextNo).padStart(6,'0')}
+function normalizeOrderNoText(value){
+  const raw = String(value||'').trim().toUpperCase();
+  if(!raw) return '';
+  const digits = (raw.match(/\d+/g)||[]).join('');
+  if(digits){
+    const n = parseInt(digits,10);
+    if(!Number.isNaN(n)) return 'OBA-' + String(n).padStart(6,'0');
+  }
+  return raw.replace(/\s+/g,'');
+}
+function orderNoCandidates(value){
+  const raw = String(value||'').trim().toUpperCase();
+  const normalized = normalizeOrderNoText(raw);
+  const digits = (raw.match(/\d+/g)||[]).join('');
+  const list = [raw, raw.replace(/\s+/g,''), normalized];
+  if(digits){
+    const n = parseInt(digits,10);
+    if(!Number.isNaN(n)){
+      list.push('OBA-' + String(n).padStart(6,'0'));
+      list.push('OBA' + String(n).padStart(6,'0'));
+      list.push(String(n).padStart(6,'0'));
+      list.push(String(n));
+    }
+  }
+  return [...new Set(list.filter(Boolean))];
+}
+function findOrderByCode(value){
+  const candidates = orderNoCandidates(value);
+  return state.orders.find(o => {
+    const orderCandidates = orderNoCandidates(o.id);
+    return candidates.some(c => orderCandidates.includes(c));
+  });
+}
 function activeItems(){return state.items.filter(i=>i.active)}
 function activeStaff(){return state.staff.filter(s=>s.active)}
 function staffById(id){return state.staff.find(s=>s.id===id)}
@@ -318,16 +351,16 @@ $('#btnPrint').onclick=()=>{try{const id=$('#printArea .barcode-note')?.textCont
 
 function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats()}
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
-function renderAssignPreview(){const code=$('#assignOrderNo').value.trim();const order=state.orders.find(o=>o.id===code);const selectedId=$('#assignDesigner').value||'JEAN'; if(!order){$('#assignPreview').innerHTML='請先掃描或輸入單號';$('#assignShowNo').textContent='--';$('#assignShowTotal').textContent='$0';$('#assignShowCommission').textContent='$0';$('#myThisOrder').textContent='$0 / $0';return} const commission=calcCommission(order,selectedId);$('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;$('#assignShowNo').textContent=order.id;$('#assignShowTotal').textContent=money(order.total);$('#assignShowCommission').textContent=money(commission);$('#myThisOrder').textContent=`${money(order.total)} / ${money(commission)}`}
-$('#btnAssignOrder').onclick=()=>{const code=$('#assignOrderNo').value.trim();const staffId=$('#assignDesigner').value||'JEAN';const order=state.orders.find(o=>o.id===code);if(!order){alert('找不到單號');return} if(order.refunded){alert('這張單已退票，不能入業績');return} const staff=staffById(staffId);order.assignedDesignerId=staff.id;order.assignedDesignerName=staff.name;order.commission=calcCommission(order,staff.id);order.assignedAt=new Date().toISOString();saveState();renderAssign();renderReport();alert('已成功掛入業績')}
+function renderAssignPreview(){const code=$('#assignOrderNo').value.trim();const order=findOrderByCode(code);const selectedId=$('#assignDesigner').value||'JEAN'; if(!order){$('#assignPreview').innerHTML='請先掃描或輸入單號';$('#assignShowNo').textContent='--';$('#assignShowTotal').textContent='$0';$('#assignShowCommission').textContent='$0';$('#myThisOrder').textContent='$0 / $0';return} const commission=calcCommission(order,selectedId);$('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;$('#assignShowNo').textContent=order.id;$('#assignShowTotal').textContent=money(order.total);$('#assignShowCommission').textContent=money(commission);$('#myThisOrder').textContent=`${money(order.total)} / ${money(commission)}`}
+$('#btnAssignOrder').onclick=()=>{const code=$('#assignOrderNo').value.trim();const staffId=$('#assignDesigner').value||'JEAN';const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return} if(order.refunded){alert('這張單已退票，不能入業績');return} const staff=staffById(staffId);order.assignedDesignerId=staff.id;order.assignedDesignerName=staff.name;order.commission=calcCommission(order,staff.id);order.assignedAt=new Date().toISOString();saveState();renderAssign();renderReport();alert('已成功掛入業績')}
 function renderMyStats(){const id=$('#assignDesigner').value||'JEAN', today=todayStr(), month=monthStr();const todayOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded), monthOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date.startsWith(month)&&!o.refunded);$('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+o.total,0))} / ${money(todayOrders.reduce((s,o)=>s+o.commission,0))} / ${todayOrders.length}`;$('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+o.total,0))} / ${money(monthOrders.reduce((s,o)=>s+o.commission,0))} / ${monthOrders.length}`;$('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單'}
 
 function openRefund(code=''){ $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
 $('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=()=>openRefund($('#assignOrderNo').value.trim()); $('#btnCloseRefund').onclick=()=>$('#refundDialog').close();
 $('#refundReason').onchange=()=>$('#refundReasonOther').classList.toggle('hidden',$('#refundReason').value!=='其他');
 $('#refundOrderNo').addEventListener('input',renderRefundPreview);
-function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=state.orders.find(o=>o.id===code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
-$('#btnDoRefund').onclick=()=>{const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;const order=state.orders.find(o=>o.id===code);if(!order){alert('找不到單號');return} if(order.refunded){alert('這張單已退票');return} if(!reason){alert('請選擇退票原因');return} order.refunded=true; state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:order.total,reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()}); saveState(); renderRefundPreview(); renderAssign(); renderReport(); $('#refundDialog').close(); alert('已完成退票')}
+function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=findOrderByCode(code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
+$('#btnDoRefund').onclick=()=>{const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return} if(order.refunded){alert('這張單已退票');return} if(!reason){alert('請選擇退票原因');return} order.refunded=true; state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:order.total,reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()}); saveState(); renderRefundPreview(); renderAssign(); renderReport(); $('#refundDialog').close(); alert('已完成退票')}
 
 function renderReport(){const today=todayStr(), month=monthStr();const dayOrders=state.orders.filter(o=>o.date===today&&!o.refunded), monthOrders=state.orders.filter(o=>o.date.startsWith(month)&&!o.refunded), dayRefunds=state.refunds.filter(r=>r.date===today);$('#daySales').textContent=money(dayOrders.reduce((s,o)=>s+o.total,0));$('#dayRefund').textContent=money(dayRefunds.reduce((s,o)=>s+o.total,0));$('#dayCount').textContent=dayOrders.length;const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');$('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;$('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;const rows=[...dayOrders.map(o=>({kind:'sale',...o})),...dayRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));$('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>完成</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:'<div class="tr header"><div>今天還沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>'}
 
@@ -487,8 +520,7 @@ let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null, zxi
 function fillScannedCode(raw){
   const code = String(raw||'').trim();
   if(!code) return false;
-  const m = code.match(/OBA-?\d{6}/i);
-  const finalCode = m ? m[0].toUpperCase().replace('OBA','OBA') : code;
+  const finalCode = normalizeOrderNoText(code);
   $('#assignOrderNo').value = finalCode;
   $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
   setTimeout(()=>$('#assignOrderNo').focus(),80);
