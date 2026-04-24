@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V10.3.1</title>
+<title>OBA Hair 店內專用系統 V10.3.2</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -235,7 +235,7 @@ body.phone-mode .section-title{font-size:20px}
   <h3>相機刷單</h3>
   <div class="scanner-wrap">
     <video id="scanVideo" playsinline muted></video>
-    <div class="scan-status" id="scanStatus">請允許相機權限，並把收據條碼放進畫面中。</div>
+    <div class="scan-status" id="scanStatus">請允許相機權限，開啟後直接對準收據條碼，不需要拍照。</div>
     <div class="row">
       <button class="btn btn-soft" id="btnCloseCameraScan" type="button">關閉相機</button>
     </div>
@@ -483,7 +483,7 @@ document.addEventListener('keydown',function(e){
   }
 });
 
-let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null;
+let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null, zxingControls=null;
 function fillScannedCode(raw){
   const code = String(raw||'').trim();
   if(!code) return false;
@@ -494,91 +494,95 @@ function fillScannedCode(raw){
   setTimeout(()=>$('#assignOrderNo').focus(),80);
   return true;
 }
-function isIOSDevice(){return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1)}
-function openPhotoScan(){
-  const input = $('#cameraScanFile');
-  if(!input){alert('找不到相機上傳元件，請重新整理頁面。');return;}
-  input.value='';
-  input.click();
-}
-async function decodePhotoFile(file){
-  if(!file) return;
-  if(!window.ZXing){
-    alert('相機解碼套件尚未載入，請確認網路後重新整理頁面。也可先手動輸入單號。');
-    return;
-  }
-  const status=$('#scanStatus');
-  try{
-    if(status) status.textContent='正在讀取照片條碼...';
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = async function(){
-      try{
-        zxingReader = zxingReader || new ZXing.BrowserMultiFormatReader();
-        const result = await zxingReader.decodeFromImageElement(img);
-        URL.revokeObjectURL(url);
-        const text = result && result.text ? result.text : '';
-        if(fillScannedCode(text)) alert('已帶入單號：' + $('#assignOrderNo').value);
-        else alert('有拍到照片，但沒有讀到條碼，請靠近一點重新拍。');
-      }catch(err){
-        URL.revokeObjectURL(url);
-        console.log(err);
-        alert('沒有讀到條碼，請讓條碼在畫面中間、光線亮一點，再拍一次。');
-      }
-    };
-    img.onerror = function(){URL.revokeObjectURL(url); alert('照片讀取失敗，請再試一次。')};
-    img.src = url;
-  }catch(e){
-    console.log(e);
-    alert('相機照片辨識失敗，請改手動輸入單號。');
-  }
-}
 async function startCameraScan(){
   const dialog=$('#cameraScanDialog'), video=$('#scanVideo'), status=$('#scanStatus');
-  // iPhone Safari 對即時條碼辨識支援不穩，改用系統相機拍照後解碼，成功率更高。
-  if(isIOSDevice() || !('BarcodeDetector' in window)){
-    openPhotoScan();
-    return;
-  }
   try{
-    barcodeDetector = new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','qr_code']});
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      alert('這支手機瀏覽器不能開啟即時相機，請改用 Safari / Chrome，或手動輸入單號。');
+      return;
+    }
     dialog.showModal();
-    status.textContent='相機啟動中...';
-    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
-    video.srcObject = scanStream;
-    await video.play();
-    status.textContent='請對準收據上的條碼。';
-    scanTimer = setInterval(async()=>{
-      try{
-        if(!barcodeDetector || !video || video.readyState < 2) return;
-        const codes = await barcodeDetector.detect(video);
-        if(codes && codes.length){
-          const raw = String(codes[0].rawValue||'').trim();
-          if(raw){
-            fillScannedCode(raw);
-            stopCameraScan();
+    status.textContent='相機啟動中，請允許相機權限...';
+
+    // V10.3.2：真正即時掃碼，不再改成拍照模式。
+    // 優先使用 ZXing 連續掃描，iPhone Safari / Android Chrome 都比較穩。
+    if(window.ZXing && ZXing.BrowserMultiFormatReader){
+      zxingReader = new ZXing.BrowserMultiFormatReader();
+      const constraints = {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      };
+      status.textContent='請把收據條碼放在鏡頭中央，系統會自動讀取。';
+      if(typeof zxingReader.decodeFromConstraints === 'function'){
+        zxingControls = await zxingReader.decodeFromConstraints(constraints, video, (result, err)=>{
+          if(result && result.text){
+            const text = String(result.text||'').trim();
+            if(fillScannedCode(text)){
+              stopCameraScan();
+            }
           }
-        }
-      }catch(e){ console.log(e); }
-    }, 450);
+        });
+      }else{
+        zxingControls = await zxingReader.decodeFromVideoDevice(null, video, (result, err)=>{
+          if(result && result.text){
+            const text = String(result.text||'').trim();
+            if(fillScannedCode(text)){
+              stopCameraScan();
+            }
+          }
+        });
+      }
+      return;
+    }
+
+    // 備援：支援 BarcodeDetector 的瀏覽器使用原生辨識。
+    if('BarcodeDetector' in window){
+      barcodeDetector = new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','qr_code']});
+      scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+      video.srcObject = scanStream;
+      await video.play();
+      status.textContent='請把收據條碼放在鏡頭中央，系統會自動讀取。';
+      scanTimer = setInterval(async()=>{
+        try{
+          if(!barcodeDetector || !video || video.readyState < 2) return;
+          const codes = await barcodeDetector.detect(video);
+          if(codes && codes.length){
+            const raw = String(codes[0].rawValue||'').trim();
+            if(raw && fillScannedCode(raw)) stopCameraScan();
+          }
+        }catch(e){ console.log(e); }
+      }, 300);
+      return;
+    }
+
+    stopCameraScan();
+    alert('即時掃碼套件尚未載入，請確認網路後重新整理；也可以先手動輸入單號。');
   }catch(e){
     console.log(e);
     stopCameraScan();
-    openPhotoScan();
+    alert('相機無法啟動。請確認 Safari/Chrome 已允許相機權限，或改用手動輸入單號。');
   }
 }
 function stopCameraScan(){
   if(scanTimer){clearInterval(scanTimer);scanTimer=null;}
+  if(zxingControls && typeof zxingControls.stop==='function'){
+    try{zxingControls.stop();}catch(e){console.log(e)}
+  }
+  zxingControls=null;
+  if(zxingReader && typeof zxingReader.reset==='function'){
+    try{zxingReader.reset();}catch(e){console.log(e)}
+  }
   if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}
-  const video=$('#scanVideo'); if(video) video.srcObject=null;
+  const video=$('#scanVideo'); if(video){video.pause(); video.srcObject=null;}
   const dialog=$('#cameraScanDialog'); if(dialog && dialog.open) dialog.close();
 }
 document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCameraScan') startCameraScan();
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
-});
-document.addEventListener('change',function(e){
-  if(e.target && e.target.id==='cameraScanFile') decodePhotoFile(e.target.files && e.target.files[0]);
 });
 
 function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()}}
