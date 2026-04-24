@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V10.2</title>
+<title>OBA Hair 店內專用系統 V10.3</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <style>
 :root{--bg:#f8f4f1;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#eadfd6;--brand:#9ed8cf;--ok:#e7f6ec;--danger:#fde8e8;--radius:24px}
@@ -65,6 +65,13 @@ body.phone-mode .section-title{font-size:20px}
   dialog{width:96vw}
   .receipt{width:78mm;max-width:100%;font-size:13px}
 }
+
+
+.camera-box{display:grid;gap:10px;margin:8px 0 12px}
+.btn-camera{background:#e7f6ec;color:#18453f;font-size:18px;padding:14px 18px;border:1px solid rgba(79,145,136,.25)}
+.scanner-wrap{display:grid;gap:10px}
+#scanVideo{width:100%;max-height:58vh;background:#111;border-radius:18px;object-fit:cover}
+.scan-status{font-weight:800;color:var(--muted);font-size:14px}
 
 </style>
 </head>
@@ -130,6 +137,7 @@ body.phone-mode .section-title{font-size:20px}
         <div class="section-title">刷單入業績</div>
         <div class="label">目前刷單員工</div><select id="assignDesigner" class="select"></select>
         <div class="space"></div>
+        <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
         <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-000001" />
         <div class="space"></div>
         <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
@@ -221,6 +229,17 @@ body.phone-mode .section-title{font-size:20px}
   </div>
 </div></dialog>
 <dialog id="receiptDialog"><div class="modal"><h3>品牌單據預覽</h3><div class="space"></div><div class="receiptWrap"><div id="printArea" class="receipt"></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPrint">列印單據</button><button class="btn btn-soft" id="btnCloseReceipt">關閉</button></div></div></dialog>
+
+<dialog id="cameraScanDialog"><div class="modal">
+  <h3>相機刷單</h3>
+  <div class="scanner-wrap">
+    <video id="scanVideo" playsinline muted></video>
+    <div class="scan-status" id="scanStatus">請允許相機權限，並把收據條碼放進畫面中。</div>
+    <div class="row">
+      <button class="btn btn-soft" id="btnCloseCameraScan" type="button">關閉相機</button>
+    </div>
+  </div>
+</div></dialog>
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 
 <script>
@@ -461,6 +480,54 @@ document.addEventListener('keydown',function(e){
     verifyAccessPassword();
   }
 });
+
+let scanStream=null, scanTimer=null, barcodeDetector=null;
+async function startCameraScan(){
+  const dialog=$('#cameraScanDialog'), video=$('#scanVideo'), status=$('#scanStatus');
+  if(!('BarcodeDetector' in window)){
+    alert('這支手機瀏覽器不支援相機條碼辨識，請改用手動輸入或外接掃描器。');
+    return;
+  }
+  try{
+    barcodeDetector = new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','qr_code']});
+    dialog.showModal();
+    status.textContent='相機啟動中...';
+    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+    video.srcObject = scanStream;
+    await video.play();
+    status.textContent='請對準收據上的條碼。';
+    scanTimer = setInterval(async()=>{
+      try{
+        if(!barcodeDetector || !video || video.readyState < 2) return;
+        const codes = await barcodeDetector.detect(video);
+        if(codes && codes.length){
+          const raw = String(codes[0].rawValue||'').trim();
+          if(raw){
+            $('#assignOrderNo').value = raw;
+            $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
+            stopCameraScan();
+            setTimeout(()=>$('#assignOrderNo').focus(),80);
+          }
+        }
+      }catch(e){ console.log(e); }
+    }, 450);
+  }catch(e){
+    console.log(e);
+    stopCameraScan();
+    alert('相機無法開啟，請確認已允許 Chrome 使用相機。');
+  }
+}
+function stopCameraScan(){
+  if(scanTimer){clearInterval(scanTimer);scanTimer=null;}
+  if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}
+  const video=$('#scanVideo'); if(video) video.srcObject=null;
+  const dialog=$('#cameraScanDialog'); if(dialog && dialog.open) dialog.close();
+}
+document.addEventListener('click',function(e){
+  if(e.target && e.target.id==='btnCameraScan') startCameraScan();
+  if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
+});
+
 function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()}}
 init();
 </script>
