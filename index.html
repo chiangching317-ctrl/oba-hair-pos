@@ -3,10 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V10.3.3</title>
+<title>OBA Hair 店內專用系統 V11.0.1 單項取消版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{--bg:#f8f4f1;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#eadfd6;--brand:#9ed8cf;--ok:#e7f6ec;--danger:#fde8e8;--radius:24px}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;background:linear-gradient(180deg,#fcfaf8 0%,var(--bg) 100%);color:var(--ink)}
@@ -74,8 +73,9 @@ body.phone-mode .section-title{font-size:20px}
 .scanner-wrap{display:grid;gap:10px}
 #scanVideo{width:100%;max-height:58vh;background:#111;border-radius:18px;object-fit:cover}
 .scan-status{font-weight:800;color:var(--muted);font-size:14px}
-
 </style>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
 </head>
 <body>
 <div class="access-gate" id="accessGate">
@@ -274,7 +274,31 @@ let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=nul
 const $=s=>document.querySelector(s);
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return clone(defaultState);const data=Object.assign(clone(defaultState),JSON.parse(raw));if(!data.staff.find(s=>s.owner))data.staff[0].owner=true;return data}catch(e){return clone(defaultState)}}
-function saveState(){localStorage.setItem(KEY,JSON.stringify(state))}
+async function saveState(){
+  localStorage.setItem(KEY,JSON.stringify(state));
+  console.log('本機已存檔');
+
+  try{
+    const { error } = await window.supabase
+      .createClient(SUPABASE_URL, SUPABASE_KEY)
+      .from('orders')
+  .upsert({
+  id: 1,
+  order_id: currentOrderNo(),
+  designer: CURRENT_CASHIER || 'SYSTEM',
+  created_at: new Date().toISOString()
+});
+
+
+    if(error){
+      console.log('雲端失敗', error);
+    }else{
+      console.log('雲端成功');
+    }
+  }catch(err){
+    console.log('同步錯誤', err);
+  }
+}
 function money(n){return '$'+Number(n||0).toLocaleString('zh-TW')}
 function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function monthStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
@@ -342,8 +366,34 @@ $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNe
 function renderCashier(){ $('#todayText').textContent=todayStr(); $('#nextOrderNo').textContent=currentOrderNo(); const grid=$('#cashierItemGrid'); grid.innerHTML=''; activeItems().filter(i=>i.quick).forEach(item=>{const btn=document.createElement('button');btn.className='chip';btn.innerHTML=`<div class="name">${item.name}</div><div class="price">${money(item.price)}</div>`;btn.onclick=()=>{state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart()};grid.appendChild(btn)}); [...new Set(activeItems().filter(i=>!i.quick).map(i=>i.category).filter(Boolean))].forEach(cat=>{const btn=document.createElement('button');btn.className='chip';btn.innerHTML=`<div class="name">${cat}</div><div class="price">點一下選金額</div>`;btn.onclick=()=>openItemPicker(cat);grid.appendChild(btn)}); renderCart()}
 function openItemPicker(category){const list=activeItems().filter(i=>!i.quick&&i.category===category);$('#itemPickTitle').textContent=category;const grid=$('#itemPickGrid');grid.innerHTML=list.map(i=>`<button class="chip" data-id="${i.id}"><div class="name">${i.name}</div><div class="price">${money(i.price)}</div></button>`).join('');grid.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>{const item=activeItems().find(x=>x.id===btn.dataset.id);if(!item)return;state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart();$('#itemPickDialog').close()});$('#itemPickDialog').showModal()}
 $('#btnCloseItemPick').onclick=()=>$('#itemPickDialog').close();
-function renderCart(){const bill=$('#cashierBill'); if(state.cart.length===0){bill.innerHTML='<div class="note">尚未加入任何項目</div>'} else {bill.innerHTML=state.cart.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')} const total=state.cart.reduce((s,i)=>s+i.price,0);$('#cashierCount').textContent=state.cart.length;$('#cashierTotal').textContent=money(total);$('#cashierStatus').textContent=total>0?'待收款':'未結帳'}
-$('#btnClearCart').onclick=()=>{state.cart=[];CURRENT_CASHIER=null;saveState();renderCart();updateCashierDisplay()}
+
+function renderCart(){
+  const bill = $('#cashierBill');
+
+  if(state.cart.length===0){
+    bill.innerHTML = '<div class="note">尚未加入任何項目</div>';
+  }else{
+    bill.innerHTML = state.cart.map((i,idx)=>`
+      <div class="bill-row">
+        <div>
+          <button type="button" class="btn btn-danger" onclick="removeCartItem(${idx})" style="margin-right:8px;padding:4px 10px;border-radius:10px;font-size:13px">取消</button>
+          ${idx+1}. ${i.name}
+        </div>
+        <div>${money(i.price)}</div>
+      </div>
+    `).join('');
+  }
+
+  $('#cashierCount').textContent = state.cart.length;
+  $('#cashierTotal').textContent = money(state.cart.reduce((s,i)=>s+i.price,0));
+  $('#cashierStatus').textContent = state.cart.length ? '待收款' : '未結帳';
+}
+
+function removeCartItem(idx){
+  state.cart.splice(idx,1);
+  saveState();
+  renderCart();
+}
 document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.cart.length===0){alert('請先加入項目');return} CURRENT_CASHIER=null; updateCashierDisplay(); if(!requireCashier())return; const method=btn.dataset.pay; state.pendingPay=method; $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(state.cart.reduce((s,i)=>s+i.price,0))}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`; $('#payDialog').showModal()})
 $('#btnCancelPay').onclick=()=>$('#payDialog').close();
 $('#btnConfirmPay').onclick=()=>{const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
