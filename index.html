@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V11.0.3 管理收合儲存版</title>
+<title>OBA Hair 店內專用系統 V11.0.4 報表時間區間個人總體業績版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -176,15 +176,37 @@ body.phone-mode .section-title{font-size:20px}
     <div class="stack">
       <div class="owner-card"><div class="owner-title">系統擁有權保留給你</div><div class="note">JEAN＝店長，同時也是系統擁有者。ALAN 不可管理。</div></div>
       <div class="card">
-        <div class="section-title">今日報表</div>
+        <div class="section-title">報表篩選</div>
+        <div class="grid4">
+          <div><div class="label">查詢日期</div><input id="reportDate" class="input" type="date" /></div>
+          <div><div class="label">開始時間</div><input id="reportStartTime" class="input" type="time" /></div>
+          <div><div class="label">結束時間</div><input id="reportEndTime" class="input" type="time" /></div>
+          <div><div class="label">個人業績</div><select id="reportStaff" class="select"></select></div>
+        </div>
+        <div class="note">不填開始/結束時間＝查整天；可查早班、晚班或任一時間段。</div>
+      </div>
+      <div class="card">
+        <div class="section-title">總體業績</div>
         <div class="stats">
-          <div class="stat"><div class="k">今日營業額</div><div class="v" id="daySales">$0</div></div>
-          <div class="stat"><div class="k">今日退票</div><div class="v" id="dayRefund">$0</div></div>
-          <div class="stat"><div class="k">今日筆數</div><div class="v" id="dayCount">0</div></div>
+          <div class="stat"><div class="k" id="daySalesLabel">區間營業額</div><div class="v" id="daySales">$0</div></div>
+          <div class="stat"><div class="k">區間退票</div><div class="v" id="dayRefund">$0</div></div>
+          <div class="stat"><div class="k">區間筆數</div><div class="v" id="dayCount">0</div></div>
+        </div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">現金</div><div class="v" id="payCash">$0</div></div>
+          <div class="stat"><div class="k">轉帳</div><div class="v" id="payTransfer">$0</div></div>
+          <div class="stat"><div class="k">LINE Pay</div><div class="v" id="payLine">$0</div></div>
         </div>
       </div>
       <div class="card">
-        <div class="section-title">設計師統計</div>
+        <div class="section-title">個人業績</div>
+        <div class="stats">
+          <div class="stat"><div class="k">選定員工業績</div><div class="v" id="personalSales">$0</div></div>
+          <div class="stat"><div class="k">選定員工抽成</div><div class="v" id="personalCommission">$0</div></div>
+          <div class="stat"><div class="k">選定員工筆數</div><div class="v" id="personalCount">0</div></div>
+        </div>
+        <div class="space"></div>
         <div class="stats">
           <div class="stat"><div class="k">JEAN 業績 / 抽成</div><div class="v" id="jeanStats">$0 / $0</div></div>
           <div class="stat"><div class="k">ALAN 業績 / 抽成</div><div class="v" id="alanStats">$0 / $0</div></div>
@@ -192,7 +214,7 @@ body.phone-mode .section-title{font-size:20px}
         </div>
       </div>
       <div class="card">
-        <div class="row" style="justify-content:space-between"><div class="section-title">今日紀錄</div><button class="btn btn-danger" id="btnResetAll">清空全部資料</button></div>
+        <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><button class="btn btn-danger" id="btnResetAll">清空全部資料</button></div>
         <div class="table" id="reportTable"></div>
       </div>
     </div>
@@ -437,7 +459,53 @@ $('#refundOrderNo').addEventListener('input',renderRefundPreview);
 function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=findOrderByCode(code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
 $('#btnDoRefund').onclick=()=>{const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return} if(order.refunded){alert('這張單已退票');return} if(!reason){alert('請選擇退票原因');return} order.refunded=true; state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:order.total,reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()}); saveState(); renderRefundPreview(); renderAssign(); renderReport(); $('#refundDialog').close(); alert('已完成退票')}
 
-function renderReport(){const today=todayStr(), month=monthStr();const dayOrders=state.orders.filter(o=>o.date===today&&!o.refunded), monthOrders=state.orders.filter(o=>o.date.startsWith(month)&&!o.refunded), dayRefunds=state.refunds.filter(r=>r.date===today);$('#daySales').textContent=money(dayOrders.reduce((s,o)=>s+o.total,0));$('#dayRefund').textContent=money(dayRefunds.reduce((s,o)=>s+o.total,0));$('#dayCount').textContent=dayOrders.length;const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');$('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;$('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;const rows=[...dayOrders.map(o=>({kind:'sale',...o})),...dayRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));$('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>完成</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:'<div class="tr header"><div>今天還沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>'}
+function reportFilterValues(){
+  const dateEl=$('#reportDate'), startEl=$('#reportStartTime'), endEl=$('#reportEndTime'), staffEl=$('#reportStaff');
+  if(dateEl && !dateEl.value) dateEl.value=todayStr();
+  return {date:dateEl?.value||todayStr(),start:startEl?.value||'',end:endEl?.value||'',staffId:staffEl?.value||'JEAN'};
+}
+function isTimeInRange(time,start,end){
+  const t=String(time||'00:00').slice(0,5);
+  if(start && t<start) return false;
+  if(end && t>end) return false;
+  return true;
+}
+function renderReportStaffOptions(){
+  const sel=$('#reportStaff');
+  if(!sel) return;
+  const current=sel.value||'JEAN';
+  const staffList=activeStaff().filter(s=>s.permissions.includes('assign')||s.permissions.includes('checkout')||s.owner);
+  sel.innerHTML=staffList.map(s=>`<option value="${s.id}" ${s.id===current?'selected':''}>${s.name}</option>`).join('');
+  if(!staffList.find(s=>s.id===sel.value) && staffList[0]) sel.value=staffList[0].id;
+}
+function renderReport(){
+  renderReportStaffOptions();
+  const f=reportFilterValues(), month=f.date.slice(0,7);
+  const rangeText=`${f.date}${f.start||f.end?' '+(f.start||'00:00')+'～'+(f.end||'23:59'):' 全日'}`;
+  const rangeOrders=state.orders.filter(o=>o.date===f.date&&!o.refunded&&isTimeInRange(o.time,f.start,f.end));
+  const rangeRefunds=state.refunds.filter(r=>r.date===f.date&&isTimeInRange(r.time,f.start,f.end));
+  $('#daySalesLabel').textContent='區間營業額';
+  $('#daySales').textContent=money(rangeOrders.reduce((s,o)=>s+o.total,0));
+  $('#dayRefund').textContent=money(rangeRefunds.reduce((s,o)=>s+o.total,0));
+  $('#dayCount').textContent=rangeOrders.length;
+  $('#payCash').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='現金').reduce((s,o)=>s+o.total,0));
+  $('#payTransfer').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='轉帳').reduce((s,o)=>s+o.total,0));
+  $('#payLine').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='LINE Pay').reduce((s,o)=>s+o.total,0));
+  const personal=rangeOrders.filter(o=>o.assignedDesignerId===f.staffId);
+  $('#personalSales').textContent=money(personal.reduce((s,o)=>s+o.total,0));
+  $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
+  $('#personalCount').textContent=personal.length;
+  const monthOrders=state.orders.filter(o=>o.date.startsWith(month)&&!o.refunded);
+  const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
+  $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
+  $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
+  $('#reportRecordTitle').textContent='區間紀錄｜'+rangeText;
+  const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
+  $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>完成</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
+}
+document.addEventListener('change',function(e){
+  if(e.target && ['reportDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
+});
 
 function applyPresetPermissions(s){if(s.owner){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all'];return} if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
 function renderManage(){const names=activeItems().map(i=>i.name);$('#staffCards').innerHTML=state.staff.map(s=>`<div class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><div><div class="section-title" style="font-size:18px;margin-bottom:4px">${s.name}${s.owner?' 👑':''}</div><div class="note">店內職位：${s.role} ｜ 系統身份：${s.systemRole}</div></div><div>${s.active?'<span class="badge badge-ok">啟用中</span>':'<span class="badge badge-off">停用</span>'}</div></div><div class="space"></div><div class="grid4"><div><div class="label">姓名</div><input class="input" value="${s.name||''}" onchange="updateStaffField('${s.id}','name',this.value)"></div><div><div class="label">暱稱</div><input class="input" value="${s.nickname||''}" onchange="updateStaffField('${s.id}','nickname',this.value)"></div><div><div class="label">電話</div><input class="input" value="${s.phone||''}" onchange="updateStaffField('${s.id}','phone',this.value)"></div><div><div class="label">住址</div><input class="input" value="${s.address||''}" onchange="updateStaffField('${s.id}','address',this.value)"></div></div><div class="space"></div><div class="grid4"><div><div class="label">到職日</div><input class="input" type="date" value="${s.joinDate||''}" onchange="updateStaffField('${s.id}','joinDate',this.value)"></div><div><div class="label">年資</div><div class="pill">${getYearsText(s.joinDate)}</div></div><div><div class="label">PIN</div><input class="input" inputmode="numeric" value="${s.pin||''}" onchange="updateStaffField('${s.id}','pin',this.value)"></div><div><div class="label">是否在職</div><select class="select" onchange="updateStaffActive('${s.id}',this.value)"><option value="true" ${s.active?'selected':''}>在職</option><option value="false" ${!s.active?'selected':''}>離職</option></select></div></div><div class="space"></div><div class="grid2"><div><div class="label">店內職位</div><select class="select" onchange="updateStaffField('${s.id}','role',this.value)"><option ${s.role==='店長'?'selected':''}>店長</option><option ${s.role==='老闆'?'selected':''}>老闆</option><option ${s.role==='設計師'?'selected':''}>設計師</option><option ${s.role==='助理'?'selected':''}>助理</option><option ${s.role==='收銀員'?'selected':''}>收銀員</option></select></div><div><div class="label">系統身份</div><select class="select" onchange="updateSystemRole('${s.id}',this.value)" ${s.owner?'disabled':''}><option ${s.systemRole==='擁有者'?'selected':''}>擁有者</option><option ${s.systemRole==='管理者'?'selected':''}>管理者</option><option ${s.systemRole==='一般員工'?'selected':''}>一般員工</option><option ${s.systemRole==='僅查看者'?'selected':''}>僅查看者</option></select></div></div><div class="space"></div><div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} ${s.owner?'disabled':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div><div class="space"></div><div class="row"><button class="btn btn-soft" onclick="updateSystemRoleByRole('${s.id}')">依身份自動套權限</button><button class="btn btn-danger" onclick="deleteStaff('${s.id}')" ${s.owner?'disabled':''}>刪除此員工</button></div></div>`).join('');
