@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V11.0.2 集點卡姓名版</title>
+<title>OBA Hair 店內專用系統 V11.0.3 管理收合儲存版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -50,6 +50,14 @@ body.phone-mode .section-title{font-size:20px}
 
 .receipt svg{width:100%;height:46px;display:block;margin:2mm 0 1mm}
 .receipt .barcode-note{font-size:12px;text-align:center;letter-spacing:1px}
+
+.manage-fold{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:0;overflow:hidden}
+.manage-fold summary{list-style:none;cursor:pointer;padding:18px;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.manage-fold summary::-webkit-details-marker{display:none}
+.manage-fold summary:after{content:'展開';font-size:13px;background:#f3f4f6;border-radius:999px;padding:6px 10px;color:#555}
+.manage-fold[open] summary:after{content:'收起'}
+.manage-fold-body{padding:0 18px 18px}
+.save-hint{font-size:12px;color:#6b7280;margin-top:8px;font-weight:800}
 @media print{
   @page{size:80mm auto;margin:0}
   html,body{width:80mm;margin:0!important;padding:0!important;background:#fff!important}
@@ -196,15 +204,27 @@ body.phone-mode .section-title{font-size:20px}
       <div class="card">
         <div class="row" style="justify-content:space-between"><div class="section-title">管理密碼</div><button class="btn btn-soft" id="btnChangePwd">修改密碼</button></div>
       </div>
-      <div class="card">
-        <div class="row" style="justify-content:space-between"><div class="section-title">員工資料建檔 / 權限設定</div><button class="btn btn-primary" id="btnAddStaff">新增員工</button></div>
-        <div id="staffCards"></div>
-      </div>
-      <div class="card">
-        <div class="section-title">品項管理</div>
-        <div class="grid3"><input id="newItemName" class="input" placeholder="品項名稱" /><input id="newItemPrice" class="input" type="number" placeholder="價格" /><button class="btn btn-primary" id="btnAddItem">新增品項</button></div>
-        <div class="space"></div><div id="itemManageList"></div>
-      </div>
+      <details class="manage-fold" open>
+        <summary>員工資料建檔 / 權限設定</summary>
+        <div class="manage-fold-body">
+          <div class="row" style="justify-content:space-between">
+            <div class="save-hint">新增或修改後，請按儲存員工資料才會寫入。</div>
+            <div class="row"><button class="btn btn-primary" id="btnAddStaff">新增員工</button><button class="btn btn-ok" id="btnSaveStaff">儲存員工資料</button></div>
+          </div>
+          <div class="space"></div>
+          <div id="staffCards"></div>
+        </div>
+      </details>
+      <details class="manage-fold" open>
+        <summary>品項管理</summary>
+        <div class="manage-fold-body">
+          <div class="save-hint">新增或修改後，請按儲存品項資料才會寫入。</div>
+          <div class="space"></div>
+          <div class="grid3"><input id="newItemName" class="input" placeholder="品項名稱" /><input id="newItemPrice" class="input" type="number" placeholder="價格" /><button class="btn btn-primary" id="btnAddItem">新增品項</button></div>
+          <div class="space"></div><div class="row"><button class="btn btn-ok" id="btnSaveItems">儲存品項資料</button></div>
+          <div class="space"></div><div id="itemManageList"></div>
+        </div>
+      </details>
     </div>
   </div>
 </div>
@@ -422,15 +442,34 @@ function renderReport(){const today=todayStr(), month=monthStr();const dayOrders
 function applyPresetPermissions(s){if(s.owner){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all'];return} if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
 function renderManage(){const names=activeItems().map(i=>i.name);$('#staffCards').innerHTML=state.staff.map(s=>`<div class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><div><div class="section-title" style="font-size:18px;margin-bottom:4px">${s.name}${s.owner?' 👑':''}</div><div class="note">店內職位：${s.role} ｜ 系統身份：${s.systemRole}</div></div><div>${s.active?'<span class="badge badge-ok">啟用中</span>':'<span class="badge badge-off">停用</span>'}</div></div><div class="space"></div><div class="grid4"><div><div class="label">姓名</div><input class="input" value="${s.name||''}" onchange="updateStaffField('${s.id}','name',this.value)"></div><div><div class="label">暱稱</div><input class="input" value="${s.nickname||''}" onchange="updateStaffField('${s.id}','nickname',this.value)"></div><div><div class="label">電話</div><input class="input" value="${s.phone||''}" onchange="updateStaffField('${s.id}','phone',this.value)"></div><div><div class="label">住址</div><input class="input" value="${s.address||''}" onchange="updateStaffField('${s.id}','address',this.value)"></div></div><div class="space"></div><div class="grid4"><div><div class="label">到職日</div><input class="input" type="date" value="${s.joinDate||''}" onchange="updateStaffField('${s.id}','joinDate',this.value)"></div><div><div class="label">年資</div><div class="pill">${getYearsText(s.joinDate)}</div></div><div><div class="label">PIN</div><input class="input" inputmode="numeric" value="${s.pin||''}" onchange="updateStaffField('${s.id}','pin',this.value)"></div><div><div class="label">是否在職</div><select class="select" onchange="updateStaffActive('${s.id}',this.value)"><option value="true" ${s.active?'selected':''}>在職</option><option value="false" ${!s.active?'selected':''}>離職</option></select></div></div><div class="space"></div><div class="grid2"><div><div class="label">店內職位</div><select class="select" onchange="updateStaffField('${s.id}','role',this.value)"><option ${s.role==='店長'?'selected':''}>店長</option><option ${s.role==='老闆'?'selected':''}>老闆</option><option ${s.role==='設計師'?'selected':''}>設計師</option><option ${s.role==='助理'?'selected':''}>助理</option><option ${s.role==='收銀員'?'selected':''}>收銀員</option></select></div><div><div class="label">系統身份</div><select class="select" onchange="updateSystemRole('${s.id}',this.value)" ${s.owner?'disabled':''}><option ${s.systemRole==='擁有者'?'selected':''}>擁有者</option><option ${s.systemRole==='管理者'?'selected':''}>管理者</option><option ${s.systemRole==='一般員工'?'selected':''}>一般員工</option><option ${s.systemRole==='僅查看者'?'selected':''}>僅查看者</option></select></div></div><div class="space"></div><div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} ${s.owner?'disabled':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div><div class="space"></div><div class="row"><button class="btn btn-soft" onclick="updateSystemRoleByRole('${s.id}')">依身份自動套權限</button><button class="btn btn-danger" onclick="deleteStaff('${s.id}')" ${s.owner?'disabled':''}>刪除此員工</button></div></div>`).join('');
 $('#itemManageList').innerHTML=state.items.map(i=>`<div class="card" style="margin-bottom:10px"><div class="grid4"><input class="input" value="${i.category||''}" onchange="updateItemField('${i.id}','category',this.value)"><input class="input" value="${i.name}" onchange="updateItemField('${i.id}','name',this.value)"><input class="input" type="number" value="${i.price}" onchange="updateItemField('${i.id}','price',this.value)"><select class="select" onchange="updateItemField('${i.id}','active',this.value)"><option value="true" ${i.active?'selected':''}>啟用</option><option value="false" ${!i.active?'selected':''}>停用</option></select></div><div class="space"></div><div class="grid2"><div><div class="label">集點卡兌換</div><select class="select" onchange="updateItemField('${i.id}','redeemable',this.value)"><option value="false" ${!i.redeemable?'selected':''}>不可兌換</option><option value="true" ${i.redeemable?'selected':''}>可兌換</option></select></div></div></div>`).join('')}
-window.updateStaffField=(staffId,field,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; saveState(); renderAssign(); renderManage(); updateCashierDisplay()}
-window.updateStaffActive=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('擁有者不可停用');return} s.active=value==='true'; saveState(); renderAssign(); renderManage()}
-window.updateSystemRole=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; applyPresetPermissions(s); saveState(); renderManage()}
-window.updateSystemRoleByRole=(staffId)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); saveState(); renderManage()}
-window.togglePermission=(staffId,key,checked)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); saveState(); renderManage()}
-window.deleteStaff=(id)=>{const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('擁有者不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); saveState(); renderAssign(); renderManage()}
-document.getElementById('btnAddStaff').onclick=()=>{const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); saveState(); renderAssign(); renderManage(); alert('已新增員工，請補完整資料與權限')}
-window.updateItemField=(id,field,val)=>{const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; saveState(); renderCashier(); renderManage()}
-document.getElementById('btnAddItem').onclick=()=>{const name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!name||!price){alert('請輸入品項名稱與價格');return} state.items.push({id:'item'+Date.now(),category:'其他',name,price,active:true,quick:false}); $('#newItemName').value=''; $('#newItemPrice').value=''; saveState(); renderCashier(); renderManage(); alert('已新增品項')}
+window.updateStaffField=(staffId,field,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; renderAssign(); renderManage(); updateCashierDisplay()}
+window.updateStaffActive=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('擁有者不可停用');return} s.active=value==='true'; renderAssign(); renderManage()}
+window.updateSystemRole=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; applyPresetPermissions(s); renderManage()}
+window.updateSystemRoleByRole=(staffId)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); renderManage()}
+window.togglePermission=(staffId,key,checked)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); renderManage()}
+window.deleteStaff=(id)=>{const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('擁有者不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
+document.getElementById('btnAddStaff').onclick=()=>{const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
+window.updateItemField=(id,field,val)=>{const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; renderCashier(); renderManage()}
+document.getElementById('btnAddItem').onclick=()=>{const name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!name||!price){alert('請輸入品項名稱與價格');return} state.items.push({id:'item'+Date.now(),category:'其他',name,price,active:true,quick:false}); $('#newItemName').value=''; $('#newItemPrice').value=''; renderCashier(); renderManage(); alert('已新增品項，請按儲存品項資料')}
+
+document.addEventListener('click', function(e){
+  if(e.target && e.target.id==='btnSaveStaff'){
+    saveState();
+    renderAssign();
+    renderReport();
+    renderManage();
+    alert('員工資料已儲存');
+  }
+  if(e.target && e.target.id==='btnSaveItems'){
+    saveState();
+    renderCashier();
+    renderAssign();
+    renderReport();
+    renderManage();
+    alert('品項資料已儲存');
+  }
+});
+
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
 $('#btnResetAll').onclick=()=>{if(!confirm('確定要清空全部資料嗎？'))return; localStorage.removeItem(KEY); state=clone(defaultState); saveState(); init()}
 function isPhoneDevice(){
