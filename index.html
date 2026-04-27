@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V11.0.4 報表時間區間個人總體業績版</title>
+<title>OBA Hair 店內專用系統 V11.0.14 雲端同步修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -83,7 +83,12 @@ body.phone-mode .section-title{font-size:20px}
 .scan-status{font-weight:800;color:var(--muted);font-size:14px}
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script src="config.js"></script>
+<script>
+const SUPABASE_URL = "https://cvehdsmeaggqmdsafalw.supabase.co";
+const SUPABASE_KEY = "sb_publishable_BxcVgGxDTlUwpEL0URXmGA_Ebod3ulA";
+const CLOUD_TABLE = "oba_pos_state";
+const CLOUD_ROW_ID = "main";
+</script>
 </head>
 <body>
 <div class="access-gate" id="accessGate">
@@ -316,30 +321,80 @@ let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=nul
 const $=s=>document.querySelector(s);
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return clone(defaultState);const data=Object.assign(clone(defaultState),JSON.parse(raw));if(!data.staff.find(s=>s.owner))data.staff[0].owner=true;return data}catch(e){return clone(defaultState)}}
-async function saveState(){
+let cloudClient=null;
+let cloudReady=false;
+let cloudSaving=false;
+function getCloudClient(){
+  if(cloudClient) return cloudClient;
+  if(!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
+  cloudClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return cloudClient;
+}
+function normalizeCloudState(data){
+  const merged = Object.assign(clone(defaultState), data || {});
+  if(!merged.staff.find(s=>s.owner)) merged.staff[0].owner=true;
+  return merged;
+}
+async function pullCloudState(){
+  const client=getCloudClient();
+  if(!client) return false;
+  try{
+    const { data, error } = await client.from(CLOUD_TABLE).select('id,data,updated_at').eq('id', CLOUD_ROW_ID).maybeSingle();
+    if(error){ console.log('雲端讀取失敗', error); return false; }
+    if(data && data.data){
+      state = normalizeCloudState(data.data);
+      localStorage.setItem(KEY, JSON.stringify(state));
+      console.log('雲端資料已載入');
+      return true;
+    }
+    await saveState(true);
+    return true;
+  }catch(err){
+    console.log('雲端讀取錯誤', err);
+    return false;
+  }
+}
+async function saveState(forceCloud=false){
   localStorage.setItem(KEY,JSON.stringify(state));
   console.log('本機已存檔');
 
+  const client=getCloudClient();
+  if(!client) return;
+  if(cloudSaving && !forceCloud) return;
+  cloudSaving=true;
   try{
-    const { error } = await window.supabase
-      .createClient(SUPABASE_URL, SUPABASE_KEY)
-      .from('orders')
-  .upsert({
-  id: 1,
-  order_id: currentOrderNo(),
-  designer: CURRENT_CASHIER || 'SYSTEM',
-  created_at: new Date().toISOString()
-});
-
-
+    const payload = { id:CLOUD_ROW_ID, data:state, updated_at:new Date().toISOString() };
+    const { error } = await client.from(CLOUD_TABLE).upsert(payload, { onConflict:'id' });
     if(error){
-      console.log('雲端失敗', error);
+      console.log('雲端同步失敗', error);
     }else{
-      console.log('雲端成功');
+      cloudReady=true;
+      console.log('雲端同步成功');
     }
   }catch(err){
     console.log('同步錯誤', err);
+  }finally{
+    cloudSaving=false;
   }
+}
+function refreshAllScreens(){
+  updateCashierDisplay();
+  renderCashier();
+  renderAssign();
+  renderReport();
+  renderManage();
+}
+async function startCloudSync(){
+  const ok = await pullCloudState();
+  if(ok){
+    refreshAllScreens();
+  }else{
+    console.log('目前使用本機資料，請確認 Supabase 資料表是否已建立');
+  }
+  setInterval(async()=>{
+    const ok = await pullCloudState();
+    if(ok) refreshAllScreens();
+  }, 15000);
 }
 function money(n){return '$'+Number(n||0).toLocaleString('zh-TW')}
 function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -779,7 +834,7 @@ document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
 });
 
-function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()}}
+function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()} startCloudSync();}
 init();
 </script>
 </body>
