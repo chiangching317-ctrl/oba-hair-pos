@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V11.0.14 雲端同步修正版</title>
+<title>OBA Hair 店內專用系統 V11.0.15 清空本單修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -686,10 +686,17 @@ function submitRedeem(){
   alert('已開立集點卡0元票，請至刷單入業績頁籤完成登錄');
 }
 document.addEventListener('click', function(e){
-  if(e.target && e.target.id === 'btnRedeemOpen') openRedeemDialog();
-  if(e.target && e.target.id === 'btnRedeemCancel') $('#redeemDialog').close();
-   if(e.target && e.target.id === 'btnRedeemSubmit') submitRedeem();
-if(e.target && e.target.id === 'btnClearCart'){ state.cart=[]; CURRENT_CASHIER=null; renderCart(); updateCashierDisplay(); saveState(true); }
+  const targetBtn = e.target && e.target.closest ? e.target.closest('button') : e.target;
+  if(targetBtn && targetBtn.id === 'btnRedeemOpen') openRedeemDialog();
+  if(targetBtn && targetBtn.id === 'btnRedeemCancel') $('#redeemDialog').close();
+  if(targetBtn && targetBtn.id === 'btnRedeemSubmit') submitRedeem();
+  if(targetBtn && targetBtn.id === 'btnClearCart'){
+    state.cart = [];
+    CURRENT_CASHIER = null;
+    renderCart();
+    updateCashierDisplay();
+    saveState(true);
+  }
 });
 
 
