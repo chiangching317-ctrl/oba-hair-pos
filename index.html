@@ -522,6 +522,7 @@ function reportFilterValues(){
 function isTimeInRange(time,start,end){
   const t=String(time||'00:00').slice(0,5);
   if(start && t<start) return false;
+  
   if(end && t>end) return false;
   return true;
 }
@@ -687,7 +688,8 @@ function submitRedeem(){
 document.addEventListener('click', function(e){
   if(e.target && e.target.id === 'btnRedeemOpen') openRedeemDialog();
   if(e.target && e.target.id === 'btnRedeemCancel') $('#redeemDialog').close();
-  if(e.target && e.target.id === 'btnRedeemSubmit') submitRedeem();
+   if(e.target && e.target.id === 'btnRedeemSubmit') submitRedeem();
+if(e.target && e.target.id === 'btnClearCart'){ state.cart=[]; CURRENT_CASHIER=null; renderCart(); updateCashierDisplay(); saveState(true); }
 });
 
 
