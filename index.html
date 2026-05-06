@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair 店內專用系統 V11.0.17 全清版</title>
+<title>OBA Hair 店內專用系統 V11.0.23 BOSS限制模式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -58,6 +58,11 @@ body.phone-mode .section-title{font-size:20px}
 .manage-fold[open] summary:after{content:'收起'}
 .manage-fold-body{padding:0 18px 18px}
 .save-hint{font-size:12px;color:#6b7280;margin-top:8px;font-weight:800}
+.save-status{font-size:13px;font-weight:900;border-radius:999px;padding:7px 11px;background:#f3f4f6;color:#555}
+.save-status.dirty{background:#fff3cd;color:#8a5a00}
+.save-status.saved{background:#e8f5eb;color:#245f38}
+body.boss-mode #tab-cashier,body.boss-mode #tab-assign,body.boss-mode #tab-manage{display:none!important}
+body.boss-mode #tab-report{display:block!important}
 @media print{
   @page{size:80mm auto;margin:0}
   html,body{width:80mm;margin:0!important;padding:0!important;background:#fff!important}
@@ -245,8 +250,8 @@ const CLOUD_ROW_ID = "main";
         <div class="manage-fold-body">
           <div class="save-hint">新增或修改後，請按儲存品項資料才會寫入。</div>
           <div class="space"></div>
-          <div class="grid3"><input id="newItemName" class="input" placeholder="品項名稱" /><input id="newItemPrice" class="input" type="number" placeholder="價格" /><button class="btn btn-primary" id="btnAddItem">新增品項</button></div>
-          <div class="space"></div><div class="row"><button class="btn btn-ok" id="btnSaveItems">儲存品項資料</button></div>
+          <div class="grid4"><input id="newItemCategory" class="input" placeholder="分類，例如：剪髮 / 染髮" /><input id="newItemName" class="input" placeholder="品項名稱，例如：洗加剪" /><input id="newItemPrice" class="input" type="number" placeholder="價格" /><button class="btn btn-primary" id="btnAddItem">新增品項</button></div>
+          <div class="space"></div><div class="row"><button class="btn btn-ok" id="btnSaveItems">儲存品項資料</button><span class="save-status saved" id="itemSaveStatus">已儲存</span></div>
           <div class="space"></div><div id="itemManageList"></div>
         </div>
       </details>
@@ -316,6 +321,7 @@ const defaultState={
  orders:[],refunds:[]
 };
 let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null;
+let ITEM_DIRTY=false;
 const $=s=>document.querySelector(s);
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return clone(defaultState);const data=Object.assign(clone(defaultState),JSON.parse(raw));if(!data.staff.find(s=>s.owner))data.staff[0].owner=true;return data}catch(e){return clone(defaultState)}}
@@ -381,6 +387,7 @@ function refreshAllScreens(){
   renderAssign();
   renderReport();
   renderManage();
+  applyBossMode();
 }
 async function startCloudSync(){
   const ok = await pullCloudState();
@@ -390,6 +397,7 @@ async function startCloudSync(){
     console.log('目前使用本機資料，請確認 Supabase 資料表是否已建立');
   }
   setInterval(async()=>{
+    if(ITEM_DIRTY){ console.log('品項尚未儲存，暫停雲端覆蓋'); return; }
     const ok = await pullCloudState();
     if(ok) refreshAllScreens();
   }, 15000);
@@ -440,7 +448,37 @@ function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new 
 function updateCashierDisplay(){ $('#cashierDisplay').textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 本單經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 尚未驗證收銀 PIN'}
 function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
 function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
+
+// V11.0.23：BOSS限制模式（只可看報表，不可操作收款/退票/管理）
+const BOSS_PASSWORD = '269527';
+window.USER_ROLE = window.USER_ROLE || 'staff';
+function isBossMode(){return window.USER_ROLE === 'boss'}
+function guardBossAction(){if(isBossMode()){alert('BOSS模式只能查看報表，不能操作此功能');return true}return false}
+function applyBossMode(){
+  if(!isBossMode()) return;
+  document.body.classList.add('boss-mode');
+  document.querySelectorAll('.tab').forEach(tab=>{
+    const isReport = tab.dataset.tab === 'report';
+    tab.classList.toggle('active', isReport);
+    if(!isReport){
+      tab.classList.add('hidden');
+      tab.disabled = true;
+      tab.style.opacity = '.45';
+      tab.style.pointerEvents = 'none';
+    }
+  });
+  document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));
+  $('#tab-report')?.classList.remove('hidden');
+  document.querySelectorAll('#tab-cashier button,#tab-assign button,#tab-manage button,#tab-manage input,#tab-manage select,#tab-manage textarea,#btnResetAll').forEach(el=>{
+    el.disabled = true;
+    el.style.opacity = '.45';
+    el.style.pointerEvents = 'none';
+  });
+  const badge = $('#cashierDisplay');
+  if(badge) badge.textContent = 'BOSS限制模式｜只可查看報表';
+}
 function requireCashier(){
+  if(guardBossAction()) return false;
   const pin = window.prompt('請輸入本單收銀 PIN');
   if(pin===null) return false;
   const cashier = state.staff.find(s=>String(s.pin||'').trim()===String(pin).trim() && s.permissions.includes('checkout') && s.active);
@@ -450,16 +488,65 @@ function requireCashier(){
   return true
 }
 
-document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{const name=tab.dataset.tab;if(tab.classList.contains('locked')){pendingLockedTab=name;openPassword(name);return}setActiveTab(name);focusScanIfNeeded(name)});
+document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
+  const name=tab.dataset.tab;
+  if(isBossMode() && name!=='report'){
+    alert('BOSS模式只能查看報表');
+    applyBossMode();
+    return;
+  }
+  if(tab.classList.contains('locked')){pendingLockedTab=name;openPassword(name);return}
+  setActiveTab(name);focusScanIfNeeded(name)
+});
 function openPassword(targetTab){pwdMode=targetTab;$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.add('hidden');$('#pwdTitle').textContent=state.managementPassword?'輸入管理密碼':'第一次設定管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 $('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
-$('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(oldPwd!==state.managementPassword){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
+$('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('BOSS模式不可修改密碼');return} if(oldPwd!==state.managementPassword){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
+ if(pwdMode==='report' && oldPwd===BOSS_PASSWORD){window.USER_ROLE='boss';$('#passwordDialog').close();pendingLockedTab='';applyBossMode();renderReport();return;}
  if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(oldPwd!==state.managementPassword){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
- $('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
+ window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 
-function renderCashier(){ $('#todayText').textContent=todayStr(); $('#nextOrderNo').textContent=currentOrderNo(); const grid=$('#cashierItemGrid'); grid.innerHTML=''; activeItems().filter(i=>i.quick).forEach(item=>{const btn=document.createElement('button');btn.className='chip';btn.innerHTML=`<div class="name">${item.name}</div><div class="price">${money(item.price)}</div>`;btn.onclick=()=>{state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart()};grid.appendChild(btn)}); [...new Set(activeItems().filter(i=>!i.quick).map(i=>i.category).filter(Boolean))].forEach(cat=>{const btn=document.createElement('button');btn.className='chip';btn.innerHTML=`<div class="name">${cat}</div><div class="price">點一下選金額</div>`;btn.onclick=()=>openItemPicker(cat);grid.appendChild(btn)}); renderCart()}
-function openItemPicker(category){const list=activeItems().filter(i=>!i.quick&&i.category===category);$('#itemPickTitle').textContent=category;const grid=$('#itemPickGrid');grid.innerHTML=list.map(i=>`<button class="chip" data-id="${i.id}"><div class="name">${i.name}</div><div class="price">${money(i.price)}</div></button>`).join('');grid.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>{const item=activeItems().find(x=>x.id===btn.dataset.id);if(!item)return;state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart();$('#itemPickDialog').close()});$('#itemPickDialog').showModal()}
+function renderCashier(){
+  $('#todayText').textContent=todayStr();
+  $('#nextOrderNo').textContent=currentOrderNo();
+  const grid=$('#cashierItemGrid');
+  grid.innerHTML='';
+  const items=activeItems();
+  const grouped={};
+  const singles=[];
+  items.forEach(item=>{
+    const cat=String(item.category||'').trim();
+    if(cat){
+      if(!grouped[cat]) grouped[cat]=[];
+      grouped[cat].push(item);
+    }else{
+      singles.push(item);
+    }
+  });
+  Object.keys(grouped).forEach(cat=>{
+    const btn=document.createElement('button');
+    btn.className='chip';
+    btn.innerHTML=`<div class="name">${cat}</div><div class="price">點一下選金額</div>`;
+    btn.onclick=()=>openItemPicker(cat);
+    grid.appendChild(btn);
+  });
+  singles.forEach(item=>{
+    const btn=document.createElement('button');
+    btn.className='chip';
+    btn.innerHTML=`<div class="name">${item.name}</div><div class="price">${money(item.price)}</div>`;
+    btn.onclick=()=>{state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart()};
+    grid.appendChild(btn);
+  });
+  renderCart();
+}
+function openItemPicker(category){
+  const list=activeItems().filter(i=>String(i.category||'').trim()===category);
+  $('#itemPickTitle').textContent=category;
+  const grid=$('#itemPickGrid');
+  grid.innerHTML=list.map(i=>`<button class="chip" data-id="${i.id}"><div class="name">${i.name}</div><div class="price">${money(i.price)}</div></button>`).join('');
+  grid.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>{const item=activeItems().find(x=>x.id===btn.dataset.id);if(!item)return;state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart();$('#itemPickDialog').close()});
+  $('#itemPickDialog').showModal();
+}
 $('#btnCloseItemPick').onclick=()=>$('#itemPickDialog').close();
 
 function renderCart(){
@@ -505,12 +592,12 @@ function renderAssignPreview(){const code=$('#assignOrderNo').value.trim();const
 $('#btnAssignOrder').onclick=()=>{const code=$('#assignOrderNo').value.trim();const staffId=$('#assignDesigner').value||'JEAN';const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return} if(order.refunded){alert('這張單已退票，不能入業績');return} const staff=staffById(staffId);order.assignedDesignerId=staff.id;order.assignedDesignerName=staff.name;order.commission=calcCommission(order,staff.id);order.assignedAt=new Date().toISOString();saveState();renderAssign();renderReport();alert('已成功掛入業績')}
 function renderMyStats(){const id=$('#assignDesigner').value||'JEAN', today=todayStr(), month=monthStr();const todayOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded), monthOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date.startsWith(month)&&!o.refunded);$('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+o.total,0))} / ${money(todayOrders.reduce((s,o)=>s+o.commission,0))} / ${todayOrders.length}`;$('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+o.total,0))} / ${money(monthOrders.reduce((s,o)=>s+o.commission,0))} / ${monthOrders.length}`;$('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單'}
 
-function openRefund(code=''){ $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
+function openRefund(code=''){ if(guardBossAction()) return; $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
 $('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=()=>openRefund($('#assignOrderNo').value.trim()); $('#btnCloseRefund').onclick=()=>$('#refundDialog').close();
 $('#refundReason').onchange=()=>$('#refundReasonOther').classList.toggle('hidden',$('#refundReason').value!=='其他');
 $('#refundOrderNo').addEventListener('input',renderRefundPreview);
 function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=findOrderByCode(code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
-$('#btnDoRefund').onclick=()=>{const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return} if(order.refunded){alert('這張單已退票');return} if(!reason){alert('請選擇退票原因');return} order.refunded=true; state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:order.total,reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()}); saveState(); renderRefundPreview(); renderAssign(); renderReport(); $('#refundDialog').close(); alert('已完成退票')}
+$('#btnDoRefund').onclick=()=>{if(guardBossAction()) return; const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return} if(order.refunded){alert('這張單已退票');return} if(!reason){alert('請選擇退票原因');return} order.refunded=true; state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:order.total,reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()}); saveState(); renderRefundPreview(); renderAssign(); renderReport(); $('#refundDialog').close(); alert('已完成退票')}
 
 function reportFilterValues(){
   const dateEl=$('#reportDate'), startEl=$('#reportStartTime'), endEl=$('#reportEndTime'), staffEl=$('#reportStaff');
@@ -561,21 +648,44 @@ document.addEventListener('change',function(e){
   if(e.target && ['reportDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
 });
 
+
+function updateItemSaveStatus(){
+  const status = $('#itemSaveStatus');
+  const btn = $('#btnSaveItems');
+  if(!status || !btn) return;
+  if(ITEM_DIRTY){
+    status.textContent='尚未儲存';
+    status.classList.remove('saved');
+    status.classList.add('dirty');
+    btn.textContent='儲存品項資料';
+  }else{
+    status.textContent='已儲存';
+    status.classList.remove('dirty');
+    status.classList.add('saved');
+    btn.textContent='儲存品項資料';
+  }
+}
+function markItemsDirty(){
+  ITEM_DIRTY=true;
+  updateItemSaveStatus();
+}
 function applyPresetPermissions(s){if(s.owner){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all'];return} if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
 function renderManage(){const names=activeItems().map(i=>i.name);$('#staffCards').innerHTML=state.staff.map(s=>`<div class="card" style="margin-bottom:12px"><div class="row" style="justify-content:space-between"><div><div class="section-title" style="font-size:18px;margin-bottom:4px">${s.name}</div></div><div>${s.active?'<span class="badge badge-ok">啟用中</span>':'<span class="badge badge-off">停用</span>'}</div></div><div class="space"></div><div class="grid4"><div><div class="label">姓名</div><input class="input" value="${s.name||''}" onchange="updateStaffField('${s.id}','name',this.value)"></div><div><div class="label">暱稱</div><input class="input" value="${s.nickname||''}" onchange="updateStaffField('${s.id}','nickname',this.value)"></div><div><div class="label">電話</div><input class="input" value="${s.phone||''}" onchange="updateStaffField('${s.id}','phone',this.value)"></div><div><div class="label">住址</div><input class="input" value="${s.address||''}" onchange="updateStaffField('${s.id}','address',this.value)"></div></div><div class="space"></div><div class="grid4"><div><div class="label">到職日</div><input class="input" type="date" value="${s.joinDate||''}" onchange="updateStaffField('${s.id}','joinDate',this.value)"></div><div><div class="label">年資</div><div class="pill">${getYearsText(s.joinDate)}</div></div><div><div class="label">PIN</div><input class="input" inputmode="numeric" value="${s.pin||''}" onchange="updateStaffField('${s.id}','pin',this.value)"></div><div><div class="label">是否在職</div><select class="select" onchange="updateStaffActive('${s.id}',this.value)"><option value="true" ${s.active?'selected':''}>在職</option><option value="false" ${!s.active?'selected':''}>離職</option></select></div></div><div class="space"></div><div class="grid2"><div><div class="label">職務類型</div><select class="select" onchange="updateStaffField('${s.id}','role',this.value)"><option value="店長" ${s.role==='店長'?'selected':''}>門市管理</option><option value="老闆" ${s.role==='老闆'?'selected':''}>查看管理</option><option value="設計師" ${s.role==='設計師'?'selected':''}>服務人員</option><option value="助理" ${s.role==='助理'?'selected':''}>助理</option><option value="收銀員" ${s.role==='收銀員'?'selected':''}>櫃台</option></select></div><div><div class="label">使用權限</div><select class="select" onchange="updateSystemRole('${s.id}',this.value)" ${s.owner?'disabled':''}><option value="擁有者" ${s.systemRole==='擁有者'?'selected':''}>最高權限</option><option value="管理者" ${s.systemRole==='管理者'?'selected':''}>管理權限</option><option value="一般員工" ${s.systemRole==='一般員工'?'selected':''}>基本權限</option><option value="僅查看者" ${s.systemRole==='僅查看者'?'selected':''}>唯讀權限</option></select></div></div><div class="space"></div><div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} ${s.owner?'disabled':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div><div class="space"></div><div class="row"><button class="btn btn-soft" onclick="updateSystemRoleByRole('${s.id}')">依身份自動套權限</button><button class="btn btn-danger" onclick="deleteStaff('${s.id}')" ${s.owner?'disabled':''}>刪除此員工</button></div></div>`).join('');
-$('#itemManageList').innerHTML=state.items.map(i=>`<div class="card" style="margin-bottom:10px"><div class="grid4"><input class="input" value="${i.category||''}" onchange="updateItemField('${i.id}','category',this.value)"><input class="input" value="${i.name}" onchange="updateItemField('${i.id}','name',this.value)"><input class="input" type="number" value="${i.price}" onchange="updateItemField('${i.id}','price',this.value)"><select class="select" onchange="updateItemField('${i.id}','active',this.value)"><option value="true" ${i.active?'selected':''}>啟用</option><option value="false" ${!i.active?'selected':''}>停用</option></select></div><div class="space"></div><div class="grid2"><div><div class="label">集點卡兌換</div><select class="select" onchange="updateItemField('${i.id}','redeemable',this.value)"><option value="false" ${!i.redeemable?'selected':''}>不可兌換</option><option value="true" ${i.redeemable?'selected':''}>可兌換</option></select></div></div></div>`).join('')}
-window.updateStaffField=(staffId,field,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; renderAssign(); renderManage(); updateCashierDisplay()}
-window.updateStaffActive=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; renderAssign(); renderManage()}
-window.updateSystemRole=(staffId,value)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; applyPresetPermissions(s); renderManage()}
-window.updateSystemRoleByRole=(staffId)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); renderManage()}
-window.togglePermission=(staffId,key,checked)=>{const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); renderManage()}
-window.deleteStaff=(id)=>{const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
-document.getElementById('btnAddStaff').onclick=()=>{const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
-window.updateItemField=(id,field,val)=>{const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; renderCashier(); renderManage()}
-document.getElementById('btnAddItem').onclick=()=>{const name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!name||!price){alert('請輸入品項名稱與價格');return} state.items.push({id:'item'+Date.now(),category:'其他',name,price,active:true,quick:false}); $('#newItemName').value=''; $('#newItemPrice').value=''; renderCashier(); renderManage(); alert('已新增品項，請按儲存品項資料')}
+$('#itemManageList').innerHTML=state.items.map(i=>`<div class="card" style="margin-bottom:10px"><div class="grid4"><input class="input" value="${i.category||''}" placeholder="分類" onchange="updateItemField('${i.id}','category',this.value)"><input class="input" value="${i.name}" placeholder="品項名稱" onchange="updateItemField('${i.id}','name',this.value)"><input class="input" type="number" value="${i.price}" placeholder="價格" onchange="updateItemField('${i.id}','price',this.value)"><select class="select" onchange="updateItemField('${i.id}','active',this.value)"><option value="true" ${i.active?'selected':''}>啟用</option><option value="false" ${!i.active?'selected':''}>停用</option></select></div><div class="space"></div><div class="grid2"><div><div class="label">集點卡兌換</div><select class="select" onchange="updateItemField('${i.id}','redeemable',this.value)"><option value="false" ${!i.redeemable?'selected':''}>不可兌換</option><option value="true" ${i.redeemable?'selected':''}>可兌換</option></select></div><div><div class="label">刪除品項</div><button class="btn btn-danger" onclick="deleteItem('${i.id}')">刪除此品項</button></div></div></div>`).join(''); updateItemSaveStatus()}
+window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; renderAssign(); renderManage(); updateCashierDisplay()}
+window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; renderAssign(); renderManage()}
+window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; applyPresetPermissions(s); renderManage()}
+window.updateSystemRoleByRole=(staffId)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); renderManage()}
+window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); renderManage()}
+window.deleteStaff=(id)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
+document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
+window.updateItemField=(id,field,val)=>{if(guardBossAction()) return; const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; ITEM_DIRTY=true; renderCashier(); renderManage()}
+document.getElementById('btnAddItem').onclick=()=>{if(guardBossAction()) return; const category=$('#newItemCategory').value.trim(), name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!category||!name||!price){alert('請輸入分類、品項名稱與價格');return} const newItem={id:'item'+Date.now(),category,name,price,active:true,quick:false}; state.items.unshift(newItem); $('#newItemCategory').value=''; $('#newItemName').value=''; $('#newItemPrice').value=''; ITEM_DIRTY=true; renderCashier(); renderManage(); setActiveTab('manage'); const list=$('#itemManageList'); if(list) list.scrollIntoView({behavior:'smooth',block:'start'}); alert('已新增品項，會歸在「'+category+'」分類；請按儲存品項資料')}
+window.deleteItem=(id)=>{if(guardBossAction()) return; const item=state.items.find(x=>x.id===id);if(!item)return;if(!confirm('確定刪除「'+item.name+'」嗎？'))return;state.items=state.items.filter(x=>x.id!==id);ITEM_DIRTY=true;renderCashier();renderManage();alert('已刪除，請按儲存品項資料')}
 
 document.addEventListener('click', function(e){
   if(e.target && e.target.id==='btnSaveStaff'){
+    if(guardBossAction()) return;
     saveState();
     renderAssign();
     renderReport();
@@ -583,7 +693,9 @@ document.addEventListener('click', function(e){
     alert('員工資料已儲存');
   }
   if(e.target && e.target.id==='btnSaveItems'){
+    if(guardBossAction()) return;
     saveState();
+    ITEM_DIRTY=false;
     renderCashier();
     renderAssign();
     renderReport();
@@ -593,7 +705,7 @@ document.addEventListener('click', function(e){
 });
 
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
-$('#btnResetAll').onclick=()=>{if(!confirm('確定要清空全部資料嗎？'))return; localStorage.removeItem(KEY); state=clone(defaultState); saveState(); init()}
+$('#btnResetAll').onclick=()=>{if(guardBossAction()) return; if(!confirm('確定要清空全部資料嗎？'))return; localStorage.removeItem(KEY); state=clone(defaultState); saveState(); init()}
 function isPhoneDevice(){
   const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
   const lw = Math.max(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
@@ -834,7 +946,7 @@ document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
 });
 
-function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()} startCloudSync();}
+function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyBossMode(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()} startCloudSync();}
 init();
 </script>
 </body>
