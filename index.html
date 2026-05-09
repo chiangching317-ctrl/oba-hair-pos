@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.35 掃描清空穩定版</title>
+<title>OBA Hair V11.0.36 刷單報表穩定版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -448,7 +448,15 @@ function findOrderByCode(value){
 function activeItems(){return state.items.filter(i=>i.active)}
 function activeStaff(){return state.staff.filter(s=>s.active)}
 function staffById(id){return state.staff.find(s=>s.id===id)}
-function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;return order.items.reduce((sum,item)=>sum+Math.round(item.price*(staff.rules[item.name]??staff.rules.default??0.5)),0)}
+function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;return order.items.reduce((sum,item)=>{const rate=staff.rules?.[item.name] ?? staff.rules?.[item.category] ?? staff.rules?.default ?? 0.5;return sum+Math.round(Number(item.price||0)*Number(rate||0));},0)}
+function ensureOrderPerformance(order){
+  if(!order || !order.assignedDesignerId) return order;
+  const staff=staffById(order.assignedDesignerId);
+  if(staff && !order.assignedDesignerName) order.assignedDesignerName=staff.name;
+  const commission=calcCommission(order,order.assignedDesignerId);
+  if(!Number.isFinite(Number(order.commission)) || Number(order.commission)===0) order.commission=commission;
+  return order;
+}
 function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new Date(joinDate), now=new Date();const months=(now.getFullYear()-start.getFullYear())*12+(now.getMonth()-start.getMonth());return `${Math.floor(months/12)}年${months%12}個月`}
 function updateCashierDisplay(){ $('#cashierDisplay').textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 本單經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 尚未驗證收銀 PIN'}
 function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
@@ -720,8 +728,27 @@ function clearAssignScanField(){
   input.dispatchEvent(new Event('input',{bubbles:true}));
   setTimeout(()=>input.focus(),80);
 }
-$('#btnAssignOrder').onclick=()=>{const code=$('#assignOrderNo').value.trim();const staffId=$('#assignDesigner').value||'JEAN';const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return} if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return} const staff=staffById(staffId);order.assignedDesignerId=staff.id;order.assignedDesignerName=staff.name;order.commission=calcCommission(order,staff.id);order.assignedAt=new Date().toISOString();saveState();renderAssign();renderReport();clearAssignScanField();alert('已成功掛入業績')}
-function renderMyStats(){const id=$('#assignDesigner').value||'JEAN', today=todayStr(), month=monthStr();const todayOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded), monthOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date.startsWith(month)&&!o.refunded);$('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+o.total,0))} / ${money(todayOrders.reduce((s,o)=>s+o.commission,0))} / ${todayOrders.length}`;$('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+o.total,0))} / ${money(monthOrders.reduce((s,o)=>s+o.commission,0))} / ${monthOrders.length}`;$('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單'}
+$('#btnAssignOrder').onclick=()=>{
+  const code=$('#assignOrderNo').value.trim();
+  const staffId=$('#assignDesigner').value||'JEAN';
+  const order=findOrderByCode(code);
+  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
+  if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return}
+  const staff=staffById(staffId);
+  if(!staff){alert('找不到員工資料，請先到員工資料確認此員工仍在職');return}
+  order.assignedDesignerId=staff.id;
+  order.assignedDesignerName=staff.name;
+  order.commission=calcCommission(order,staff.id);
+  order.assignedAt=new Date().toISOString();
+  const reportStaff=$('#reportStaff');
+  if(reportStaff) reportStaff.value=staff.id;
+  saveState(true);
+  renderAssign();
+  renderReport();
+  clearAssignScanField();
+  alert('已成功掛入業績，報表已更新到 '+staff.name);
+}
+function renderMyStats(){state.orders.forEach(ensureOrderPerformance);const id=$('#assignDesigner').value||'JEAN', today=todayStr(), month=monthStr();const todayOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded), monthOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date.startsWith(month)&&!o.refunded);$('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(todayOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${todayOrders.length}`;$('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(monthOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${monthOrders.length}`;$('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單'}
 
 function openRefund(code=''){ if(guardBossAction()) return; $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
 $('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=()=>openRefund($('#assignOrderNo').value.trim()); $('#btnCloseRefund').onclick=()=>$('#refundDialog').close();
@@ -751,6 +778,7 @@ function renderReportStaffOptions(){
   if(!staffList.find(s=>s.id===sel.value) && staffList[0]) sel.value=staffList[0].id;
 }
 function renderReport(){
+  state.orders.forEach(ensureOrderPerformance);
   renderReportStaffOptions();
   const f=reportFilterValues(), month=f.date.slice(0,7);
   const rangeText=`${f.date}${f.start||f.end?' '+(f.start||'00:00')+'～'+(f.end||'23:59'):' 全日'}`;
@@ -773,7 +801,7 @@ function renderReport(){
   $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
   $('#reportRecordTitle').textContent='區間紀錄｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
-  $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>完成</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
+  $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
 }
 document.addEventListener('change',function(e){
   if(e.target && ['reportDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
