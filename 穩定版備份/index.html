@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.36 刷單報表穩定版</title>
+<title>OBA Hair V11.0.37 QR Code刷單版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
@@ -50,6 +51,8 @@ body.phone-mode .section-title{font-size:20px}
 .hidden-gate{display:none!important}
 
 .receipt svg{width:100%;height:46px;display:block;margin:2mm 0 1mm}
+.receipt .qr-box{display:flex;justify-content:center;align-items:center;margin:2mm 0 1mm}
+.receipt .qr-box canvas,.receipt .qr-box img{width:86px!important;height:86px!important}
 .receipt .barcode-note{font-size:12px;text-align:center;letter-spacing:1px}
 
 .manage-fold{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:0;overflow:hidden}
@@ -73,6 +76,7 @@ body.boss-mode #tab-report{display:block!important}
   .receipt{width:80mm!important;padding:4mm!important;font-size:13px!important;line-height:1.45!important}
   .receipt h3{font-size:20px!important;margin-bottom:6px!important}
   .receipt svg{height:48px!important}
+  .receipt .qr-box canvas,.receipt .qr-box img{width:90px!important;height:90px!important}
 }
 @media (max-width:768px){
   .btn{min-height:48px;font-size:16px}
@@ -287,7 +291,7 @@ const CLOUD_ROW_ID = "main";
   <h3>相機刷單</h3>
   <div class="scanner-wrap">
     <video id="scanVideo" playsinline muted></video>
-    <div class="scan-status" id="scanStatus">請允許相機權限，開啟後直接對準收據條碼，不需要拍照。</div>
+    <div class="scan-status" id="scanStatus">請允許相機權限，開啟後直接對準收據 QR Code，不需要拍照。</div>
     <div class="row">
       <button class="btn btn-soft" id="btnCloseCameraScan" type="button">關閉相機</button>
     </div>
@@ -592,18 +596,33 @@ function removeCartItem(idx){
 document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.cart.length===0){alert('請先加入項目');return} CURRENT_CASHIER=null; updateCashierDisplay(); if(!requireCashier())return; const method=btn.dataset.pay; state.pendingPay=method; $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(state.cart.reduce((s,i)=>s+i.price,0))}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`; $('#payDialog').showModal()})
 $('#btnCancelPay').onclick=()=>$('#payDialog').close();
 $('#btnConfirmPay').onclick=()=>{const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
+function renderReceiptQr(orderId){
+  const box = $('#receiptQr');
+  if(!box) return;
+  box.innerHTML='';
+  try{
+    if(window.QRCode){
+      new QRCode(box,{text:String(orderId||''),width:86,height:86,correctLevel:QRCode.CorrectLevel.M});
+    }else{
+      box.innerHTML='<div class="note">QR Code 套件尚未載入</div>';
+      alert('QR Code 套件尚未載入，請確認網路後重新整理');
+    }
+  }catch(e){
+    console.log(e);
+    box.innerHTML='<div class="note">QR Code 產生失敗</div>';
+    alert('QR Code 產生失敗');
+  }
+}
 function openReceipt(order){
   const redeemInfo = order.paymentMethod==='集點卡兌換' && order.redeemMeta
     ? `<div class="r"><span>客人姓名</span><span>${order.redeemMeta.customer||'-'}</span></div><div class="r"><span>集點卡末4碼</span><span>${order.redeemMeta.uid4||'-'}</span></div>`
     : '';
-  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>類型</span><span>${order.paymentMethod==='集點卡兌換'?'集點卡0元票':order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><svg id="receiptBarcode"></svg><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>{try{if(window.JsBarcode){JsBarcode('#receiptBarcode', order.id, {format:'CODE128',displayValue:false,height:42,width:1.45,margin:0});}else{alert('條碼套件尚未載入，請確認網路後重新整理');}}catch(e){console.log(e);alert('條碼產生失敗');}},350)}
+  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>類型</span><span>${order.paymentMethod==='集點卡兌換'?'集點卡0元票':order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>renderReceiptQr(order.id),250)}
 let LAST_RECEIPT_IMAGE_FILE=null;
 async function makeReceiptImage(){
   try{
     const id=$('#printArea .barcode-note')?.textContent?.trim();
-    if(id && window.JsBarcode){
-      JsBarcode('#receiptBarcode', id, {format:'CODE128',displayValue:false,height:42,width:1.45,margin:0});
-    }
+    if(id) renderReceiptQr(id);
     if(!window.html2canvas){
       alert('圖片產生套件尚未載入，請確認網路後重新整理');
       return;
@@ -681,9 +700,7 @@ function canvasToEscPosRaster(canvas){
 async function printReceiptByRawBT(){
   try{
     const id=$('#printArea .barcode-note')?.textContent?.trim();
-    if(id && window.JsBarcode){
-      JsBarcode('#receiptBarcode', id, {format:'CODE128',displayValue:false,height:42,width:1.45,margin:0});
-    }
+    if(id) renderReceiptQr(id);
     if(!window.html2canvas){
       alert('圖片產生套件尚未載入，請確認網路後重新整理');
       return;
