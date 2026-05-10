@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.39 本張單顯示穩定版</title>
+<title>OBA Hair V11.0.41 防F12正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -481,7 +481,7 @@ function updateCashierDisplay(){ $('#cashierDisplay').textContent = CURRENT_CASH
 function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
 function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
 
-// V11.0.38：BOSS限制模式＋分店欄位預留（只可看報表，不可操作收款/退票/管理）
+// V11.0.40：BOSS限制模式＋分店欄位預留＋歸零退票帳務（只可看報表，不可操作收款/退票/管理）
 const BOSS_PASSWORD = '269527';
 const BOSS_SESSION_KEY = 'oba_boss_mode_v38';
 window.USER_ROLE = sessionStorage.getItem(BOSS_SESSION_KEY)==='yes' ? 'boss' : (window.USER_ROLE || 'staff');
@@ -640,9 +640,10 @@ function renderReceiptQr(orderId){
 }
 function openReceipt(order){
   const redeemInfo = order.paymentMethod==='集點卡兌換' && order.redeemMeta
-    ? `<div class="r"><span>客人姓名</span><span>${order.redeemMeta.customer||'-'}</span></div><div class="r"><span>集點卡末4碼</span><span>${order.redeemMeta.uid4||'-'}</span></div>`
+    ? `<div class="r"><span>客人</span><span>${order.redeemMeta.customer||'-'} / ${order.redeemMeta.uid4||'-'}</span></div>`
     : '';
-  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>分店</span><span>${order.branchName||DEFAULT_BRANCH_NAME}</span></div><div class="r"><span>類型</span><span>${order.paymentMethod==='集點卡兌換'?'集點卡0元票':order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>renderReceiptQr(order.id),250)}
+  const typeText = order.paymentMethod==='集點卡兌換' ? '集點卡0元票' : order.paymentMethod;
+  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">${order.id}</div><div class="center">${order.date} ${order.time}｜${typeText}</div><div class="center">${order.branchName||DEFAULT_BRANCH_NAME}｜經手 ${order.cashierName||'-'}</div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:2px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>renderReceiptQr(order.id),250)}
 let LAST_RECEIPT_IMAGE_FILE=null;
 async function makeReceiptImage(){
   try{
@@ -762,7 +763,26 @@ $('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay();
 
 function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats()}
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
-function renderAssignPreview(){const code=$('#assignOrderNo').value.trim();let order=findOrderByCode(code);if(!order && !code && LAST_ASSIGNED_ORDER_NO){order=findOrderByCode(LAST_ASSIGNED_ORDER_NO)}const selectedId=$('#assignDesigner').value||'JEAN'; if(!order){$('#assignPreview').innerHTML='請先掃描或輸入單號';$('#assignShowNo').textContent='--';$('#assignShowTotal').textContent='$0';$('#assignShowCommission').textContent='$0';$('#myThisOrder').textContent='$0 / $0';return} const commission=calcCommission(order,selectedId);$('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;$('#assignShowNo').textContent=order.id;$('#assignShowTotal').textContent=money(order.total);$('#assignShowCommission').textContent=money(commission);$('#myThisOrder').textContent=`${money(order.total)} / ${money(commission)}`}
+function renderAssignPreview(){
+  const code=$('#assignOrderNo').value.trim();
+  let order=findOrderByCode(code);
+  if(!order && !code && LAST_ASSIGNED_ORDER_NO){order=findOrderByCode(LAST_ASSIGNED_ORDER_NO)}
+  const selectedId=$('#assignDesigner').value||'JEAN';
+  if(!order){
+    $('#assignPreview').innerHTML='請先掃描或輸入單號';
+    $('#assignShowNo').textContent='--';
+    $('#assignShowTotal').textContent='$0';
+    $('#assignShowCommission').textContent='$0';
+    $('#myThisOrder').textContent='$0 / $0';
+    return;
+  }
+  const commission=order.refunded ? 0 : calcCommission(order,selectedId);
+  $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;
+  $('#assignShowNo').textContent=order.id;
+  $('#assignShowTotal').textContent=order.refunded ? '$0' : money(order.total);
+  $('#assignShowCommission').textContent=money(commission);
+  $('#myThisOrder').textContent=order.refunded ? '$0 / $0' : `${money(order.total)} / ${money(commission)}`;
+}
 function clearAssignScanField(){
   const input=$('#assignOrderNo');
   if(!input) return;
@@ -799,7 +819,25 @@ $('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=(
 $('#refundReason').onchange=()=>$('#refundReasonOther').classList.toggle('hidden',$('#refundReason').value!=='其他');
 $('#refundOrderNo').addEventListener('input',renderRefundPreview);
 function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=findOrderByCode(code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
-$('#btnDoRefund').onclick=()=>{if(guardBossAction()) return; const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;const order=findOrderByCode(code);if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return} if(order.refunded){alert('這張單已退票');return} if(!reason){alert('請選擇退票原因');return} order.refunded=true; state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:order.total,reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()}); saveState(); renderRefundPreview(); renderAssign(); renderReport(); $('#refundDialog').close(); alert('已完成退票')}
+$('#btnDoRefund').onclick=()=>{
+  if(guardBossAction()) return;
+  const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;
+  const order=findOrderByCode(code);
+  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return}
+  if(order.refunded){alert('這張單已退票');return}
+  if(!reason){alert('請選擇退票原因');return}
+  order.refunded=true;
+  order.refundedAt=new Date().toISOString();
+  order.refundReason=reason;
+  state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:Number(order.total||0),reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()});
+  if(LAST_ASSIGNED_ORDER_NO===order.id) LAST_ASSIGNED_ORDER_NO='';
+  saveState(true);
+  renderRefundPreview();
+  renderAssign();
+  renderReport();
+  $('#refundDialog').close();
+  alert('已完成退票，業績與抽成已從報表扣回');
+}
 
 function reportFilterValues(){
   const dateEl=$('#reportDate'), startEl=$('#reportStartTime'), endEl=$('#reportEndTime'), staffEl=$('#reportStaff');
@@ -975,7 +1013,33 @@ document.addEventListener('click', function(e){
 });
 
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
-$('#btnResetAll').onclick=()=>{if(guardBossAction()) return; if(!confirm('確定要清空全部資料嗎？'))return; localStorage.removeItem(KEY); state=clone(defaultState); saveState(); init()}
+function resetAllDataForGoLive(){
+  localStorage.removeItem(KEY);
+  state=clone(defaultState);
+  state.nextNo=1;
+  state.cart=[];
+  state.orders=[];
+  state.refunds=[];
+  state.pendingPay='';
+  state.branchId=DEFAULT_BRANCH_ID;
+  state.branchName=DEFAULT_BRANCH_NAME;
+  CURRENT_CASHIER=null;
+  LAST_ASSIGNED_ORDER_NO='';
+  ITEM_DIRTY=false;
+  STAFF_DIRTY=false;
+  ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
+  const dateEl=$('#reportDate'); if(dateEl) dateEl.value=todayStr();
+  saveState(true);
+  refreshAllScreens();
+  setActiveTab('cashier');
+}
+$('#btnResetAll').onclick=()=>{
+  if(guardBossAction()) return;
+  if(!confirm('確定要清空全部資料並把單號歸零成 OBA-00000001 嗎？'))return;
+  if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表。'))return;
+  resetAllDataForGoLive();
+  alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空');
+}
 function isPhoneDevice(){
   const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
   const lw = Math.max(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
@@ -1159,32 +1223,7 @@ async function startCameraScan(){
       if(typeof zxingReader.decodeFromConstraints === 'function'){
         zxingControls = await zxingReader.decodeFromConstraints(constraints, video, (result, err)=>{
           if(result && result.text){
-(function(){
-  const blockMsg = 'OBA Hair 店內系統：此操作已鎖定';
-  document.addEventListener('contextmenu', function(e){
-    e.preventDefault();
-    alert(blockMsg);
-  });
-  document.addEventListener('keydown', function(e){
-    const k = (e.key || '').toLowerCase();
-    const blocked =
-      e.key === 'F12' ||
-      (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(k)) ||
-      (e.ctrlKey && ['u','s','p'].includes(k));
-    if(blocked){
-      e.preventDefault();
-      e.stopPropagation();
-      alert(blockMsg);
-      return false;
-    }
-  }, true);
-  document.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
-  document.addEventListener('selectstart', function(e){
-    const tag = (e.target && e.target.tagName || '').toLowerCase();
-    if(['input','textarea'].includes(tag)) return;
-    e.preventDefault();
-  }, true);
-})();            const text = String(result.text||'').trim();
+            const text = String(result.text||'').trim();
             if(fillScannedCode(text)){
               stopCameraScan();
             }
@@ -1255,6 +1294,36 @@ init();
 
 <script>
 // V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
+
+// V11.0.41 防F12正式版：阻擋一般右鍵 / F12 / 檢視原始碼 / 儲存 / 列印快捷鍵（保留輸入框可選字）
+(function(){
+  if(window.__OBA_F12_PROTECT__) return;
+  window.__OBA_F12_PROTECT__ = true;
+  const blockMsg = 'OBA Hair 店內系統：此操作已鎖定';
+  document.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+    alert(blockMsg);
+  }, true);
+  document.addEventListener('keydown', function(e){
+    const k = (e.key || '').toLowerCase();
+    const blocked =
+      e.key === 'F12' ||
+      (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(k)) ||
+      (e.ctrlKey && ['u','s','p'].includes(k));
+    if(blocked){
+      e.preventDefault();
+      e.stopPropagation();
+      alert(blockMsg);
+      return false;
+    }
+  }, true);
+  document.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
+  document.addEventListener('selectstart', function(e){
+    const tag = (e.target && e.target.tagName || '').toLowerCase();
+    if(['input','textarea'].includes(tag)) return;
+    e.preventDefault();
+  }, true);
+})();
 
 </script>
 
