@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.38 BOSS分店預留版</title>
+<title>OBA Hair V11.0.39 本張單顯示穩定版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -328,6 +328,7 @@ const defaultState={
  orders:[],refunds:[]
 };
 let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null;
+let LAST_ASSIGNED_ORDER_NO='';
 let ITEM_DIRTY=false;
 let STAFF_DIRTY=false;
 const $=s=>document.querySelector(s);
@@ -761,12 +762,13 @@ $('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay();
 
 function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats()}
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
-function renderAssignPreview(){const code=$('#assignOrderNo').value.trim();const order=findOrderByCode(code);const selectedId=$('#assignDesigner').value||'JEAN'; if(!order){$('#assignPreview').innerHTML='請先掃描或輸入單號';$('#assignShowNo').textContent='--';$('#assignShowTotal').textContent='$0';$('#assignShowCommission').textContent='$0';$('#myThisOrder').textContent='$0 / $0';return} const commission=calcCommission(order,selectedId);$('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;$('#assignShowNo').textContent=order.id;$('#assignShowTotal').textContent=money(order.total);$('#assignShowCommission').textContent=money(commission);$('#myThisOrder').textContent=`${money(order.total)} / ${money(commission)}`}
+function renderAssignPreview(){const code=$('#assignOrderNo').value.trim();let order=findOrderByCode(code);if(!order && !code && LAST_ASSIGNED_ORDER_NO){order=findOrderByCode(LAST_ASSIGNED_ORDER_NO)}const selectedId=$('#assignDesigner').value||'JEAN'; if(!order){$('#assignPreview').innerHTML='請先掃描或輸入單號';$('#assignShowNo').textContent='--';$('#assignShowTotal').textContent='$0';$('#assignShowCommission').textContent='$0';$('#myThisOrder').textContent='$0 / $0';return} const commission=calcCommission(order,selectedId);$('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;$('#assignShowNo').textContent=order.id;$('#assignShowTotal').textContent=money(order.total);$('#assignShowCommission').textContent=money(commission);$('#myThisOrder').textContent=`${money(order.total)} / ${money(commission)}`}
 function clearAssignScanField(){
   const input=$('#assignOrderNo');
   if(!input) return;
   input.value='';
-  input.dispatchEvent(new Event('input',{bubbles:true}));
+  renderAssignPreview();
+  renderMyStats();
   setTimeout(()=>input.focus(),80);
 }
 $('#btnAssignOrder').onclick=()=>{
@@ -781,6 +783,7 @@ $('#btnAssignOrder').onclick=()=>{
   order.assignedDesignerName=staff.name;
   order.commission=calcCommission(order,staff.id);
   order.assignedAt=new Date().toISOString();
+  LAST_ASSIGNED_ORDER_NO=order.id;
   const reportStaff=$('#reportStaff');
   if(reportStaff) reportStaff.value=staff.id;
   saveState(true);

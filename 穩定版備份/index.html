@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.37 QR Code刷單版</title>
+<title>OBA Hair V11.0.38 BOSS分店預留版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -98,6 +98,8 @@ const SUPABASE_URL = "https://cvehdsmeaggqmdsafalw.supabase.co";
 const SUPABASE_KEY = "sb_publishable_BxcVgGxDTlUwpEL0URXmGA_Ebod3ulA";
 const CLOUD_TABLE = "oba_pos_state";
 const CLOUD_ROW_ID = "main";
+const DEFAULT_BRANCH_ID = "main";
+const DEFAULT_BRANCH_NAME = "總店";
 </script>
 </head>
 <body>
@@ -330,7 +332,19 @@ let ITEM_DIRTY=false;
 let STAFF_DIRTY=false;
 const $=s=>document.querySelector(s);
 function clone(o){return JSON.parse(JSON.stringify(o))}
-function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return clone(defaultState);const data=Object.assign(clone(defaultState),JSON.parse(raw));if(!data.staff.find(s=>s.owner))data.staff[0].owner=true;return data}catch(e){return clone(defaultState)}}
+function ensureBranchFields(data){
+  const d = data || clone(defaultState);
+  if(!d.branchId) d.branchId = DEFAULT_BRANCH_ID;
+  if(!d.branchName) d.branchName = DEFAULT_BRANCH_NAME;
+  if(Array.isArray(d.orders)){
+    d.orders.forEach(o=>{
+      if(!o.branchId) o.branchId = d.branchId || DEFAULT_BRANCH_ID;
+      if(!o.branchName) o.branchName = d.branchName || DEFAULT_BRANCH_NAME;
+    });
+  }
+  return d;
+}
+function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return ensureBranchFields(clone(defaultState));const data=ensureBranchFields(Object.assign(clone(defaultState),JSON.parse(raw)));if(!data.staff.find(s=>s.owner))data.staff[0].owner=true;return data}catch(e){return ensureBranchFields(clone(defaultState))}}
 let cloudClient=null;
 let cloudReady=false;
 let cloudSaving=false;
@@ -341,7 +355,7 @@ function getCloudClient(){
   return cloudClient;
 }
 function normalizeCloudState(data){
-  const merged = Object.assign(clone(defaultState), data || {});
+  const merged = ensureBranchFields(Object.assign(clone(defaultState), data || {}));
   if(!merged.staff.find(s=>s.owner)) merged.staff[0].owner=true;
   return merged;
 }
@@ -466,9 +480,10 @@ function updateCashierDisplay(){ $('#cashierDisplay').textContent = CURRENT_CASH
 function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
 function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
 
-// V11.0.23：BOSS限制模式（只可看報表，不可操作收款/退票/管理）
+// V11.0.38：BOSS限制模式＋分店欄位預留（只可看報表，不可操作收款/退票/管理）
 const BOSS_PASSWORD = '269527';
-window.USER_ROLE = window.USER_ROLE || 'staff';
+const BOSS_SESSION_KEY = 'oba_boss_mode_v38';
+window.USER_ROLE = sessionStorage.getItem(BOSS_SESSION_KEY)==='yes' ? 'boss' : (window.USER_ROLE || 'staff');
 function isBossMode(){return window.USER_ROLE === 'boss'}
 function guardBossAction(){if(isBossMode()){alert('BOSS模式只能查看報表，不能操作此功能');return true}return false}
 function applyBossMode(){
@@ -492,7 +507,16 @@ function applyBossMode(){
     el.style.pointerEvents = 'none';
   });
   const badge = $('#cashierDisplay');
-  if(badge) badge.textContent = 'BOSS限制模式｜只可查看報表';
+  if(badge) badge.textContent = 'BOSS限制模式｜只可查看報表｜'+(state.branchName||DEFAULT_BRANCH_NAME);
+  renderReport();
+}
+function enterBossMode(){
+  window.USER_ROLE='boss';
+  sessionStorage.setItem(BOSS_SESSION_KEY,'yes');
+  sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
+  closeAccessGate();
+  setActiveTab('report');
+  applyBossMode();
 }
 function requireCashier(){
   if(guardBossAction()) return false;
@@ -518,7 +542,7 @@ document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
 function openPassword(targetTab){pwdMode=targetTab;$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.add('hidden');$('#pwdTitle').textContent=state.managementPassword?'輸入管理密碼':'第一次設定管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 $('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
 $('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('BOSS模式不可修改密碼');return} if(oldPwd!==state.managementPassword){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
- if(pwdMode==='report' && oldPwd===BOSS_PASSWORD){window.USER_ROLE='boss';$('#passwordDialog').close();pendingLockedTab='';applyBossMode();renderReport();return;}
+ if(pwdMode==='report' && oldPwd===BOSS_PASSWORD){$('#passwordDialog').close();pendingLockedTab='';enterBossMode();return;}
  if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(oldPwd!==state.managementPassword){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
  window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
@@ -595,7 +619,7 @@ function removeCartItem(idx){
 }
 document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.cart.length===0){alert('請先加入項目');return} CURRENT_CASHIER=null; updateCashierDisplay(); if(!requireCashier())return; const method=btn.dataset.pay; state.pendingPay=method; $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(state.cart.reduce((s,i)=>s+i.price,0))}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`; $('#payDialog').showModal()})
 $('#btnCancelPay').onclick=()=>$('#payDialog').close();
-$('#btnConfirmPay').onclick=()=>{const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
+$('#btnConfirmPay').onclick=()=>{if(guardBossAction()) return; const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
 function renderReceiptQr(orderId){
   const box = $('#receiptQr');
   if(!box) return;
@@ -617,7 +641,7 @@ function openReceipt(order){
   const redeemInfo = order.paymentMethod==='集點卡兌換' && order.redeemMeta
     ? `<div class="r"><span>客人姓名</span><span>${order.redeemMeta.customer||'-'}</span></div><div class="r"><span>集點卡末4碼</span><span>${order.redeemMeta.uid4||'-'}</span></div>`
     : '';
-  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>類型</span><span>${order.paymentMethod==='集點卡兌換'?'集點卡0元票':order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>renderReceiptQr(order.id),250)}
+  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">品牌單據</div><div class="line"></div><div class="r"><span>單號</span><span>${order.id}</span></div><div class="r"><span>日期</span><span>${order.date}</span></div><div class="r"><span>時間</span><span>${order.time}</span></div><div class="r"><span>分店</span><span>${order.branchName||DEFAULT_BRANCH_NAME}</span></div><div class="r"><span>類型</span><span>${order.paymentMethod==='集點卡兌換'?'集點卡0元票':order.paymentMethod}</span></div><div class="r"><span>經手人</span><span>${order.cashierName||'-'}</span></div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div class="line"></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:4px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>renderReceiptQr(order.id),250)}
 let LAST_RECEIPT_IMAGE_FILE=null;
 async function makeReceiptImage(){
   try{
@@ -816,7 +840,7 @@ function renderReport(){
   const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
   $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
   $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
-  $('#reportRecordTitle').textContent='區間紀錄｜'+rangeText;
+  $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
 }
@@ -977,6 +1001,7 @@ function getRedeemItemFallback(){
   return items.slice(0, 8);
 }
 function openRedeemDialog(){
+  if(guardBossAction()) return;
   const itemSel = $('#redeemItemSelect');
   const redeemItems = getRedeemableItems();
   const itemsToShow = redeemItems.length ? redeemItems : getRedeemItemFallback();
@@ -997,6 +1022,7 @@ function openRedeemDialog(){
   },80);
 }
 function submitRedeem(){
+  if(guardBossAction()) return;
   const customer = $('#redeemCustomer').value.trim();
   const uid4 = $('#redeemUid4').value.trim();
   const itemId = $('#redeemItemSelect').value;
@@ -1010,6 +1036,8 @@ function submitRedeem(){
     id: currentOrderNo(),
     date: todayStr(),
     time: nowTime(),
+    branchId: state.branchId || DEFAULT_BRANCH_ID,
+    branchName: state.branchName || DEFAULT_BRANCH_NAME,
     items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
     total: 0,
     paymentMethod: '集點卡兌換',
@@ -1070,6 +1098,10 @@ function verifyAccessPassword(){
   const input=$('#accessPassword');
   const val=(input?.value||'').trim();
   if(!val){ alert('請輸入進入密碼'); return; }
+  if(val===BOSS_PASSWORD){
+    enterBossMode();
+    return;
+  }
   if(val!==getAccessPassword()){
     alert('進入密碼錯誤');
     input.value='';
@@ -1214,7 +1246,7 @@ document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
 });
 
-function init(){updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); applyBossMode(); applyDeviceMode(); window.addEventListener('resize', applyDeviceMode); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()} startCloudSync();}
+function init(){ensureBranchFields(state); updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); if(isBossMode()){closeAccessGate(); setActiveTab('report'); applyBossMode();} else {applyDeviceMode(); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()}} window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceMode(); }); startCloudSync();}
 init();
 </script>
 
