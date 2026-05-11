@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.42 歸零業績檢查版</title>
+<title>OBA Hair V11.0.42 歸零修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -349,6 +349,8 @@ function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return ensu
 let cloudClient=null;
 let cloudReady=false;
 let cloudSaving=false;
+let CLOUD_RESET_LOCK_UNTIL=0;
+const RESET_LOCK_KEY=KEY+'_reset_lock_until';
 function getCloudClient(){
   if(cloudClient) return cloudClient;
   if(!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
@@ -361,13 +363,29 @@ function normalizeCloudState(data){
   return merged;
 }
 async function pullCloudState(){
+  const savedLock = Number(localStorage.getItem(RESET_LOCK_KEY)||0);
+  if(Date.now() < Math.max(CLOUD_RESET_LOCK_UNTIL, savedLock)){
+    console.log('剛完成歸零，暫停雲端拉回舊資料');
+    return true;
+  }
   const client=getCloudClient();
   if(!client) return false;
   try{
     const { data, error } = await client.from(CLOUD_TABLE).select('id,data,updated_at').eq('id', CLOUD_ROW_ID).maybeSingle();
     if(error){ console.log('雲端讀取失敗', error); return false; }
     if(data && data.data){
-      state = normalizeCloudState(data.data);
+      const incoming = data.data || {};
+      const localResetToken = Number(state?.resetToken || 0);
+      const incomingResetToken = Number(incoming?.resetToken || 0);
+
+      // 歸零後保護：如果本機已經歸零，而且本機版本比雲端新，不准雲端舊資料蓋回來。
+      if(localResetToken && incomingResetToken < localResetToken && Array.isArray(state.orders) && state.orders.length === 0){
+        console.log('本機歸零資料較新，拒絕雲端舊資料覆蓋，並重新覆蓋雲端');
+        await saveState(true);
+        return true;
+      }
+
+      state = normalizeCloudState(incoming);
       localStorage.setItem(KEY, JSON.stringify(state));
       console.log('雲端資料已載入');
       return true;
@@ -1013,6 +1031,26 @@ document.addEventListener('click', function(e){
 });
 
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
+
+async function forceCloudOverwriteAfterReset(){
+  const client=getCloudClient();
+  if(!client) return true;
+  const payload = { id:CLOUD_ROW_ID, data:state, updated_at:new Date().toISOString() };
+  try{
+    // 連續寫入兩次，避免剛歸零時另一台裝置或同步輪詢把舊資料拉回來。
+    const first = await client.from(CLOUD_TABLE).upsert(payload, { onConflict:'id' });
+    if(first.error){ console.log('歸零雲端覆蓋失敗 1', first.error); return false; }
+    await new Promise(r=>setTimeout(r,350));
+    payload.updated_at = new Date().toISOString();
+    const second = await client.from(CLOUD_TABLE).upsert(payload, { onConflict:'id' });
+    if(second.error){ console.log('歸零雲端覆蓋失敗 2', second.error); return false; }
+    console.log('歸零資料已覆蓋雲端');
+    return true;
+  }catch(err){
+    console.log('歸零雲端覆蓋錯誤', err);
+    return false;
+  }
+}
 async function resetAllDataForGoLive(){
   // V11.0.42：正式營運重置，只清營業資料，不清員工、品項、PIN、管理密碼。
   // 避免開店前測試單殘留：單號、訂單、退票、刷單預覽、今日/本月業績都同步歸零。
@@ -1031,7 +1069,9 @@ async function resetAllDataForGoLive(){
     cart: [],
     orders: [],
     refunds: [],
-    pendingPay: ''
+    pendingPay: '',
+    resetToken: Date.now(),
+    resetAt: new Date().toISOString()
   });
   CURRENT_CASHIER=null;
   LAST_ASSIGNED_ORDER_NO='';
@@ -1039,18 +1079,34 @@ async function resetAllDataForGoLive(){
   STAFF_DIRTY=false;
   ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
   const dateEl=$('#reportDate'); if(dateEl) dateEl.value=todayStr();
+  // V11.0.43：歸零後先鎖住雲端讀取，避免 Supabase 舊資料在 15 秒輪詢時復活。
+  const lockUntil = Date.now() + 300000;
+  CLOUD_RESET_LOCK_UNTIL = lockUntil;
+  localStorage.setItem(RESET_LOCK_KEY, String(lockUntil));
   localStorage.setItem(KEY, JSON.stringify(state));
+
+  const ok = await forceCloudOverwriteAfterReset();
   await saveState(true);
   refreshAllScreens();
   setActiveTab('cashier');
+
+  // 讓畫面更新完後再解除本機鎖；雲端已被歸零資料覆蓋。
+  setTimeout(()=>{
+    CLOUD_RESET_LOCK_UNTIL=0;
+    localStorage.removeItem(RESET_LOCK_KEY);
+  }, 300000);
+
+  if(!ok){
+    alert('本機已歸零，但雲端覆蓋失敗。請確認網路後再按一次清空全部資料。');
+  }
 }
 $('#btnResetAll').onclick=async()=>{
   if(guardBossAction()) return;
   if(!confirm('確定要清空營業資料並把單號歸零成 OBA-00000001 嗎？'))return;
   if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表；員工、品項、PIN會保留。'))return;
   await resetAllDataForGoLive();
-  alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空');
-}
+  alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空，雲端舊資料已覆蓋');
+};
 function isPhoneDevice(){
   const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
   const lw = Math.max(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
