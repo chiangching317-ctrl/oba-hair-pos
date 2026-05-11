@@ -103,7 +103,19 @@ const DEFAULT_BRANCH_NAME = "總店";
 </script>
 </head>
 <body>
-<!-- V11.0.48：已移除入口密碼遮罩，開啟後直接進系統。 -->
+<div class="access-gate hidden-gate" id="accessGate">
+  <div class="access-card">
+    <h2 class="access-title">OBA Hair 內部系統</h2>
+    <div class="access-sub">此系統僅供公司內部使用。請先輸入進入密碼。</div>
+    <div class="label">進入密碼</div>
+    <input id="accessPassword" class="input" type="password" placeholder="請輸入內部密碼" />
+    <div class="space"></div>
+    <div class="row">
+      <button class="btn btn-primary" id="btnAccessEnter">進入系統</button>
+    </div>
+    <div class="note">員工手機會自動鎖定刷單入業績頁；平板與電腦保留收銀系統。</div>
+  </div>
+</div>
 <div class="wrap">
   <div class="hero">
     <div><h1 class="title">OBA Hair 收銀系統</h1></div>
@@ -1227,8 +1239,12 @@ function closeAccessGate(){
   if(gate) gate.classList.add('hidden-gate');
 }
 function openAccessGate(){
-  // V11.0.48：免入口密碼，不再打開入口遮罩。
-  closeAccessGate();
+  const gate=$('#accessGate');
+  if(gate) gate.classList.remove('hidden-gate');
+  setTimeout(function(){
+    const el=$('#accessPassword');
+    if(el){ el.focus(); try{el.click();}catch(e){} }
+  },80);
 }
 function verifyAccessPassword(){
   const input=$('#accessPassword');
