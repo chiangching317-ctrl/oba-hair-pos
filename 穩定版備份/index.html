@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-<head>
+<head><title>OBA Hair V11.0.42 </title>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.41 防F12正式版</title>
+<title>OBA Hair V11.0.42 </title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -28,7 +28,7 @@
 .badge{display:inline-block;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;background:#f3f4f6}.badge-ok{background:#e8f5eb;color:#245f38}.badge-off{background:#f5f5f5;color:#666}
 .hidden{display:none!important}.owner-card{border:1px solid #d9cabf;background:#fffbf8;border-radius:18px;padding:12px}.owner-title{font-size:15px;font-weight:900;color:#7a4b2c}
 dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow:0 24px 90px rgba(0,0,0,.3)}dialog::backdrop{background:rgba(0,0,0,.35)}.modal{padding:18px;background:#fff}
-.receiptWrap{display:flex;justify-content:center}.receipt{width:76mm;background:#fff;color:#111;padding:4mm;font-family:"Courier New",monospace;line-height:1.45}.receipt h3{text-align:center;margin:0 0 8px;font-size:18px}.receipt .center{text-align:center}.receipt .line{border-top:1px dashed #333;margin:8px 0}.receipt .r{display:flex;justify-content:space-between;gap:8px}
+.receiptWrap{display:flex;justify-content:center}.receipt{width:76mm;background:#fff;color:#111;padding:4mm;font-family:"Courier New",monospace;line-height:1.45}.receipt h3{text-align:center;margin:0 0 8px;font-size:18px}.receipt .center{text-align:center}.receipt .line{border-top:1px dashed #333;margin:8px 0}.receipt .r{display:flex;justify-content:space-between;gap:6px;margin:1px 0}
 .permission-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 
 /* V10.2：手機專用鎖定刷單模式。平板即使直放也保留完整收銀功能。 */
@@ -72,7 +72,7 @@ body.boss-mode #tab-report{display:block!important}
   html,body{width:80mm;margin:0!important;padding:0!important;background:#fff!important}
   body *{visibility:hidden!important}
   #printArea,#printArea *{visibility:visible!important}
-  #printArea{position:absolute!important;left:0!important;top:0!important;width:80mm!important;margin:0!important;padding:4mm!important;box-shadow:none!important;border:none!important}
+  #printArea{position:absolute!important;left:0!important;top:0!important;width:80mm!important;margin:0!important;padding:2.5mm 3mm!important;box-shadow:none!important;border:none!important}
   .receipt{width:80mm!important;padding:4mm!important;font-size:13px!important;line-height:1.45!important}
   .receipt h3{font-size:20px!important;margin-bottom:6px!important}
   .receipt svg{height:48px!important}
@@ -1013,31 +1013,42 @@ document.addEventListener('click', function(e){
 });
 
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
-function resetAllDataForGoLive(){
-  localStorage.removeItem(KEY);
-  state=clone(defaultState);
-  state.nextNo=1;
-  state.cart=[];
-  state.orders=[];
-  state.refunds=[];
-  state.pendingPay='';
-  state.branchId=DEFAULT_BRANCH_ID;
-  state.branchName=DEFAULT_BRANCH_NAME;
+async function resetAllDataForGoLive(){
+  // V11.0.42：正式營運重置，只清營業資料，不清員工、品項、PIN、管理密碼。
+  // 避免開店前測試單殘留：單號、訂單、退票、刷單預覽、今日/本月業績都同步歸零。
+  const keepStaff = clone(state.staff || defaultState.staff);
+  const keepItems = clone(state.items || defaultState.items);
+  const keepPassword = state.managementPassword || '';
+  const keepBranchId = state.branchId || DEFAULT_BRANCH_ID;
+  const keepBranchName = state.branchName || DEFAULT_BRANCH_NAME;
+  state = Object.assign(clone(defaultState), {
+    managementPassword: keepPassword,
+    staff: keepStaff,
+    items: keepItems,
+    branchId: keepBranchId,
+    branchName: keepBranchName,
+    nextNo: 1,
+    cart: [],
+    orders: [],
+    refunds: [],
+    pendingPay: ''
+  });
   CURRENT_CASHIER=null;
   LAST_ASSIGNED_ORDER_NO='';
   ITEM_DIRTY=false;
   STAFF_DIRTY=false;
   ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
   const dateEl=$('#reportDate'); if(dateEl) dateEl.value=todayStr();
-  saveState(true);
+  localStorage.setItem(KEY, JSON.stringify(state));
+  await saveState(true);
   refreshAllScreens();
   setActiveTab('cashier');
 }
-$('#btnResetAll').onclick=()=>{
+$('#btnResetAll').onclick=async()=>{
   if(guardBossAction()) return;
-  if(!confirm('確定要清空全部資料並把單號歸零成 OBA-00000001 嗎？'))return;
-  if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表。'))return;
-  resetAllDataForGoLive();
+  if(!confirm('確定要清空營業資料並把單號歸零成 OBA-00000001 嗎？'))return;
+  if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表；員工、品項、PIN會保留。'))return;
+  await resetAllDataForGoLive();
   alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空');
 }
 function isPhoneDevice(){
@@ -1223,7 +1234,32 @@ async function startCameraScan(){
       if(typeof zxingReader.decodeFromConstraints === 'function'){
         zxingControls = await zxingReader.decodeFromConstraints(constraints, video, (result, err)=>{
           if(result && result.text){
-            const text = String(result.text||'').trim();
+(function(){
+  const blockMsg = 'OBA Hair 店內系統：此操作已鎖定';
+  document.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+    alert(blockMsg);
+  });
+  document.addEventListener('keydown', function(e){
+    const k = (e.key || '').toLowerCase();
+    const blocked =
+      e.key === 'F12' ||
+      (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(k)) ||
+      (e.ctrlKey && ['u','s','p'].includes(k));
+    if(blocked){
+      e.preventDefault();
+      e.stopPropagation();
+      alert(blockMsg);
+      return false;
+    }
+  }, true);
+  document.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
+  document.addEventListener('selectstart', function(e){
+    const tag = (e.target && e.target.tagName || '').toLowerCase();
+    if(['input','textarea'].includes(tag)) return;
+    e.preventDefault();
+  }, true);
+})();            const text = String(result.text||'').trim();
             if(fillScannedCode(text)){
               stopCameraScan();
             }
@@ -1294,36 +1330,6 @@ init();
 
 <script>
 // V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
-
-// V11.0.41 防F12正式版：阻擋一般右鍵 / F12 / 檢視原始碼 / 儲存 / 列印快捷鍵（保留輸入框可選字）
-(function(){
-  if(window.__OBA_F12_PROTECT__) return;
-  window.__OBA_F12_PROTECT__ = true;
-  const blockMsg = 'OBA Hair 店內系統：此操作已鎖定';
-  document.addEventListener('contextmenu', function(e){
-    e.preventDefault();
-    alert(blockMsg);
-  }, true);
-  document.addEventListener('keydown', function(e){
-    const k = (e.key || '').toLowerCase();
-    const blocked =
-      e.key === 'F12' ||
-      (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(k)) ||
-      (e.ctrlKey && ['u','s','p'].includes(k));
-    if(blocked){
-      e.preventDefault();
-      e.stopPropagation();
-      alert(blockMsg);
-      return false;
-    }
-  }, true);
-  document.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
-  document.addEventListener('selectstart', function(e){
-    const tag = (e.target && e.target.tagName || '').toLowerCase();
-    if(['input','textarea'].includes(tag)) return;
-    e.preventDefault();
-  }, true);
-})();
 
 </script>
 
