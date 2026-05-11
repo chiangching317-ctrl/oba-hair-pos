@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.43 雲端鎖定版</title>
+<title>OBA Hair V11.0.44 歷史單據查詢版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -231,6 +231,18 @@ const DEFAULT_BRANCH_NAME = "總店";
       </div>
       <div class="card">
         <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><button class="btn btn-danger" id="btnResetAll">清空全部資料</button></div>
+        <div class="space"></div>
+        <div class="card" style="padding:14px;border-radius:18px;background:#fcfbfa">
+          <div class="section-title" style="font-size:18px">歷史單據查詢</div>
+          <div class="grid3">
+            <input id="historyOrderNo" class="input" placeholder="輸入或掃描單號，例如 OBA-00000001" />
+            <button class="btn btn-primary" id="btnHistorySearch" type="button">查詢單據</button>
+            <button class="btn btn-soft" id="btnHistoryClear" type="button">清除查詢</button>
+          </div>
+          <div class="space"></div>
+          <div class="bill" id="historyPreview">輸入單號後，會在這裡顯示以前開過的單。</div>
+        </div>
+        <div class="space"></div>
         <div class="table" id="reportTable"></div>
       </div>
     </div>
@@ -866,6 +878,33 @@ function renderReportStaffOptions(){
   sel.innerHTML=staffList.map(s=>`<option value="${s.id}" ${s.id===current?'selected':''}>${s.name}</option>`).join('');
   if(!staffList.find(s=>s.id===sel.value) && staffList[0]) sel.value=staffList[0].id;
 }
+function renderHistorySearch(){
+  const input=$('#historyOrderNo');
+  const box=$('#historyPreview');
+  if(!input || !box) return;
+  const code=input.value.trim();
+  if(!code){
+    box.innerHTML='輸入單號後，會在這裡顯示以前開過的單。';
+    return;
+  }
+  const order=findOrderByCode(code);
+  if(!order){
+    box.innerHTML='找不到這張單：'+code+'。請確認單號，或到上方日期切換到開單日期查看區間紀錄。';
+    return;
+  }
+  ensureOrderPerformance(order);
+  const status=order.refunded?'已退票':'正常';
+  box.innerHTML=`<div class="bill-row"><div>單號</div><div><strong>${order.id}</strong></div></div>
+    <div class="bill-row"><div>日期時間</div><div>${order.date||'-'} ${order.time||''}</div></div>
+    <div class="bill-row"><div>分店</div><div>${order.branchName||DEFAULT_BRANCH_NAME}</div></div>
+    <div class="bill-row"><div>收款方式 / 經手</div><div>${order.paymentMethod||'-'} / ${order.cashierName||'-'}</div></div>
+    <div class="bill-row"><div>業績人</div><div>${order.assignedDesignerName||'未掛業績'}</div></div>
+    <div class="bill-row"><div>金額 / 抽成</div><div>${money(order.total||0)} / ${money(order.commission||0)}</div></div>
+    <div class="bill-row"><div>狀態</div><div>${status}${order.refundReason?'｜'+order.refundReason:''}</div></div>
+    <div class="line"></div>
+    ${(order.items||[]).map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price||0)}</div></div>`).join('')}`;
+}
+
 function renderReport(){
   state.orders.forEach(ensureOrderPerformance);
   renderReportStaffOptions();
@@ -891,9 +930,21 @@ function renderReport(){
   $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
+  renderHistorySearch();
 }
 document.addEventListener('change',function(e){
   if(e.target && ['reportDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
+});
+document.addEventListener('input',function(e){
+  if(e.target && e.target.id==='historyOrderNo') renderHistorySearch();
+});
+document.addEventListener('click',function(e){
+  if(e.target && e.target.id==='btnHistorySearch') renderHistorySearch();
+  if(e.target && e.target.id==='btnHistoryClear'){
+    const input=$('#historyOrderNo');
+    if(input) input.value='';
+    renderHistorySearch();
+  }
 });
 
 
