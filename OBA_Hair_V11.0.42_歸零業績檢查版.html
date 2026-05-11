@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OBA Hair V11.0.42 歸零業績檢查版</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+:root{--bg:#f8f4f1;--card:#fff;--ink:#1f2937;--muted:#6b7280;--line:#eadfd6;--brand:#9ed8cf;--ok:#e7f6ec;--danger:#fde8e8;--radius:24px}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;background:linear-gradient(180deg,#fcfaf8 0%,var(--bg) 100%);color:var(--ink)}
+.wrap{max-width:1320px;margin:0 auto;padding:20px}.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}.title{font-size:clamp(28px,4vw,42px);font-weight:900;margin:0}.sub{color:var(--muted);margin-top:8px;font-size:14px}
+.pill{background:rgba(158,216,207,.28);color:#18453f;border:1px solid rgba(79,145,136,.18);border-radius:999px;padding:10px 14px;font-weight:800}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.tab{border:none;background:#fff;border:1px solid var(--line);border-radius:999px;padding:11px 15px;font-weight:900;cursor:pointer}.tab.active{background:var(--brand)}.panel.hidden{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}.shell{display:grid;grid-template-columns:1.18fr .92fr;gap:18px}.stack{display:grid;grid-template-columns:1fr;gap:18px}
+@media (max-width:980px){.shell{grid-template-columns:1fr}}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.grid2,.grid3,.grid4{display:grid;gap:12px}.grid2{grid-template-columns:1fr 1fr}.grid3{grid-template-columns:repeat(3,1fr)}.grid4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:900px){.grid2,.grid3,.grid4{grid-template-columns:1fr}}
+.section-title{margin:0 0 10px;font-size:21px;font-weight:900}.label{font-size:13px;color:var(--muted);font-weight:800;margin-bottom:8px}.note{font-size:12px;color:var(--muted);margin-top:12px}.space{height:10px}
+.btn{appearance:none;border:none;border-radius:18px;padding:12px 16px;font-size:15px;font-weight:900;cursor:pointer}.btn-primary{background:var(--brand)}.btn-soft{background:#fff;border:1px solid var(--line)}.btn-ok{background:var(--ok)}.btn-danger{background:var(--danger)}
+.input,.select,textarea{width:100%;border:1px solid var(--line);background:#fff;border-radius:16px;padding:12px 14px;font-size:15px;outline:none}
+.chip-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:10px}.chip{border:1px solid var(--line);background:linear-gradient(180deg,#fff 0%,#fcfbfa 100%);border-radius:18px;padding:12px;text-align:left;cursor:pointer;min-height:82px}.chip .name{font-size:15px;font-weight:900}.chip .price{font-size:13px;color:var(--muted);margin-top:6px}
+.bill{border:1px dashed var(--line);border-radius:18px;padding:14px;background:#fcfbfa;min-height:160px}.bill-row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed #eee}.bill-row:last-child{border-bottom:none}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{border:1px solid var(--line);background:#fcfbfa;border-radius:18px;padding:14px}.stat .k{font-size:13px;color:var(--muted);font-weight:800}.stat .v{font-size:22px;font-weight:900;margin-top:6px}
+.table{border:1px solid var(--line);border-radius:18px;overflow:hidden}.tr{display:grid;grid-template-columns:1.2fr .8fr .8fr .8fr .8fr .7fr auto;gap:10px;align-items:center;padding:12px;border-bottom:1px solid #f1ece7;font-size:14px}.tr.header{background:#fbf8f5;font-weight:900;color:#555}.tr:last-child{border-bottom:none}
+.small-list{border:1px solid var(--line);border-radius:18px;padding:12px;background:#fcfbfa}.small-item{padding:8px 0;border-bottom:1px dashed #eee}.small-item:last-child{border-bottom:none}
+.badge{display:inline-block;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;background:#f3f4f6}.badge-ok{background:#e8f5eb;color:#245f38}.badge-off{background:#f5f5f5;color:#666}
+.hidden{display:none!important}.owner-card{border:1px solid #d9cabf;background:#fffbf8;border-radius:18px;padding:12px}.owner-title{font-size:15px;font-weight:900;color:#7a4b2c}
+dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow:0 24px 90px rgba(0,0,0,.3)}dialog::backdrop{background:rgba(0,0,0,.35)}.modal{padding:18px;background:#fff}
+.receiptWrap{display:flex;justify-content:center}.receipt{width:76mm;background:#fff;color:#111;padding:4mm;font-family:"Courier New",monospace;line-height:1.45}.receipt h3{text-align:center;margin:0 0 8px;font-size:18px}.receipt .center{text-align:center}.receipt .line{border-top:1px dashed #333;margin:8px 0}.receipt .r{display:flex;justify-content:space-between;gap:6px;margin:1px 0}
+.permission-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+
+/* V10.2：手機專用鎖定刷單模式。平板即使直放也保留完整收銀功能。 */
+body.phone-mode .tabs{display:none}
+body.phone-mode #tab-cashier,
+body.phone-mode #tab-report,
+body.phone-mode #tab-manage{display:none!important}
+body.phone-mode #tab-assign{display:block!important}
+body.phone-mode .wrap{padding:12px}
+body.phone-mode .hero{margin-bottom:12px}
+body.phone-mode .title{font-size:28px}
+body.phone-mode .pill{padding:8px 12px;font-size:13px}
+body.phone-mode .section-title{font-size:20px}
+
+
+.access-gate{position:fixed;inset:0;background:rgba(248,244,241,.98);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
+.access-card{width:min(420px,92vw);background:#fff;border:1px solid var(--line);border-radius:24px;padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.16)}
+.access-title{font-size:26px;font-weight:900;margin:0 0 8px}
+.access-sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+.hidden-gate{display:none!important}
+
+.receipt svg{width:100%;height:46px;display:block;margin:2mm 0 1mm}
+.receipt .qr-box{display:flex;justify-content:center;align-items:center;margin:2mm 0 1mm}
+.receipt .qr-box canvas,.receipt .qr-box img{width:86px!important;height:86px!important}
+.receipt .barcode-note{font-size:12px;text-align:center;letter-spacing:1px}
+
+.manage-fold{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:0;overflow:hidden}
+.manage-fold summary{list-style:none;cursor:pointer;padding:18px;font-size:21px;font-weight:900;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.manage-fold summary::-webkit-details-marker{display:none}
+.manage-fold summary:after{content:'展開';font-size:13px;background:#f3f4f6;border-radius:999px;padding:6px 10px;color:#555}
+.manage-fold[open] summary:after{content:'收起'}
+.manage-fold-body{padding:0 18px 18px}
+.save-hint{font-size:12px;color:#6b7280;margin-top:8px;font-weight:800}
+.save-status{font-size:13px;font-weight:900;border-radius:999px;padding:7px 11px;background:#f3f4f6;color:#555}
+.save-status.dirty{background:#fff3cd;color:#8a5a00}
+.save-status.saved{background:#e8f5eb;color:#245f38}
+body.boss-mode #tab-cashier,body.boss-mode #tab-assign,body.boss-mode #tab-manage{display:none!important}
+body.boss-mode #tab-report{display:block!important}
+@media print{
+  @page{size:80mm auto;margin:0}
+  html,body{width:80mm;margin:0!important;padding:0!important;background:#fff!important}
+  body *{visibility:hidden!important}
+  #printArea,#printArea *{visibility:visible!important}
+  #printArea{position:absolute!important;left:0!important;top:0!important;width:80mm!important;margin:0!important;padding:2.5mm 3mm!important;box-shadow:none!important;border:none!important}
+  .receipt{width:80mm!important;padding:4mm!important;font-size:13px!important;line-height:1.45!important}
+  .receipt h3{font-size:20px!important;margin-bottom:6px!important}
+  .receipt svg{height:48px!important}
+  .receipt .qr-box canvas,.receipt .qr-box img{width:90px!important;height:90px!important}
+}
+@media (max-width:768px){
+  .btn{min-height:48px;font-size:16px}
+  .input,.select{min-height:48px;font-size:16px}
+  dialog{width:96vw}
+  .receipt{width:78mm;max-width:100%;font-size:13px}
+}
+
+
+.camera-box{display:grid;gap:10px;margin:8px 0 12px}
+.btn-camera{background:#e7f6ec;color:#18453f;font-size:18px;padding:14px 18px;border:1px solid rgba(79,145,136,.25)}
+.scanner-wrap{display:grid;gap:10px}
+#scanVideo{width:100%;max-height:58vh;background:#111;border-radius:18px;object-fit:cover}
+.scan-status{font-weight:800;color:var(--muted);font-size:14px}
+</style>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://cvehdsmeaggqmdsafalw.supabase.co";
+const SUPABASE_KEY = "sb_publishable_BxcVgGxDTlUwpEL0URXmGA_Ebod3ulA";
+const CLOUD_TABLE = "oba_pos_state";
+const CLOUD_ROW_ID = "main";
+const DEFAULT_BRANCH_ID = "main";
+const DEFAULT_BRANCH_NAME = "總店";
+</script>
+</head>
+<body>
+<div class="access-gate" id="accessGate">
+  <div class="access-card">
+    <h2 class="access-title">OBA Hair 內部系統</h2>
+    <div class="access-sub">此系統僅供公司內部使用。請先輸入進入密碼。</div>
+    <div class="label">進入密碼</div>
+    <input id="accessPassword" class="input" type="password" placeholder="請輸入內部密碼" />
+    <div class="space"></div>
+    <div class="row">
+      <button class="btn btn-primary" id="btnAccessEnter">進入系統</button>
+    </div>
+    <div class="note">員工手機會自動鎖定刷單入業績頁；平板與電腦保留收銀系統。</div>
+  </div>
+</div>
+<div class="wrap">
+  <div class="hero">
+    <div><h1 class="title">OBA Hair 收銀系統</h1></div>
+    <div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 未登入收銀PIN</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="cashier">收款出單</button>
+    <button class="tab" data-tab="assign">刷單入業績</button>
+    <button class="tab locked" data-tab="report">報表</button>
+    <button class="tab locked" data-tab="manage">員工 / 品項 / 密碼</button>
+  </div>
+
+  <div class="panel" id="tab-cashier">
+    <div class="shell">
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <div><div class="label">今日日期</div><div class="pill" id="todayText">--</div></div>
+          <div><div class="label">本單單號</div><div class="pill" id="nextOrderNo">OBA-000001</div></div>
+        </div>
+        <div class="space"></div>
+        <div class="section-title">項目</div>
+        <div class="chip-grid" id="cashierItemGrid"></div>
+        <div class="space"></div>
+        <div class="row"><button class="btn btn-soft" id="btnClearCart">清空本單</button><button class="btn btn-danger" id="btnRefundQuick">🧾 查單 / 退票</button></div>
+      </div>
+      <div class="card">
+        <div class="section-title">本單明細</div>
+        <div class="bill" id="cashierBill"></div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">項目數</div><div class="v" id="cashierCount">0</div></div>
+          <div class="stat"><div class="k">總金額</div><div class="v" id="cashierTotal">$0</div></div>
+          <div class="stat"><div class="k">狀態</div><div class="v" id="cashierStatus">未結帳</div></div>
+        </div>
+        <div class="space"></div>
+        <div class="label">收款方式</div>
+        <div class="row"><button class="btn btn-ok" data-pay="現金">現金</button><button class="btn btn-soft" data-pay="轉帳">轉帳</button><button class="btn btn-primary" data-pay="LINE Pay">LINE Pay</button><button class="btn btn-soft" id="btnRedeemOpen">集點卡兌換</button></div>
+        <div class="note">每一張單收款時都要重新輸入收銀 PIN，避免沿用上一位經手人。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="tab-assign">
+    <div class="shell">
+      <div class="card">
+        <div class="section-title">刷單入業績</div>
+        <div class="label">目前刷單員工</div><select id="assignDesigner" class="select"></select>
+        <div class="space"></div>
+        <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
+        <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-000001" />
+        <div class="space"></div>
+        <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
+        <div class="space"></div>
+        <div class="section-title" style="font-size:18px">我的即時數據</div>
+        <div class="stats">
+          <div class="stat"><div class="k">今日業績 / 抽成 / 筆數</div><div class="v" id="myTodayStats">$0 / $0 / 0</div></div>
+          <div class="stat"><div class="k">本月業績 / 抽成 / 筆數</div><div class="v" id="myMonthStats">$0 / $0 / 0</div></div>
+          <div class="stat"><div class="k">本張單金額 / 抽成</div><div class="v" id="myThisOrder">$0 / $0</div></div>
+        </div>
+        <div class="space"></div><div class="section-title" style="font-size:18px">我的今日單號列表</div><div class="small-list" id="myTodayOrderList">今天還沒有單</div>
+      </div>
+      <div class="card">
+        <div class="section-title">單據內容</div><div class="bill" id="assignPreview">請先掃描或輸入單號</div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">單號</div><div class="v" id="assignShowNo">--</div></div>
+          <div class="stat"><div class="k">金額</div><div class="v" id="assignShowTotal">$0</div></div>
+          <div class="stat"><div class="k">抽成</div><div class="v" id="assignShowCommission">$0</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="tab-report">
+    <div class="stack">
+      <div class="card">
+        <div class="section-title">報表篩選</div>
+        <div class="grid4">
+          <div><div class="label">查詢日期</div><input id="reportDate" class="input" type="date" /></div>
+          <div><div class="label">開始時間</div><input id="reportStartTime" class="input" type="time" /></div>
+          <div><div class="label">結束時間</div><input id="reportEndTime" class="input" type="time" /></div>
+          <div><div class="label">個人業績</div><select id="reportStaff" class="select"></select></div>
+        </div>
+        <div class="note">不填開始/結束時間＝查整天；可查早班、晚班或任一時間段。</div>
+      </div>
+      <div class="card">
+        <div class="section-title">總體業績</div>
+        <div class="stats">
+          <div class="stat"><div class="k" id="daySalesLabel">區間營業額</div><div class="v" id="daySales">$0</div></div>
+          <div class="stat"><div class="k">區間退票</div><div class="v" id="dayRefund">$0</div></div>
+          <div class="stat"><div class="k">區間筆數</div><div class="v" id="dayCount">0</div></div>
+        </div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">現金</div><div class="v" id="payCash">$0</div></div>
+          <div class="stat"><div class="k">轉帳</div><div class="v" id="payTransfer">$0</div></div>
+          <div class="stat"><div class="k">LINE Pay</div><div class="v" id="payLine">$0</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-title">個人業績</div>
+        <div class="stats">
+          <div class="stat"><div class="k">選定員工業績</div><div class="v" id="personalSales">$0</div></div>
+          <div class="stat"><div class="k">選定員工抽成</div><div class="v" id="personalCommission">$0</div></div>
+          <div class="stat"><div class="k">選定員工筆數</div><div class="v" id="personalCount">0</div></div>
+        </div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">JEAN 業績 / 抽成</div><div class="v" id="jeanStats">$0 / $0</div></div>
+          <div class="stat"><div class="k">ALAN 業績 / 抽成</div><div class="v" id="alanStats">$0 / $0</div></div>
+          <div class="stat"><div class="k">資料匯出</div><div class="v"><button class="btn btn-soft" id="btnExport">匯出</button></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><button class="btn btn-danger" id="btnResetAll">清空全部資料</button></div>
+        <div class="table" id="reportTable"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="tab-manage">
+    <div class="stack">
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><div class="section-title">管理密碼</div><button class="btn btn-soft" id="btnChangePwd">修改密碼</button></div>
+      </div>
+      <details class="manage-fold" open>
+        <summary>員工資料建檔 / 權限設定</summary>
+        <div class="manage-fold-body">
+          <div class="row" style="justify-content:space-between">
+            <div class="save-hint">新增或修改後，請按儲存員工資料才會寫入。</div>
+            <div class="row"><button class="btn btn-primary" id="btnAddStaff">新增員工</button><button class="btn btn-ok" id="btnSaveStaff">儲存員工資料</button></div>
+          </div>
+          <div class="space"></div>
+          <div id="staffCards"></div>
+        </div>
+      </details>
+      <details class="manage-fold" open>
+        <summary>品項管理</summary>
+        <div class="manage-fold-body">
+          <div class="save-hint">新增或修改後，請按儲存品項資料才會寫入。</div>
+          <div class="space"></div>
+          <div class="grid4"><input id="newItemCategory" class="input" placeholder="分類，例如：剪髮 / 染髮" /><input id="newItemName" class="input" placeholder="品項名稱，例如：洗加剪" /><input id="newItemPrice" class="input" type="number" placeholder="價格" /><button class="btn btn-primary" id="btnAddItem">新增品項</button></div>
+          <div class="space"></div><div class="row"><button class="btn btn-ok" id="btnSaveItems">儲存品項資料</button><span class="save-status saved" id="itemSaveStatus">已儲存</span></div>
+          <div class="space"></div><div id="itemManageList"></div>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<dialog id="itemPickDialog"><div class="modal"><h3 id="itemPickTitle">選擇品項</h3><div class="chip-grid" id="itemPickGrid"></div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseItemPick">取消</button></div></div></dialog>
+<dialog id="payDialog"><div class="modal"><h3>確認收款與出單</h3><div id="paySummary" class="note"></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnConfirmPay">確認收款並列印</button><button class="btn btn-soft" id="btnCancelPay">取消</button></div></div></dialog>
+<dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input id="refundOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-000001" /><div class="space"></div><div class="label">退票原因</div><select id="refundReason" class="select"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input id="refundReasonOther" class="input hidden" placeholder="請輸入其他原因" /><div class="space"></div><div id="refundPreview" class="bill">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
+
+<dialog id="redeemDialog"><div class="modal">
+  <h3>集點卡兌換</h3>
+  <div class="note">0 元票，需刷單入業績</div>
+  <div class="space"></div>
+  <div class="grid2">
+    <div><div class="label">客人名稱</div><input id="redeemCustomer" class="input" placeholder="請輸入客人名稱" /></div>
+    <div><div class="label">UID 後4碼</div><input id="redeemUid4" class="input" maxlength="4" placeholder="例如 0Ksl" /></div>
+  </div>
+  <div class="space"></div>
+  <div><div class="label">兌換項目</div><select id="redeemItemSelect" class="select"></select></div>
+
+  <div class="space"></div>
+  <div class="row">
+    <button class="btn btn-primary" id="btnRedeemSubmit">確認出票</button>
+    <button class="btn btn-soft" id="btnRedeemCancel">取消</button>
+  </div>
+</div></dialog>
+<dialog id="receiptDialog"><div class="modal"><h3>品牌單據預覽</h3><div class="space"></div><div class="receiptWrap"><div id="printArea" class="receipt"></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPrint">一鍵列印 RawBT</button><button class="btn btn-soft" id="btnImageBackup" type="button">備用產生圖片</button><button class="btn btn-soft" id="btnCloseReceipt">關閉</button></div><div class="note" id="receiptImageHint">按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。</div><div class="row hidden" id="receiptImageActions"><a class="btn btn-ok" id="receiptImageDownload" download="OBA_receipt.png">下載圖片</a><button class="btn btn-soft" id="btnShareReceiptImage" type="button">分享圖片</button></div><div class="row" style="display:none"></div></div></dialog>
+
+<dialog id="cameraScanDialog"><div class="modal">
+  <h3>相機刷單</h3>
+  <div class="scanner-wrap">
+    <video id="scanVideo" playsinline muted></video>
+    <div class="scan-status" id="scanStatus">請允許相機權限，開啟後直接對準收據 QR Code，不需要拍照。</div>
+    <div class="row">
+      <button class="btn btn-soft" id="btnCloseCameraScan" type="button">關閉相機</button>
+    </div>
+  </div>
+</div></dialog>
+<input id="cameraScanFile" class="hidden" type="file" accept="image/*" capture="environment" />
+<dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
+
+<script>
+const KEY='oba_hair_v2_owner';
+const defaultState={
+ managementPassword:'',nextNo:1,cart:[],pendingPay:'',
+ staff:[
+  {id:'JEAN',name:'JEAN',nickname:'JEAN',phone:'',address:'',joinDate:'2024-01-01',role:'店長',systemRole:'擁有者',active:true,owner:true,pin:'1234',rules:{default:0.5},permissions:['checkout','assign','refund','report','manage','item','password','view_all']},
+  {id:'ALAN',name:'ALAN',nickname:'ALAN',phone:'',address:'',joinDate:'2024-01-01',role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'5678',rules:{default:0.5,'護髮':0.7,'燙髮':0.7,'染髮':0.7,'加價':0.7,'隔離':0.7},permissions:['assign']}
+ ],
+ items:[
+  {id:'cut',category:'剪髮',name:'cut',price:300,active:true,quick:true},
+  {id:'wash',category:'沖洗',name:'沖洗',price:100,active:true,quick:true},
+  {id:'extra',category:'加價',name:'加價',price:100,active:true,quick:true},
+  {id:'isolation',category:'隔離',name:'隔離',price:100,active:true,quick:true},
+  {id:'color_s',category:'染髮',name:'染髮(S)',price:700,active:true},
+  {id:'color_m',category:'染髮',name:'染髮(M)',price:1000,active:true},
+  {id:'color_l',category:'染髮',name:'染髮(L)',price:1400,active:true},
+  {id:'perm_basic',category:'燙髮',name:'燙髮',price:800,active:true},
+  {id:'perm_men',category:'燙髮',name:'男士燙髮',price:1000,active:true},
+  {id:'perm_women',category:'燙髮',name:'女士燙髮',price:1500,active:true},
+  {id:'care_basic',category:'護理',name:'護髮',price:300,active:true},
+  {id:'care_struct',category:'護理',name:'結構式頭皮護理',price:600,active:true},
+  {id:'scalp_basic',category:'護理',name:'頭皮護理',price:300,active:true}
+ ],
+ orders:[],refunds:[]
+};
+let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null;
+let LAST_ASSIGNED_ORDER_NO='';
+let ITEM_DIRTY=false;
+let STAFF_DIRTY=false;
+const $=s=>document.querySelector(s);
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function ensureBranchFields(data){
+  const d = data || clone(defaultState);
+  if(!d.branchId) d.branchId = DEFAULT_BRANCH_ID;
+  if(!d.branchName) d.branchName = DEFAULT_BRANCH_NAME;
+  if(Array.isArray(d.orders)){
+    d.orders.forEach(o=>{
+      if(!o.branchId) o.branchId = d.branchId || DEFAULT_BRANCH_ID;
+      if(!o.branchName) o.branchName = d.branchName || DEFAULT_BRANCH_NAME;
+    });
+  }
+  return d;
+}
+function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return ensureBranchFields(clone(defaultState));const data=ensureBranchFields(Object.assign(clone(defaultState),JSON.parse(raw)));if(!data.staff.find(s=>s.owner))data.staff[0].owner=true;return data}catch(e){return ensureBranchFields(clone(defaultState))}}
+let cloudClient=null;
+let cloudReady=false;
+let cloudSaving=false;
+function getCloudClient(){
+  if(cloudClient) return cloudClient;
+  if(!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
+  cloudClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  return cloudClient;
+}
+function normalizeCloudState(data){
+  const merged = ensureBranchFields(Object.assign(clone(defaultState), data || {}));
+  if(!merged.staff.find(s=>s.owner)) merged.staff[0].owner=true;
+  return merged;
+}
+async function pullCloudState(){
+  const client=getCloudClient();
+  if(!client) return false;
+  try{
+    const { data, error } = await client.from(CLOUD_TABLE).select('id,data,updated_at').eq('id', CLOUD_ROW_ID).maybeSingle();
+    if(error){ console.log('雲端讀取失敗', error); return false; }
+    if(data && data.data){
+      state = normalizeCloudState(data.data);
+      localStorage.setItem(KEY, JSON.stringify(state));
+      console.log('雲端資料已載入');
+      return true;
+    }
+    await saveState(true);
+    return true;
+  }catch(err){
+    console.log('雲端讀取錯誤', err);
+    return false;
+  }
+}
+async function saveState(forceCloud=false){
+  localStorage.setItem(KEY,JSON.stringify(state));
+  console.log('本機已存檔');
+
+  const client=getCloudClient();
+  if(!client) return;
+  if(cloudSaving && !forceCloud) return;
+  cloudSaving=true;
+  try{
+    const payload = { id:CLOUD_ROW_ID, data:state, updated_at:new Date().toISOString() };
+    const { error } = await client.from(CLOUD_TABLE).upsert(payload, { onConflict:'id' });
+    if(error){
+      console.log('雲端同步失敗', error);
+    }else{
+      cloudReady=true;
+      console.log('雲端同步成功');
+    }
+  }catch(err){
+    console.log('同步錯誤', err);
+  }finally{
+    cloudSaving=false;
+  }
+}
+function refreshAllScreens(){
+  updateCashierDisplay();
+  renderCashier();
+  renderAssign();
+  renderReport();
+  renderManage();
+  applyBossMode();
+}
+async function startCloudSync(){
+  const ok = await pullCloudState();
+  if(ok){
+    refreshAllScreens();
+  }else{
+    console.log('目前使用本機資料，請確認 Supabase 資料表是否已建立');
+  }
+  setInterval(async()=>{
+    if(ITEM_DIRTY || STAFF_DIRTY){ console.log('資料尚未儲存，暫停雲端覆蓋'); return; }
+    const ok = await pullCloudState();
+    if(ok) refreshAllScreens();
+  }, 15000);
+}
+function money(n){return '$'+Number(n||0).toLocaleString('zh-TW')}
+function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function monthStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+function nowTime(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`}
+function currentOrderNo(){return 'OBA-'+String(state.nextNo).padStart(8,'0')}
+function normalizeOrderNoText(value){
+  const raw = String(value||'').trim().toUpperCase();
+  if(!raw) return '';
+  const digits = (raw.match(/\d+/g)||[]).join('');
+  if(digits){
+    const n = parseInt(digits,10);
+    if(!Number.isNaN(n)) return 'OBA-' + String(n).padStart(8,'0');
+  }
+  return raw.replace(/\s+/g,'');
+}
+function orderNoCandidates(value){
+  const raw = String(value||'').trim().toUpperCase();
+  const normalized = normalizeOrderNoText(raw);
+  const digits = (raw.match(/\d+/g)||[]).join('');
+  const list = [raw, raw.replace(/\s+/g,''), normalized];
+  if(digits){
+    const n = parseInt(digits,10);
+    if(!Number.isNaN(n)){
+      list.push('OBA-' + String(n).padStart(8,'0'));
+      list.push('OBA' + String(n).padStart(8,'0'));
+      list.push(String(n).padStart(8,'0'));
+      list.push('OBA-' + String(n).padStart(6,'0'));
+      list.push('OBA' + String(n).padStart(6,'0'));
+      list.push(String(n).padStart(6,'0'));
+      list.push(String(n));
+    }
+  }
+  return [...new Set(list.filter(Boolean))];
+}
+function findOrderByCode(value){
+  const candidates = orderNoCandidates(value);
+  return state.orders.find(o => {
+    const orderCandidates = orderNoCandidates(o.id);
+    return candidates.some(c => orderCandidates.includes(c));
+  });
+}
+function activeItems(){return state.items.filter(i=>i.active)}
+function activeStaff(){return state.staff.filter(s=>s.active)}
+function staffById(id){return state.staff.find(s=>s.id===id)}
+function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;return order.items.reduce((sum,item)=>{const rate=staff.rules?.[item.name] ?? staff.rules?.[item.category] ?? staff.rules?.default ?? 0.5;return sum+Math.round(Number(item.price||0)*Number(rate||0));},0)}
+function ensureOrderPerformance(order){
+  if(!order || !order.assignedDesignerId) return order;
+  const staff=staffById(order.assignedDesignerId);
+  if(staff && !order.assignedDesignerName) order.assignedDesignerName=staff.name;
+  const commission=calcCommission(order,order.assignedDesignerId);
+  if(!Number.isFinite(Number(order.commission)) || Number(order.commission)===0) order.commission=commission;
+  return order;
+}
+function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new Date(joinDate), now=new Date();const months=(now.getFullYear()-start.getFullYear())*12+(now.getMonth()-start.getMonth());return `${Math.floor(months/12)}年${months%12}個月`}
+function updateCashierDisplay(){ $('#cashierDisplay').textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 本單經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 尚未驗證收銀 PIN'}
+function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
+function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
+
+// V11.0.40：BOSS限制模式＋分店欄位預留＋歸零退票帳務（只可看報表，不可操作收款/退票/管理）
+const BOSS_PASSWORD = '269527';
+const BOSS_SESSION_KEY = 'oba_boss_mode_v38';
+window.USER_ROLE = sessionStorage.getItem(BOSS_SESSION_KEY)==='yes' ? 'boss' : (window.USER_ROLE || 'staff');
+function isBossMode(){return window.USER_ROLE === 'boss'}
+function guardBossAction(){if(isBossMode()){alert('BOSS模式只能查看報表，不能操作此功能');return true}return false}
+function applyBossMode(){
+  if(!isBossMode()) return;
+  document.body.classList.add('boss-mode');
+  document.querySelectorAll('.tab').forEach(tab=>{
+    const isReport = tab.dataset.tab === 'report';
+    tab.classList.toggle('active', isReport);
+    if(!isReport){
+      tab.classList.add('hidden');
+      tab.disabled = true;
+      tab.style.opacity = '.45';
+      tab.style.pointerEvents = 'none';
+    }
+  });
+  document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));
+  $('#tab-report')?.classList.remove('hidden');
+  document.querySelectorAll('#tab-cashier button,#tab-assign button,#btnResetAll').forEach(el=>{
+    el.disabled = true;
+    el.style.opacity = '.45';
+    el.style.pointerEvents = 'none';
+  });
+  const badge = $('#cashierDisplay');
+  if(badge) badge.textContent = 'BOSS限制模式｜只可查看報表｜'+(state.branchName||DEFAULT_BRANCH_NAME);
+  renderReport();
+}
+function enterBossMode(){
+  window.USER_ROLE='boss';
+  sessionStorage.setItem(BOSS_SESSION_KEY,'yes');
+  sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
+  closeAccessGate();
+  setActiveTab('report');
+  applyBossMode();
+}
+function requireCashier(){
+  if(guardBossAction()) return false;
+  const pin = window.prompt('請輸入本單收銀 PIN');
+  if(pin===null) return false;
+  const cashier = state.staff.find(s=>String(s.pin||'').trim()===String(pin).trim() && s.permissions.includes('checkout') && s.active);
+  if(!cashier){alert('PIN 錯誤或沒有收款權限'); CURRENT_CASHIER=null; updateCashierDisplay(); return false}
+  CURRENT_CASHIER={id:cashier.id,name:cashier.name};
+  updateCashierDisplay();
+  return true
+}
+
+document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
+  const name=tab.dataset.tab;
+  if(isBossMode() && name!=='report'){
+    alert('BOSS模式只能查看報表');
+    applyBossMode();
+    return;
+  }
+  if(tab.classList.contains('locked')){pendingLockedTab=name;openPassword(name);return}
+  setActiveTab(name);focusScanIfNeeded(name)
+});
+function openPassword(targetTab){pwdMode=targetTab;$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.add('hidden');$('#pwdTitle').textContent=state.managementPassword?'輸入管理密碼':'第一次設定管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
+$('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
+$('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('BOSS模式不可修改密碼');return} if(oldPwd!==state.managementPassword){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
+ if(pwdMode==='report' && oldPwd===BOSS_PASSWORD){$('#passwordDialog').close();pendingLockedTab='';enterBossMode();return;}
+ if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(oldPwd!==state.managementPassword){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
+ window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
+$('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
+
+function renderCashier(){
+  $('#todayText').textContent=todayStr();
+  $('#nextOrderNo').textContent=currentOrderNo();
+  const grid=$('#cashierItemGrid');
+  grid.innerHTML='';
+  const items=activeItems();
+  const grouped={};
+  const singles=[];
+  items.forEach(item=>{
+    const cat=String(item.category||'').trim();
+    if(cat){
+      if(!grouped[cat]) grouped[cat]=[];
+      grouped[cat].push(item);
+    }else{
+      singles.push(item);
+    }
+  });
+  Object.keys(grouped).forEach(cat=>{
+    const btn=document.createElement('button');
+    btn.className='chip';
+    btn.innerHTML=`<div class="name">${cat}</div><div class="price">點一下選金額</div>`;
+    btn.onclick=()=>openItemPicker(cat);
+    grid.appendChild(btn);
+  });
+  singles.forEach(item=>{
+    const btn=document.createElement('button');
+    btn.className='chip';
+    btn.innerHTML=`<div class="name">${item.name}</div><div class="price">${money(item.price)}</div>`;
+    btn.onclick=()=>{state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart()};
+    grid.appendChild(btn);
+  });
+  renderCart();
+}
+function openItemPicker(category){
+  const list=activeItems().filter(i=>String(i.category||'').trim()===category);
+  $('#itemPickTitle').textContent=category;
+  const grid=$('#itemPickGrid');
+  grid.innerHTML=list.map(i=>`<button class="chip" data-id="${i.id}"><div class="name">${i.name}</div><div class="price">${money(i.price)}</div></button>`).join('');
+  grid.querySelectorAll('[data-id]').forEach(btn=>btn.onclick=()=>{const item=activeItems().find(x=>x.id===btn.dataset.id);if(!item)return;state.cart.push({id:item.id,name:item.name,price:Number(item.price),category:item.category||''});saveState();renderCart();$('#itemPickDialog').close()});
+  $('#itemPickDialog').showModal();
+}
+$('#btnCloseItemPick').onclick=()=>$('#itemPickDialog').close();
+
+function renderCart(){
+  const bill = $('#cashierBill');
+
+  if(state.cart.length===0){
+    bill.innerHTML = '<div class="note">尚未加入任何項目</div>';
+  }else{
+    bill.innerHTML = state.cart.map((i,idx)=>`
+      <div class="bill-row">
+        <div>
+          <button type="button" class="btn btn-danger" onclick="removeCartItem(${idx})" style="margin-right:8px;padding:4px 10px;border-radius:10px;font-size:13px">取消</button>
+          ${idx+1}. ${i.name}
+        </div>
+        <div>${money(i.price)}</div>
+      </div>
+    `).join('');
+  }
+
+  $('#cashierCount').textContent = state.cart.length;
+  $('#cashierTotal').textContent = money(state.cart.reduce((s,i)=>s+i.price,0));
+  $('#cashierStatus').textContent = state.cart.length ? '待收款' : '未結帳';
+}
+
+function removeCartItem(idx){
+  state.cart.splice(idx,1);
+  saveState();
+  renderCart();
+}
+document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.cart.length===0){alert('請先加入項目');return} CURRENT_CASHIER=null; updateCashierDisplay(); if(!requireCashier())return; const method=btn.dataset.pay; state.pendingPay=method; $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(state.cart.reduce((s,i)=>s+i.price,0))}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`; $('#payDialog').showModal()})
+$('#btnCancelPay').onclick=()=>$('#payDialog').close();
+$('#btnConfirmPay').onclick=()=>{if(guardBossAction()) return; const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
+function renderReceiptQr(orderId){
+  const box = $('#receiptQr');
+  if(!box) return;
+  box.innerHTML='';
+  try{
+    if(window.QRCode){
+      new QRCode(box,{text:String(orderId||''),width:86,height:86,correctLevel:QRCode.CorrectLevel.M});
+    }else{
+      box.innerHTML='<div class="note">QR Code 套件尚未載入</div>';
+      alert('QR Code 套件尚未載入，請確認網路後重新整理');
+    }
+  }catch(e){
+    console.log(e);
+    box.innerHTML='<div class="note">QR Code 產生失敗</div>';
+    alert('QR Code 產生失敗');
+  }
+}
+function openReceipt(order){
+  const redeemInfo = order.paymentMethod==='集點卡兌換' && order.redeemMeta
+    ? `<div class="r"><span>客人</span><span>${order.redeemMeta.customer||'-'} / ${order.redeemMeta.uid4||'-'}</span></div>`
+    : '';
+  const typeText = order.paymentMethod==='集點卡兌換' ? '集點卡0元票' : order.paymentMethod;
+  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">${order.id}</div><div class="center">${order.date} ${order.time}｜${typeText}</div><div class="center">${order.branchName||DEFAULT_BRANCH_NAME}｜經手 ${order.cashierName||'-'}</div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:2px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>renderReceiptQr(order.id),250)}
+let LAST_RECEIPT_IMAGE_FILE=null;
+async function makeReceiptImage(){
+  try{
+    const id=$('#printArea .barcode-note')?.textContent?.trim();
+    if(id) renderReceiptQr(id);
+    if(!window.html2canvas){
+      alert('圖片產生套件尚未載入，請確認網路後重新整理');
+      return;
+    }
+    $('#btnPrint').disabled=true;
+    $('#btnPrint').textContent='圖片產生中...';
+    const area=$('#printArea');
+    const canvas=await html2canvas(area,{backgroundColor:'#ffffff',scale:3,useCORS:true,logging:false});
+    canvas.toBlob(async blob=>{
+      if(!blob){alert('圖片產生失敗');return;}
+      const filename=(id||'OBA_receipt')+'.png';
+      const url=URL.createObjectURL(blob);
+      const link=$('#receiptImageDownload');
+      link.href=url;
+      link.download=filename;
+      link.textContent='下載圖片：'+filename;
+      $('#receiptImageActions').classList.remove('hidden');
+      $('#receiptImageHint').textContent='圖片已產生。平板請按「下載圖片」或「分享圖片」，再用 POS Printer App 列印。';
+      LAST_RECEIPT_IMAGE_FILE=new File([blob],filename,{type:'image/png'});
+      $('#btnPrint').disabled=false;
+      $('#btnPrint').textContent='一鍵列印 RawBT';
+    },'image/png');
+  }catch(e){
+    console.log(e);
+    alert('圖片產生失敗，請重新整理後再試');
+    $('#btnPrint').disabled=false;
+    $('#btnPrint').textContent='一鍵列印 RawBT';
+  }
+}
+
+function bytesToBase64(bytes){
+  let binary='';
+  const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary += String.fromCharCode.apply(null, bytes.slice(i,i+chunk));
+  }
+  return btoa(binary);
+}
+function canvasToEscPosRaster(canvas){
+  const targetWidth=576; // 80mm 熱感紙常用寬度
+  const ratio=targetWidth/canvas.width;
+  const targetHeight=Math.max(1,Math.round(canvas.height*ratio));
+  const c=document.createElement('canvas');
+  c.width=targetWidth;
+  c.height=targetHeight;
+  const ctx=c.getContext('2d',{willReadFrequently:true});
+  ctx.fillStyle='#fff';
+  ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(canvas,0,0,targetWidth,targetHeight);
+  const img=ctx.getImageData(0,0,targetWidth,targetHeight).data;
+  const widthBytes=Math.ceil(targetWidth/8);
+  const data=[];
+  // 初始化 + 對齊置中
+  data.push(0x1B,0x40,0x1B,0x61,0x01);
+  // GS v 0 raster bit image
+  data.push(0x1D,0x76,0x30,0x00,widthBytes&0xff,(widthBytes>>8)&0xff,targetHeight&0xff,(targetHeight>>8)&0xff);
+  for(let y=0;y<targetHeight;y++){
+    for(let xb=0;xb<widthBytes;xb++){
+      let b=0;
+      for(let bit=0;bit<8;bit++){
+        const x=xb*8+bit;
+        if(x>=targetWidth) continue;
+        const idx=(y*targetWidth+x)*4;
+        const r=img[idx], g=img[idx+1], bl=img[idx+2], a=img[idx+3];
+        const gray=(r*0.299+g*0.587+bl*0.114);
+        if(a>20 && gray<185) b |= (0x80>>bit);
+      }
+      data.push(b);
+    }
+  }
+  // 走紙 + 切紙（沒有切刀也不影響）
+  data.push(0x0A,0x0A,0x0A,0x1D,0x56,0x42,0x00);
+  return new Uint8Array(data);
+}
+async function printReceiptByRawBT(){
+  try{
+    const id=$('#printArea .barcode-note')?.textContent?.trim();
+    if(id) renderReceiptQr(id);
+    if(!window.html2canvas){
+      alert('圖片產生套件尚未載入，請確認網路後重新整理');
+      return;
+    }
+    const btn=$('#btnPrint');
+    btn.disabled=true;
+    btn.textContent='送出列印中...';
+    const canvas=await html2canvas($('#printArea'),{backgroundColor:'#ffffff',scale:3,useCORS:true,logging:false});
+    const bytes=canvasToEscPosRaster(canvas);
+    const b64=bytesToBase64(bytes);
+    $('#receiptImageHint').textContent='已送到 RawBT。若 RawBT 跳出確認畫面，直接按 PRINT。';
+    window.location.href='rawbt:base64,'+b64;
+    setTimeout(()=>{btn.disabled=false;btn.textContent='一鍵列印 RawBT';},1200);
+  }catch(e){
+    console.log(e);
+    alert('RawBT 一鍵列印失敗，請確認 RawBT 已安裝並已連上印表機');
+    const btn=$('#btnPrint');
+    if(btn){btn.disabled=false;btn.textContent='一鍵列印 RawBT';}
+  }
+}
+$('#btnPrint').onclick=()=>printReceiptByRawBT();
+$('#btnImageBackup').onclick=()=>makeReceiptImage();
+$('#btnShareReceiptImage').onclick=async()=>{
+  try{
+    if(!LAST_RECEIPT_IMAGE_FILE){alert('請先產生單據圖片');return;}
+    if(navigator.canShare && navigator.canShare({files:[LAST_RECEIPT_IMAGE_FILE]})){
+      await navigator.share({files:[LAST_RECEIPT_IMAGE_FILE],title:'OBA單據圖片'});
+    }else{
+      alert('這台平板不支援直接分享圖片，請按「下載圖片」後再到 POS Printer App 開啟列印。');
+    }
+  }catch(e){console.log(e);}
+};
+$('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay(); $('#receiptDialog').close();};
+
+function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats()}
+$('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
+function renderAssignPreview(){
+  const code=$('#assignOrderNo').value.trim();
+  let order=findOrderByCode(code);
+  if(!order && !code && LAST_ASSIGNED_ORDER_NO){order=findOrderByCode(LAST_ASSIGNED_ORDER_NO)}
+  const selectedId=$('#assignDesigner').value||'JEAN';
+  if(!order){
+    $('#assignPreview').innerHTML='請先掃描或輸入單號';
+    $('#assignShowNo').textContent='--';
+    $('#assignShowTotal').textContent='$0';
+    $('#assignShowCommission').textContent='$0';
+    $('#myThisOrder').textContent='$0 / $0';
+    return;
+  }
+  const commission=order.refunded ? 0 : calcCommission(order,selectedId);
+  $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;
+  $('#assignShowNo').textContent=order.id;
+  $('#assignShowTotal').textContent=order.refunded ? '$0' : money(order.total);
+  $('#assignShowCommission').textContent=money(commission);
+  $('#myThisOrder').textContent=order.refunded ? '$0 / $0' : `${money(order.total)} / ${money(commission)}`;
+}
+function clearAssignScanField(){
+  const input=$('#assignOrderNo');
+  if(!input) return;
+  input.value='';
+  renderAssignPreview();
+  renderMyStats();
+  setTimeout(()=>input.focus(),80);
+}
+$('#btnAssignOrder').onclick=()=>{
+  const code=$('#assignOrderNo').value.trim();
+  const staffId=$('#assignDesigner').value||'JEAN';
+  const order=findOrderByCode(code);
+  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
+  if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return}
+  const staff=staffById(staffId);
+  if(!staff){alert('找不到員工資料，請先到員工資料確認此員工仍在職');return}
+  order.assignedDesignerId=staff.id;
+  order.assignedDesignerName=staff.name;
+  order.commission=calcCommission(order,staff.id);
+  order.assignedAt=new Date().toISOString();
+  LAST_ASSIGNED_ORDER_NO=order.id;
+  const reportStaff=$('#reportStaff');
+  if(reportStaff) reportStaff.value=staff.id;
+  saveState(true);
+  renderAssign();
+  renderReport();
+  clearAssignScanField();
+  alert('已成功掛入業績，報表已更新到 '+staff.name);
+}
+function renderMyStats(){state.orders.forEach(ensureOrderPerformance);const id=$('#assignDesigner').value||'JEAN', today=todayStr(), month=monthStr();const todayOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded), monthOrders=state.orders.filter(o=>o.assignedDesignerId===id&&o.date.startsWith(month)&&!o.refunded);$('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(todayOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${todayOrders.length}`;$('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(monthOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${monthOrders.length}`;$('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單'}
+
+function openRefund(code=''){ if(guardBossAction()) return; $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
+$('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=()=>openRefund($('#assignOrderNo').value.trim()); $('#btnCloseRefund').onclick=()=>$('#refundDialog').close();
+$('#refundReason').onchange=()=>$('#refundReasonOther').classList.toggle('hidden',$('#refundReason').value!=='其他');
+$('#refundOrderNo').addEventListener('input',renderRefundPreview);
+function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=findOrderByCode(code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
+$('#btnDoRefund').onclick=()=>{
+  if(guardBossAction()) return;
+  const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;
+  const order=findOrderByCode(code);
+  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');return}
+  if(order.refunded){alert('這張單已退票');return}
+  if(!reason){alert('請選擇退票原因');return}
+  order.refunded=true;
+  order.refundedAt=new Date().toISOString();
+  order.refundReason=reason;
+  state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:Number(order.total||0),reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()});
+  if(LAST_ASSIGNED_ORDER_NO===order.id) LAST_ASSIGNED_ORDER_NO='';
+  saveState(true);
+  renderRefundPreview();
+  renderAssign();
+  renderReport();
+  $('#refundDialog').close();
+  alert('已完成退票，業績與抽成已從報表扣回');
+}
+
+function reportFilterValues(){
+  const dateEl=$('#reportDate'), startEl=$('#reportStartTime'), endEl=$('#reportEndTime'), staffEl=$('#reportStaff');
+  if(dateEl && !dateEl.value) dateEl.value=todayStr();
+  return {date:dateEl?.value||todayStr(),start:startEl?.value||'',end:endEl?.value||'',staffId:staffEl?.value||'JEAN'};
+}
+function isTimeInRange(time,start,end){
+  const t=String(time||'00:00').slice(0,5);
+  if(start && t<start) return false;
+  
+  if(end && t>end) return false;
+  return true;
+}
+function renderReportStaffOptions(){
+  const sel=$('#reportStaff');
+  if(!sel) return;
+  const current=sel.value||'JEAN';
+  const staffList=activeStaff().filter(s=>s.permissions.includes('assign')||s.permissions.includes('checkout')||s.owner);
+  sel.innerHTML=staffList.map(s=>`<option value="${s.id}" ${s.id===current?'selected':''}>${s.name}</option>`).join('');
+  if(!staffList.find(s=>s.id===sel.value) && staffList[0]) sel.value=staffList[0].id;
+}
+function renderReport(){
+  state.orders.forEach(ensureOrderPerformance);
+  renderReportStaffOptions();
+  const f=reportFilterValues(), month=f.date.slice(0,7);
+  const rangeText=`${f.date}${f.start||f.end?' '+(f.start||'00:00')+'～'+(f.end||'23:59'):' 全日'}`;
+  const rangeOrders=state.orders.filter(o=>o.date===f.date&&!o.refunded&&isTimeInRange(o.time,f.start,f.end));
+  const rangeRefunds=state.refunds.filter(r=>r.date===f.date&&isTimeInRange(r.time,f.start,f.end));
+  $('#daySalesLabel').textContent='區間營業額';
+  $('#daySales').textContent=money(rangeOrders.reduce((s,o)=>s+o.total,0));
+  $('#dayRefund').textContent=money(rangeRefunds.reduce((s,o)=>s+o.total,0));
+  $('#dayCount').textContent=rangeOrders.length;
+  $('#payCash').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='現金').reduce((s,o)=>s+o.total,0));
+  $('#payTransfer').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='轉帳').reduce((s,o)=>s+o.total,0));
+  $('#payLine').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='LINE Pay').reduce((s,o)=>s+o.total,0));
+  const personal=rangeOrders.filter(o=>o.assignedDesignerId===f.staffId);
+  $('#personalSales').textContent=money(personal.reduce((s,o)=>s+o.total,0));
+  $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
+  $('#personalCount').textContent=personal.length;
+  const monthOrders=state.orders.filter(o=>o.date.startsWith(month)&&!o.refunded);
+  const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
+  $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
+  $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
+  $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
+  const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
+  $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
+}
+document.addEventListener('change',function(e){
+  if(e.target && ['reportDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
+});
+
+
+function updateItemSaveStatus(){
+  const status = $('#itemSaveStatus');
+  const btn = $('#btnSaveItems');
+  if(!status || !btn) return;
+  if(ITEM_DIRTY){
+    status.textContent='尚未儲存';
+    status.classList.remove('saved');
+    status.classList.add('dirty');
+    btn.textContent='儲存品項資料';
+  }else{
+    status.textContent='已儲存';
+    status.classList.remove('dirty');
+    status.classList.add('saved');
+    btn.textContent='儲存品項資料';
+  }
+}
+function markItemsDirty(){
+  ITEM_DIRTY=true;
+  updateItemSaveStatus();
+}
+function applyPresetPermissions(s){if(s.owner){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all'];return} if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
+function rulePercent(s,name){
+  if(!s.rules) s.rules={default:0.5};
+  const v = s.rules[name] ?? s.rules.default ?? 0.5;
+  return Math.round(Number(v||0)*100);
+}
+
+function updateStaffRule(staffId, ruleName, value){
+  const staff = state.staff.find(s=>s.id===staffId);
+  if(!staff) return;
+
+  if(!staff.rules) staff.rules={default:0.5};
+
+  let num = Number(value||0);
+  if(isNaN(num)) num = 0;
+  if(num < 0) num = 0;
+  if(num > 100) num = 100;
+
+  staff.rules[ruleName] = Number((num / 100).toFixed(2));
+
+  STAFF_DIRTY = true;
+  localStorage.setItem(KEY, JSON.stringify(state));
+
+  console.log('抽成比例暫存', staffId, ruleName, staff.rules[ruleName]);
+}
+function renderCommissionInputs(s,names){
+  if(!s.rules) s.rules={default:0.5};
+  const unique=[...new Set(names.filter(Boolean))];
+  return `<div class="space"></div><div class="label">抽成比例設定（可個別更改，輸入 50 代表 50%）</div><div class="grid4"><div><div class="label">預設抽成 %</div><input class="input" type="number" min="0" max="100" value="${rulePercent(s,'default')}" onchange="updateStaffRule('${s.id}','default',this.value)"></div>${unique.map(name=>`<div><div class="label">${name} %</div><input class="input" type="number" min="0" max="100" value="${rulePercent(s,name)}" onchange="updateStaffRule('${s.id}','${name.replace(/'/g,"\\'")}',this.value)"></div>`).join('')}</div>`;
+}
+function renderManage(){
+  const names=activeItems().map(i=>i.name);
+  $('#staffCards').innerHTML=state.staff.map(s=>{
+    if(!s.permissions) s.permissions=[];
+    if(!s.rules) s.rules={default:0.5};
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="row" style="justify-content:space-between"><div><div class="section-title" style="font-size:18px;margin-bottom:4px">${s.name}</div></div><div>${s.active?'<span class="badge badge-ok">啟用中</span>':'<span class="badge badge-off">停用</span>'}</div></div>
+      <div class="space"></div>
+      <div class="grid4">
+        <div><div class="label">姓名</div><input class="input" value="${s.name||''}" onchange="updateStaffField('${s.id}','name',this.value)"></div>
+        <div><div class="label">暱稱</div><input class="input" value="${s.nickname||''}" onchange="updateStaffField('${s.id}','nickname',this.value)"></div>
+        <div><div class="label">電話</div><input class="input" value="${s.phone||''}" onchange="updateStaffField('${s.id}','phone',this.value)"></div>
+        <div><div class="label">住址</div><input class="input" value="${s.address||''}" onchange="updateStaffField('${s.id}','address',this.value)"></div>
+      </div>
+      <div class="space"></div>
+      <div class="grid4">
+        <div><div class="label">到職日</div><input class="input" type="date" value="${s.joinDate||''}" onchange="updateStaffField('${s.id}','joinDate',this.value)"></div>
+        <div><div class="label">年資</div><div class="pill">${getYearsText(s.joinDate)}</div></div>
+        <div><div class="label">PIN</div><input class="input" inputmode="numeric" value="${s.pin||''}" onchange="updateStaffField('${s.id}','pin',this.value)"></div>
+        <div><div class="label">是否在職</div><select class="select" onchange="updateStaffActive('${s.id}',this.value)"><option value="true" ${s.active?'selected':''}>在職</option><option value="false" ${!s.active?'selected':''}>離職</option></select></div>
+      </div>
+      <div class="space"></div>
+      <div class="grid2">
+        <div><div class="label">職務類型</div><select class="select" onchange="updateStaffField('${s.id}','role',this.value)"><option value="店長" ${s.role==='店長'?'selected':''}>門市管理</option><option value="老闆" ${s.role==='老闆'?'selected':''}>查看管理</option><option value="設計師" ${s.role==='設計師'?'selected':''}>服務人員</option><option value="助理" ${s.role==='助理'?'selected':''}>助理</option><option value="收銀員" ${s.role==='收銀員'?'selected':''}>櫃台</option></select></div>
+        <div><div class="label">使用權限</div><select class="select" onchange="updateSystemRole('${s.id}',this.value)" ${s.owner?'disabled':''}><option value="擁有者" ${s.systemRole==='擁有者'?'selected':''}>最高權限</option><option value="管理者" ${s.systemRole==='管理者'?'selected':''}>管理權限</option><option value="一般員工" ${s.systemRole==='一般員工'?'selected':''}>基本權限</option><option value="僅查看者" ${s.systemRole==='僅查看者'?'selected':''}>唯讀權限</option></select></div>
+      </div>
+      ${renderCommissionInputs(s,names)}
+      <div class="space"></div>
+      <div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} ${s.owner?'disabled':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div>
+      <div class="space"></div>
+      <div class="row"><button class="btn btn-soft" onclick="updateSystemRoleByRole('${s.id}')">依身份自動套權限</button><button class="btn btn-ok" onclick="saveStaffChanges()">儲存修改</button><button class="btn btn-danger" onclick="deleteStaff('${s.id}')" ${s.owner?'disabled':''}>刪除此員工</button></div>
+    </div>`;
+  }).join('');
+  $('#itemManageList').innerHTML=state.items.map(i=>`<div class="card" style="margin-bottom:10px"><div class="grid4"><input class="input" value="${i.category||''}" placeholder="分類" onchange="updateItemField('${i.id}','category',this.value)"><input class="input" value="${i.name}" placeholder="品項名稱" onchange="updateItemField('${i.id}','name',this.value)"><input class="input" type="number" value="${i.price}" placeholder="價格" onchange="updateItemField('${i.id}','price',this.value)"><select class="select" onchange="updateItemField('${i.id}','active',this.value)"><option value="true" ${i.active?'selected':''}>啟用</option><option value="false" ${!i.active?'selected':''}>停用</option></select></div><div class="space"></div><div class="grid2"><div><div class="label">集點卡兌換</div><select class="select" onchange="updateItemField('${i.id}','redeemable',this.value)"><option value="false" ${!i.redeemable?'selected':''}>不可兌換</option><option value="true" ${i.redeemable?'selected':''}>可兌換</option></select></div><div><div class="label">刪除品項</div><div class="row"><button class="btn btn-danger" onclick="deleteItem('${i.id}')">刪除此品項</button><button class="btn btn-ok" onclick="saveItemsChanges()">儲存修改</button></div></div></div></div>`).join('');
+  updateItemSaveStatus();
+}
+
+window.updateStaffRule=(staffId,name,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId); if(!s)return; if(!s.rules)s.rules={default:0.5}; const n=Number(value||0); s.rules[name]=Math.max(0,Math.min(100,n))/100; renderAssign(); renderReport(); renderManage()}
+window.saveStaffChanges=()=>{if(guardBossAction()) return; saveState(); renderAssign(); renderReport(); renderManage(); alert('員工資料已儲存')}
+window.saveItemsChanges=()=>{if(guardBossAction()) return; saveState(); ITEM_DIRTY=false; renderCashier(); renderAssign(); renderReport(); renderManage(); alert('品項資料已儲存')}
+window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; renderAssign(); renderManage(); updateCashierDisplay()}
+window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; renderAssign(); renderManage()}
+window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; renderManage()}
+window.updateSystemRoleByRole=(staffId)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; renderManage()}
+window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(!Array.isArray(s.permissions))s.permissions=[]; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); saveState(); renderAssign(); renderReport(); renderManage()}
+window.deleteStaff=(id)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
+document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
+window.updateItemField=(id,field,val)=>{if(guardBossAction()) return; const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; ITEM_DIRTY=true; renderCashier(); renderManage()}
+document.getElementById('btnAddItem').onclick=()=>{if(guardBossAction()) return; const category=$('#newItemCategory').value.trim(), name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!category||!name||!price){alert('請輸入分類、品項名稱與價格');return} const newItem={id:'item'+Date.now(),category,name,price,active:true,quick:false}; state.items.unshift(newItem); $('#newItemCategory').value=''; $('#newItemName').value=''; $('#newItemPrice').value=''; ITEM_DIRTY=true; renderCashier(); renderManage(); setActiveTab('manage'); const list=$('#itemManageList'); if(list) list.scrollIntoView({behavior:'smooth',block:'start'}); alert('已新增品項，會歸在「'+category+'」分類；請按儲存品項資料')}
+window.deleteItem=(id)=>{if(guardBossAction()) return; const item=state.items.find(x=>x.id===id);if(!item)return;if(!confirm('確定刪除「'+item.name+'」嗎？'))return;state.items=state.items.filter(x=>x.id!==id);ITEM_DIRTY=true;renderCashier();renderManage();alert('已刪除，請按儲存品項資料')}
+
+document.addEventListener('click', function(e){
+  if(e.target && e.target.id==='btnSaveStaff'){
+    if(guardBossAction()) return;
+    saveState();
+    renderAssign();
+    renderReport();
+    renderManage();
+    alert('員工資料已儲存');
+  }
+  if(e.target && e.target.id==='btnSaveItems'){
+    if(guardBossAction()) return;
+    saveState();
+    ITEM_DIRTY=false;
+    renderCashier();
+    renderAssign();
+    renderReport();
+    renderManage();
+    alert('品項資料已儲存');
+  }
+});
+
+$('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
+async function resetAllDataForGoLive(){
+  // V11.0.42：正式營運重置，只清營業資料，不清員工、品項、PIN、管理密碼。
+  // 避免開店前測試單殘留：單號、訂單、退票、刷單預覽、今日/本月業績都同步歸零。
+  const keepStaff = clone(state.staff || defaultState.staff);
+  const keepItems = clone(state.items || defaultState.items);
+  const keepPassword = state.managementPassword || '';
+  const keepBranchId = state.branchId || DEFAULT_BRANCH_ID;
+  const keepBranchName = state.branchName || DEFAULT_BRANCH_NAME;
+  state = Object.assign(clone(defaultState), {
+    managementPassword: keepPassword,
+    staff: keepStaff,
+    items: keepItems,
+    branchId: keepBranchId,
+    branchName: keepBranchName,
+    nextNo: 1,
+    cart: [],
+    orders: [],
+    refunds: [],
+    pendingPay: ''
+  });
+  CURRENT_CASHIER=null;
+  LAST_ASSIGNED_ORDER_NO='';
+  ITEM_DIRTY=false;
+  STAFF_DIRTY=false;
+  ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
+  const dateEl=$('#reportDate'); if(dateEl) dateEl.value=todayStr();
+  localStorage.setItem(KEY, JSON.stringify(state));
+  await saveState(true);
+  refreshAllScreens();
+  setActiveTab('cashier');
+}
+$('#btnResetAll').onclick=async()=>{
+  if(guardBossAction()) return;
+  if(!confirm('確定要清空營業資料並把單號歸零成 OBA-00000001 嗎？'))return;
+  if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表；員工、品項、PIN會保留。'))return;
+  await resetAllDataForGoLive();
+  alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空');
+}
+function isPhoneDevice(){
+  const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
+  const lw = Math.max(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
+  const ua = navigator.userAgent || '';
+  const isAndroidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
+  const isiPhone = /iPhone|iPod/i.test(ua);
+  const sizeLooksPhone = sw <= 600 && lw <= 1100;
+  return isiPhone || isAndroidPhone || sizeLooksPhone;
+}
+function applyDeviceMode(){
+  const phoneOnly = isPhoneDevice();
+  document.body.classList.toggle('phone-mode', phoneOnly);
+  if(phoneOnly){
+    setActiveTab('assign');
+  }else{
+    const active = document.querySelector('.tab.active')?.dataset?.tab || 'cashier';
+    setActiveTab(active);
+  }
+}
+
+function getRedeemableItems(){
+  return activeItems().filter(i => i.active && (i.redeemable===true || i.redeemable==='true' || i.redeem==='Y' || i.redeem===true));
+}
+function getRedeemItemFallback(){
+  const items = activeItems().filter(i=>i.active);
+  return items.slice(0, 8);
+}
+function openRedeemDialog(){
+  if(guardBossAction()) return;
+  const itemSel = $('#redeemItemSelect');
+  const redeemItems = getRedeemableItems();
+  const itemsToShow = redeemItems.length ? redeemItems : getRedeemItemFallback();
+  itemSel.innerHTML = itemsToShow.map(i => `<option value="${i.id}">${i.name}｜${money(i.price)}</option>`).join('');
+  $('#redeemCustomer').value = '';
+  $('#redeemUid4').value = '';
+  $('#redeemDialog').showModal();
+  setTimeout(function(){
+    const el = $('#redeemCustomer');
+    if(el){
+      el.focus();
+      try{el.click();}catch(e){}
+      setTimeout(function(){
+        el.focus();
+        try{el.click();}catch(e){}
+      },260);
+    }
+  },80);
+}
+function submitRedeem(){
+  if(guardBossAction()) return;
+  const customer = $('#redeemCustomer').value.trim();
+  const uid4 = $('#redeemUid4').value.trim();
+  const itemId = $('#redeemItemSelect').value;
+  if(!customer || !uid4 || !itemId){
+    alert('請填完整資料');
+    return;
+  }
+  const item = activeItems().find(i => i.id===itemId);
+  if(!item){ alert('資料讀取失敗'); return; }
+  const order = {
+    id: currentOrderNo(),
+    date: todayStr(),
+    time: nowTime(),
+    branchId: state.branchId || DEFAULT_BRANCH_ID,
+    branchName: state.branchName || DEFAULT_BRANCH_NAME,
+    items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
+    total: 0,
+    paymentMethod: '集點卡兌換',
+    cashierId: '',
+    cashierName: '集點卡兌換',
+    assignedDesignerId: '',
+    assignedDesignerName: '',
+    commission: 0,
+    assignedAt: '',
+    refunded: false,
+    createdAt: new Date().toISOString(),
+    redeemMeta: {
+      customer,
+      uid4,
+      sourcePrice: Number(item.price || 0),
+      redeemType: true
+    }
+  };
+  state.orders.unshift(order);
+  state.nextNo += 1;
+  saveState();
+  renderCashier();
+  renderAssign();
+  renderReport();
+  $('#redeemDialog').close();
+  openReceipt(order);
+  alert('已開立集點卡0元票，請至刷單入業績頁籤完成登錄');
+}
+document.addEventListener('click', function(e){
+  if(e.target && e.target.id === 'btnRedeemOpen') openRedeemDialog();
+  if(e.target && e.target.id === 'btnRedeemCancel') $('#redeemDialog').close();
+   if(e.target && e.target.id === 'btnRedeemSubmit') submitRedeem();
+if(e.target && e.target.id === 'btnClearCart'){ state.cart=[]; CURRENT_CASHIER=null; renderCart(); updateCashierDisplay(); saveState(true); }
+});
+
+
+const ACCESS_KEY='oba_hair_access_password_v27';
+const ACCESS_SESSION_KEY='oba_hair_access_granted_v27';
+function getAccessPassword(){
+  const saved=localStorage.getItem(ACCESS_KEY);
+  if(saved!==null) return saved;
+  localStorage.setItem(ACCESS_KEY,'oba2026');
+  return 'oba2026';
+}
+function closeAccessGate(){
+  const gate=$('#accessGate');
+  if(gate) gate.classList.add('hidden-gate');
+}
+function openAccessGate(){
+  const gate=$('#accessGate');
+  if(gate) gate.classList.remove('hidden-gate');
+  setTimeout(function(){
+    const el=$('#accessPassword');
+    if(el){ el.focus(); try{el.click();}catch(e){} }
+  },80);
+}
+function verifyAccessPassword(){
+  const input=$('#accessPassword');
+  const val=(input?.value||'').trim();
+  if(!val){ alert('請輸入進入密碼'); return; }
+  if(val===BOSS_PASSWORD){
+    enterBossMode();
+    return;
+  }
+  if(val!==getAccessPassword()){
+    alert('進入密碼錯誤');
+    input.value='';
+    input.focus();
+    return;
+  }
+  sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
+  closeAccessGate();
+}
+document.addEventListener('click',function(e){
+  if(e.target && e.target.id==='btnAccessEnter') verifyAccessPassword();
+});
+document.addEventListener('keydown',function(e){
+  if(e.key==='Enter' && document.activeElement && document.activeElement.id==='accessPassword'){
+    verifyAccessPassword();
+  }
+});
+
+let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null, zxingControls=null;
+function fillScannedCode(raw){
+  const code = String(raw||'').trim();
+  if(!code) return false;
+  const finalCode = normalizeOrderNoText(code);
+  $('#assignOrderNo').value = finalCode;
+  $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
+  setTimeout(()=>$('#assignOrderNo').focus(),80);
+  return true;
+}
+async function startCameraScan(){
+  const dialog=$('#cameraScanDialog'), video=$('#scanVideo'), status=$('#scanStatus');
+  try{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      alert('這支手機瀏覽器不能開啟即時相機，請改用 Safari / Chrome，或手動輸入單號。');
+      return;
+    }
+    dialog.showModal();
+    status.textContent='相機啟動中，請允許相機權限...';
+
+    // V10.3.2：真正即時掃碼，不再改成拍照模式。
+    // 優先使用 ZXing 連續掃描，iPhone Safari / Android Chrome 都比較穩。
+    if(window.ZXing && ZXing.BrowserMultiFormatReader){
+      zxingReader = new ZXing.BrowserMultiFormatReader();
+      const constraints = {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      };
+      status.textContent='請把收據條碼放在鏡頭中央，系統會自動讀取。';
+      if(typeof zxingReader.decodeFromConstraints === 'function'){
+        zxingControls = await zxingReader.decodeFromConstraints(constraints, video, (result, err)=>{
+          if(result && result.text){
+(function(){
+  const blockMsg = 'OBA Hair 店內系統：此操作已鎖定';
+  document.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+    alert(blockMsg);
+  });
+  document.addEventListener('keydown', function(e){
+    const k = (e.key || '').toLowerCase();
+    const blocked =
+      e.key === 'F12' ||
+      (e.ctrlKey && e.shiftKey && ['i','j','c'].includes(k)) ||
+      (e.ctrlKey && ['u','s','p'].includes(k));
+    if(blocked){
+      e.preventDefault();
+      e.stopPropagation();
+      alert(blockMsg);
+      return false;
+    }
+  }, true);
+  document.addEventListener('dragstart', function(e){ e.preventDefault(); }, true);
+  document.addEventListener('selectstart', function(e){
+    const tag = (e.target && e.target.tagName || '').toLowerCase();
+    if(['input','textarea'].includes(tag)) return;
+    e.preventDefault();
+  }, true);
+})();            const text = String(result.text||'').trim();
+            if(fillScannedCode(text)){
+              stopCameraScan();
+            }
+          }
+        });
+      }else{
+        zxingControls = await zxingReader.decodeFromVideoDevice(null, video, (result, err)=>{
+          if(result && result.text){
+            const text = String(result.text||'').trim();
+            if(fillScannedCode(text)){
+              stopCameraScan();
+            }
+          }
+        });
+      }
+      return;
+    }
+
+    // 備援：支援 BarcodeDetector 的瀏覽器使用原生辨識。
+    if('BarcodeDetector' in window){
+      barcodeDetector = new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','qr_code']});
+      scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+      video.srcObject = scanStream;
+      await video.play();
+      status.textContent='請把收據條碼放在鏡頭中央，系統會自動讀取。';
+      scanTimer = setInterval(async()=>{
+        try{
+          if(!barcodeDetector || !video || video.readyState < 2) return;
+          const codes = await barcodeDetector.detect(video);
+          if(codes && codes.length){
+            const raw = String(codes[0].rawValue||'').trim();
+            if(raw && fillScannedCode(raw)) stopCameraScan();
+          }
+        }catch(e){ console.log(e); }
+      }, 300);
+      return;
+    }
+
+    stopCameraScan();
+    alert('即時掃碼套件尚未載入，請確認網路後重新整理；也可以先手動輸入單號。');
+  }catch(e){
+    console.log(e);
+    stopCameraScan();
+    alert('相機無法啟動。請確認 Safari/Chrome 已允許相機權限，或改用手動輸入單號。');
+  }
+}
+function stopCameraScan(){
+  if(scanTimer){clearInterval(scanTimer);scanTimer=null;}
+  if(zxingControls && typeof zxingControls.stop==='function'){
+    try{zxingControls.stop();}catch(e){console.log(e)}
+  }
+  zxingControls=null;
+  if(zxingReader && typeof zxingReader.reset==='function'){
+    try{zxingReader.reset();}catch(e){console.log(e)}
+  }
+  if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}
+  const video=$('#scanVideo'); if(video){video.pause(); video.srcObject=null;}
+  const dialog=$('#cameraScanDialog'); if(dialog && dialog.open) dialog.close();
+}
+document.addEventListener('click',function(e){
+  if(e.target && e.target.id==='btnCameraScan') startCameraScan();
+  if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
+});
+
+function init(){ensureBranchFields(state); updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); if(isBossMode()){closeAccessGate(); setActiveTab('report'); applyBossMode();} else {applyDeviceMode(); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()}} window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceMode(); }); startCloudSync();}
+init();
+</script>
+
+<script>
+// V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
+
+</script>
+
+</body>
+</html>
