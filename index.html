@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.47 入口免密修正版</title>
+<title>OBA Hair V11.0.48 免入口密碼歸零版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -409,6 +409,37 @@ async function saveState(forceCloud=false){
     cloudSaving=false;
   }
 }
+
+async function forceResetAllData(){
+  // 鎖住雲端拉回，避免剛歸零又被舊資料覆蓋
+  CLOUD_RESET_LOCK_UNTIL = Date.now() + 120000;
+  localStorage.setItem(RESET_LOCK_KEY, String(CLOUD_RESET_LOCK_UNTIL));
+
+  state.orders = [];
+  state.refunds = [];
+  state.cart = [];
+  state.nextNo = 1;
+
+  LAST_ASSIGNED_ORDER_NO = '';
+  CURRENT_CASHIER = null;
+
+  localStorage.setItem(KEY, JSON.stringify(state));
+
+  const client = getCloudClient();
+  if(client){
+    const payload = { id:CLOUD_ROW_ID, data:state, updated_at:new Date().toISOString() };
+    const { error } = await client.from(CLOUD_TABLE).upsert(payload, { onConflict:'id' });
+    if(error){
+      alert('本機已歸零，但雲端覆蓋失敗，請不要換裝置操作，稍後再試一次');
+      console.log('雲端歸零失敗', error);
+    }else{
+      console.log('雲端已被歸零資料覆蓋');
+    }
+  }
+
+  refreshAllScreens();
+}
+
 function refreshAllScreens(){
   updateCashierDisplay();
   renderCashier();
@@ -1089,34 +1120,94 @@ async function resetAllDataForGoLive(){
 }
 $('#btnResetAll').onclick=async()=>{
   if(guardBossAction()) return;
+  if(!confirm('確定要清空營業資料並把單號歸零成 OBA-00000001 嗎？'))return;
+  if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表；員工、品項、PIN會保留。'))return;
+  await resetAllDataForGoLive();
+  alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空，雲端舊資料已覆蓋');
+}
+function isPhoneDevice(){
+  const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
+  const lw = Math.max(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
+  const ua = navigator.userAgent || '';
+  const isAndroidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
+  const isiPhone = /iPhone|iPod/i.test(ua);
+  const sizeLooksPhone = sw <= 600 && lw <= 1100;
+  return isiPhone || isAndroidPhone || sizeLooksPhone;
+}
+function applyDeviceMode(){
+  const phoneOnly = isPhoneDevice();
+  document.body.classList.toggle('phone-mode', phoneOnly);
+  if(phoneOnly){
+    setActiveTab('assign');
+  }else{
+    const active = document.querySelector('.tab.active')?.dataset?.tab || 'cashier';
+    setActiveTab(active);
+  }
+}
 
-  const ok = confirm('確定要清空全部資料並重新歸零嗎？');
-  if(!ok) return;
-
-  // 防止剛清空又被雲端舊資料蓋回來
-  CLOUD_RESET_LOCK_UNTIL = Date.now() + 60000;
-  localStorage.setItem(RESET_LOCK_KEY, CLOUD_RESET_LOCK_UNTIL);
-
-  // 真正全部歸零
-  state.orders = [];
-  state.refunds = [];
-  state.cart = [];
-  state.nextNo = 1;
-
-  LAST_ASSIGNED_ORDER_NO = '';
-  CURRENT_CASHIER = null;
-
-  // 直接覆蓋雲端
-  await saveState(true);
-
-  // 強制刷新全部畫面
-  renderCashier();
-  renderAssign();
-  renderReport();
-  updateCashierDisplay();
-
-  alert('已完成真正歸零（單號、業績、抽成、報表、退票）');
-};
+function getRedeemableItems(){
+  return activeItems().filter(i => i.active && (i.redeemable===true || i.redeemable==='true' || i.redeem==='Y' || i.redeem===true));
+}
+function getRedeemItemFallback(){
+  const items = activeItems().filter(i=>i.active);
+  return items.slice(0, 8);
+}
+function openRedeemDialog(){
+  if(guardBossAction()) return;
+  const itemSel = $('#redeemItemSelect');
+  const redeemItems = getRedeemableItems();
+  const itemsToShow = redeemItems.length ? redeemItems : getRedeemItemFallback();
+  itemSel.innerHTML = itemsToShow.map(i => `<option value="${i.id}">${i.name}｜${money(i.price)}</option>`).join('');
+  $('#redeemCustomer').value = '';
+  $('#redeemUid4').value = '';
+  $('#redeemDialog').showModal();
+  setTimeout(function(){
+    const el = $('#redeemCustomer');
+    if(el){
+      el.focus();
+      try{el.click();}catch(e){}
+      setTimeout(function(){
+        el.focus();
+        try{el.click();}catch(e){}
+      },260);
+    }
+  },80);
+}
+function submitRedeem(){
+  if(guardBossAction()) return;
+  const customer = $('#redeemCustomer').value.trim();
+  const uid4 = $('#redeemUid4').value.trim();
+  const itemId = $('#redeemItemSelect').value;
+  if(!customer || !uid4 || !itemId){
+    alert('請填完整資料');
+    return;
+  }
+  const item = activeItems().find(i => i.id===itemId);
+  if(!item){ alert('資料讀取失敗'); return; }
+  const order = {
+    id: currentOrderNo(),
+    date: todayStr(),
+    time: nowTime(),
+    branchId: state.branchId || DEFAULT_BRANCH_ID,
+    branchName: state.branchName || DEFAULT_BRANCH_NAME,
+    items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
+    total: 0,
+    paymentMethod: '集點卡兌換',
+    cashierId: '',
+    cashierName: '集點卡兌換',
+    assignedDesignerId: '',
+    assignedDesignerName: '',
+    commission: 0,
+    assignedAt: '',
+    refunded: false,
+    createdAt: new Date().toISOString(),
+    redeemMeta: {
+      customer,
+      uid4,
+      sourcePrice: Number(item.price || 0),
+      redeemType: true
+    }
+  };
   state.orders.unshift(order);
   state.nextNo += 1;
   saveState();
@@ -1135,7 +1226,6 @@ if(e.target && e.target.id === 'btnClearCart'){ state.cart=[]; CURRENT_CASHIER=n
 });
 
 
-// V11.0.47：臨時修正入口卡住，先免輸入進入密碼，讓正式網址可直接進系統。
 const ACCESS_KEY='oba_hair_access_password_v27';
 const ACCESS_SESSION_KEY='oba_hair_access_granted_v27';
 function getAccessPassword(){
@@ -1308,12 +1398,41 @@ document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
 });
 
-function init(){ensureBranchFields(state); updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); if(isBossMode()){closeAccessGate(); setActiveTab('report'); applyBossMode();} else {applyDeviceMode(); sessionStorage.setItem(ACCESS_SESSION_KEY,'yes'); closeAccessGate()} window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceMode(); }); startCloudSync();}
+function init(){
+  ensureBranchFields(state);
+  // V11.0.48：取消入口密碼，開啟後直接進系統。
+  sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
+  closeAccessGate();
+  updateCashierDisplay();
+  renderCashier();
+  renderAssign();
+  renderReport();
+  renderManage();
+  if(isBossMode()){
+    setActiveTab('report');
+    applyBossMode();
+  }else{
+    applyDeviceMode();
+  }
+  window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceMode(); });
+  startCloudSync();
+}
 init();
 </script>
 
 <script>
 // V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
+
+
+$('#btnResetAll').onclick=async()=>{
+  if(guardBossAction()) return;
+  const ok = confirm('確定要清空全部資料並重新歸零嗎？\n\n會清空：單號、業績、抽成、報表紀錄、退票紀錄。');
+  if(!ok) return;
+
+  await forceResetAllData();
+
+  alert('已完成真正歸零：單號回到 001，業績與抽成已清為 0，雲端也已覆蓋。');
+};
 
 </script>
 
