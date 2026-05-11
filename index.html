@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.48 歸零修正版</title>
+<title>OBA Hair V11.0.47 入口免密修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -103,7 +103,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </script>
 </head>
 <body>
-<div class="access-gate" id="accessGate">
+<div class="access-gate hidden-gate" id="accessGate">
   <div class="access-card">
     <h2 class="access-title">OBA Hair 內部系統</h2>
     <div class="access-sub">此系統僅供公司內部使用。請先輸入進入密碼。</div>
@@ -374,18 +374,7 @@ async function pullCloudState(){
     const { data, error } = await client.from(CLOUD_TABLE).select('id,data,updated_at').eq('id', CLOUD_ROW_ID).maybeSingle();
     if(error){ console.log('雲端讀取失敗', error); return false; }
     if(data && data.data){
-      const incoming = data.data || {};
-      const localResetToken = Number(state?.resetToken || 0);
-      const incomingResetToken = Number(incoming?.resetToken || 0);
-
-      // 歸零後保護：如果本機已經歸零，而且本機版本比雲端新，不准雲端舊資料蓋回來。
-      if(localResetToken && incomingResetToken < localResetToken && Array.isArray(state.orders) && state.orders.length === 0){
-        console.log('本機歸零資料較新，拒絕雲端舊資料覆蓋，並重新覆蓋雲端');
-        await saveState(true);
-        return true;
-      }
-
-      state = normalizeCloudState(incoming);
+      state = normalizeCloudState(data.data);
       localStorage.setItem(KEY, JSON.stringify(state));
       console.log('雲端資料已載入');
       return true;
@@ -1069,9 +1058,7 @@ async function resetAllDataForGoLive(){
     cart: [],
     orders: [],
     refunds: [],
-    pendingPay: '',
-    resetToken: Date.now(),
-    resetAt: new Date().toISOString()
+    pendingPay: ''
   });
   CURRENT_CASHIER=null;
   LAST_ASSIGNED_ORDER_NO='';
@@ -1080,7 +1067,7 @@ async function resetAllDataForGoLive(){
   ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
   const dateEl=$('#reportDate'); if(dateEl) dateEl.value=todayStr();
   // V11.0.43：歸零後先鎖住雲端讀取，避免 Supabase 舊資料在 15 秒輪詢時復活。
-  const lockUntil = Date.now() + 300000;
+  const lockUntil = Date.now() + 90000;
   CLOUD_RESET_LOCK_UNTIL = lockUntil;
   localStorage.setItem(RESET_LOCK_KEY, String(lockUntil));
   localStorage.setItem(KEY, JSON.stringify(state));
@@ -1094,7 +1081,7 @@ async function resetAllDataForGoLive(){
   setTimeout(()=>{
     CLOUD_RESET_LOCK_UNTIL=0;
     localStorage.removeItem(RESET_LOCK_KEY);
-  }, 300000);
+  }, 90000);
 
   if(!ok){
     alert('本機已歸零，但雲端覆蓋失敗。請確認網路後再按一次清空全部資料。');
@@ -1102,94 +1089,34 @@ async function resetAllDataForGoLive(){
 }
 $('#btnResetAll').onclick=async()=>{
   if(guardBossAction()) return;
-  if(!confirm('確定要清空營業資料並把單號歸零成 OBA-00000001 嗎？'))return;
-  if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表；員工、品項、PIN會保留。'))return;
-  await resetAllDataForGoLive();
-  alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空，雲端舊資料已覆蓋');
-};
-function isPhoneDevice(){
-  const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
-  const lw = Math.max(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
-  const ua = navigator.userAgent || '';
-  const isAndroidPhone = /Android/i.test(ua) && /Mobile/i.test(ua);
-  const isiPhone = /iPhone|iPod/i.test(ua);
-  const sizeLooksPhone = sw <= 600 && lw <= 1100;
-  return isiPhone || isAndroidPhone || sizeLooksPhone;
-}
-function applyDeviceMode(){
-  const phoneOnly = isPhoneDevice();
-  document.body.classList.toggle('phone-mode', phoneOnly);
-  if(phoneOnly){
-    setActiveTab('assign');
-  }else{
-    const active = document.querySelector('.tab.active')?.dataset?.tab || 'cashier';
-    setActiveTab(active);
-  }
-}
 
-function getRedeemableItems(){
-  return activeItems().filter(i => i.active && (i.redeemable===true || i.redeemable==='true' || i.redeem==='Y' || i.redeem===true));
-}
-function getRedeemItemFallback(){
-  const items = activeItems().filter(i=>i.active);
-  return items.slice(0, 8);
-}
-function openRedeemDialog(){
-  if(guardBossAction()) return;
-  const itemSel = $('#redeemItemSelect');
-  const redeemItems = getRedeemableItems();
-  const itemsToShow = redeemItems.length ? redeemItems : getRedeemItemFallback();
-  itemSel.innerHTML = itemsToShow.map(i => `<option value="${i.id}">${i.name}｜${money(i.price)}</option>`).join('');
-  $('#redeemCustomer').value = '';
-  $('#redeemUid4').value = '';
-  $('#redeemDialog').showModal();
-  setTimeout(function(){
-    const el = $('#redeemCustomer');
-    if(el){
-      el.focus();
-      try{el.click();}catch(e){}
-      setTimeout(function(){
-        el.focus();
-        try{el.click();}catch(e){}
-      },260);
-    }
-  },80);
-}
-function submitRedeem(){
-  if(guardBossAction()) return;
-  const customer = $('#redeemCustomer').value.trim();
-  const uid4 = $('#redeemUid4').value.trim();
-  const itemId = $('#redeemItemSelect').value;
-  if(!customer || !uid4 || !itemId){
-    alert('請填完整資料');
-    return;
-  }
-  const item = activeItems().find(i => i.id===itemId);
-  if(!item){ alert('資料讀取失敗'); return; }
-  const order = {
-    id: currentOrderNo(),
-    date: todayStr(),
-    time: nowTime(),
-    branchId: state.branchId || DEFAULT_BRANCH_ID,
-    branchName: state.branchName || DEFAULT_BRANCH_NAME,
-    items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
-    total: 0,
-    paymentMethod: '集點卡兌換',
-    cashierId: '',
-    cashierName: '集點卡兌換',
-    assignedDesignerId: '',
-    assignedDesignerName: '',
-    commission: 0,
-    assignedAt: '',
-    refunded: false,
-    createdAt: new Date().toISOString(),
-    redeemMeta: {
-      customer,
-      uid4,
-      sourcePrice: Number(item.price || 0),
-      redeemType: true
-    }
-  };
+  const ok = confirm('確定要清空全部資料並重新歸零嗎？');
+  if(!ok) return;
+
+  // 防止剛清空又被雲端舊資料蓋回來
+  CLOUD_RESET_LOCK_UNTIL = Date.now() + 60000;
+  localStorage.setItem(RESET_LOCK_KEY, CLOUD_RESET_LOCK_UNTIL);
+
+  // 真正全部歸零
+  state.orders = [];
+  state.refunds = [];
+  state.cart = [];
+  state.nextNo = 1;
+
+  LAST_ASSIGNED_ORDER_NO = '';
+  CURRENT_CASHIER = null;
+
+  // 直接覆蓋雲端
+  await saveState(true);
+
+  // 強制刷新全部畫面
+  renderCashier();
+  renderAssign();
+  renderReport();
+  updateCashierDisplay();
+
+  alert('已完成真正歸零（單號、業績、抽成、報表、退票）');
+};
   state.orders.unshift(order);
   state.nextNo += 1;
   saveState();
@@ -1208,6 +1135,7 @@ if(e.target && e.target.id === 'btnClearCart'){ state.cart=[]; CURRENT_CASHIER=n
 });
 
 
+// V11.0.47：臨時修正入口卡住，先免輸入進入密碼，讓正式網址可直接進系統。
 const ACCESS_KEY='oba_hair_access_password_v27';
 const ACCESS_SESSION_KEY='oba_hair_access_granted_v27';
 function getAccessPassword(){
@@ -1380,7 +1308,7 @@ document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
 });
 
-function init(){ensureBranchFields(state); updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); if(isBossMode()){closeAccessGate(); setActiveTab('report'); applyBossMode();} else {applyDeviceMode(); if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes'){closeAccessGate()} else {openAccessGate()}} window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceMode(); }); startCloudSync();}
+function init(){ensureBranchFields(state); updateCashierDisplay(); renderCashier(); renderAssign(); renderReport(); renderManage(); if(isBossMode()){closeAccessGate(); setActiveTab('report'); applyBossMode();} else {applyDeviceMode(); sessionStorage.setItem(ACCESS_SESSION_KEY,'yes'); closeAccessGate()} window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceMode(); }); startCloudSync();}
 init();
 </script>
 
