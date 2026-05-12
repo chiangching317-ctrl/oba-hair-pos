@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.50 單號歸零同步清業績版</title>
+<title>OBA Hair V11.0.50b 歸零同步清業績版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -398,7 +398,12 @@ async function saveState(forceCloud=false){
   }
 }
 
-async function forceResetAllData(){
+async async function forceResetAllData(){
+  // V11.0.50b：統一走正式營運歸零，避免只清單號沒清業績。
+  if(typeof resetAllDataForGoLive === "function"){
+    await resetAllDataForGoLive();
+    return;
+  }
   // 鎖住雲端拉回，避免剛歸零又被舊資料覆蓋
   CLOUD_RESET_LOCK_UNTIL = Date.now() + 120000;
   localStorage.setItem(RESET_LOCK_KEY, String(CLOUD_RESET_LOCK_UNTIL));
@@ -1405,21 +1410,52 @@ init();
 </script>
 
 <script>
-// V11.0.50：單號歸零同步清業績版。歸零會清空訂單、退票、刷單業績、今日/月統計與暫存，保留員工、品項、PIN、管理密碼。
-// V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
+// V11.0.50b：基礎保護＋清空全部資料按鈕最終綁定
+// 重點：不要再用只改 state.nextNo 的方式；要同時清 orders / refunds / 業績暫存 / 雲端。
 
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', function(e){
+  const key = String(e.key || '').toUpperCase();
+  if(
+    key === 'F12' ||
+    (e.ctrlKey && e.shiftKey && ['I','J','C'].includes(key)) ||
+    (e.ctrlKey && key === 'U')
+  ){
+    e.preventDefault();
+    return false;
+  }
+});
 
-$('#btnResetAll').onclick=async()=>{
-  if(guardBossAction()) return;
-  const ok = confirm('確定要清空全部資料並重新歸零嗎？\n\n會清空：單號、訂單、退票、刷單紀錄、今日/本月業績、抽成與筆數。\n員工、品項、PIN、管理密碼會保留。');
-  if(!ok) return;
-  const ok2 = confirm('再次確認：這是正式營運前歸零，清掉後測試業績不會保留。');
-  if(!ok2) return;
+const resetButtonFinal = document.getElementById('btnResetAll');
+if(resetButtonFinal){
+  resetButtonFinal.onclick = async()=>{
+    if(guardBossAction()) return;
+    const ok = confirm('確定要清空營業資料並重新歸零嗎？\n\n會清空：單號、訂單、退票、今日/本月業績、抽成、筆數、刷單畫面暫存。\n會保留：員工、品項、PIN、管理密碼。');
+    if(!ok) return;
 
-  await resetAllDataForGoLive();
+    if(typeof resetAllDataForGoLive === 'function'){
+      await resetAllDataForGoLive();
+    }else{
+      await forceResetAllData();
+    }
 
-  alert('已完成真正歸零：單號回到 OBA-00000001，今日/本月業績、抽成、筆數與刷單紀錄都已清為 0，雲端也已覆蓋。');
-};
+    const assignInput = document.getElementById('assignOrderNo');
+    if(assignInput) assignInput.value = '';
+    const preview = document.getElementById('assignPreview');
+    if(preview) preview.innerHTML = '請先掃描或輸入單號';
+    const todayStats = document.getElementById('myTodayStats');
+    if(todayStats) todayStats.textContent = '$0 / $0 / 0';
+    const monthStats = document.getElementById('myMonthStats');
+    if(monthStats) monthStats.textContent = '$0 / $0 / 0';
+    const thisOrder = document.getElementById('myThisOrder');
+    if(thisOrder) thisOrder.textContent = '$0 / $0';
+    const list = document.getElementById('myTodayOrderList');
+    if(list) list.innerHTML = '今天還沒有單';
+
+    refreshAllScreens();
+    alert('已完整歸零：單號回到 OBA-00000001，今日/本月業績、抽成、筆數都已清空。');
+  };
+}
 
 </script>
 

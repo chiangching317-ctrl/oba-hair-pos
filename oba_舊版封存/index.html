@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.49a 測試同步版</title>
+<title>OBA Hair V11.0.50 單號歸零同步清業績版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -1405,17 +1405,20 @@ init();
 </script>
 
 <script>
+// V11.0.50：單號歸零同步清業績版。歸零會清空訂單、退票、刷單業績、今日/月統計與暫存，保留員工、品項、PIN、管理密碼。
 // V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
 
 
 $('#btnResetAll').onclick=async()=>{
   if(guardBossAction()) return;
-  const ok = confirm('確定要清空全部資料並重新歸零嗎？\n\n會清空：單號、業績、抽成、報表紀錄、退票紀錄。');
+  const ok = confirm('確定要清空全部資料並重新歸零嗎？\n\n會清空：單號、訂單、退票、刷單紀錄、今日/本月業績、抽成與筆數。\n員工、品項、PIN、管理密碼會保留。');
   if(!ok) return;
+  const ok2 = confirm('再次確認：這是正式營運前歸零，清掉後測試業績不會保留。');
+  if(!ok2) return;
 
-  await forceResetAllData();
+  await resetAllDataForGoLive();
 
-  alert('已完成真正歸零：單號回到 001，業績與抽成已清為 0，雲端也已覆蓋。');
+  alert('已完成真正歸零：單號回到 OBA-00000001，今日/本月業績、抽成、筆數與刷單紀錄都已清為 0，雲端也已覆蓋。');
 };
 
 </script>
