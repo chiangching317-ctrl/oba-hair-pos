@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.44 員工欄位穩定版</title>
+<title>OBA Hair V11.0.43 拿掉入口PIN碼版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -332,16 +332,6 @@ let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=nul
 let LAST_ASSIGNED_ORDER_NO='';
 let ITEM_DIRTY=false;
 let STAFF_DIRTY=false;
-function markStaffDirty(){
-  STAFF_DIRTY=true;
-  localStorage.setItem(KEY, JSON.stringify(state));
-}
-function isManageEditing(){
-  const managePanel = document.getElementById('tab-manage');
-  if(!managePanel || managePanel.classList.contains('hidden')) return false;
-  const ae = document.activeElement;
-  return !!(ae && (ae.closest('#staffCards') || ae.closest('#itemManageList') || ae.closest('.manage-fold')));
-}
 const $=s=>document.querySelector(s);
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function ensureBranchFields(data){
@@ -465,7 +455,7 @@ async function startCloudSync(){
     console.log('目前使用本機資料，請確認 Supabase 資料表是否已建立');
   }
   setInterval(async()=>{
-    if(ITEM_DIRTY || STAFF_DIRTY || isManageEditing()){ console.log('資料正在編輯，暫停雲端覆蓋'); return; }
+    if(ITEM_DIRTY || STAFF_DIRTY){ console.log('資料尚未儲存，暫停雲端覆蓋'); return; }
     const ok = await pullCloudState();
     if(ok) refreshAllScreens();
   }, 15000);
@@ -977,7 +967,8 @@ function updateStaffRule(staffId, ruleName, value){
 
   staff.rules[ruleName] = Number((num / 100).toFixed(2));
 
-  markStaffDirty();
+  STAFF_DIRTY = true;
+  localStorage.setItem(KEY, JSON.stringify(state));
 
   console.log('抽成比例暫存', staffId, ruleName, staff.rules[ruleName]);
 }
@@ -1023,24 +1014,16 @@ function renderManage(){
   updateItemSaveStatus();
 }
 
-
-// V11.0.44：員工資料編輯中立即標記，避免15秒雲端pull重畫造成欄位跳走
-const staffCardsEl = document.getElementById('staffCards');
-if(staffCardsEl){
-  staffCardsEl.addEventListener('input', function(){ markStaffDirty(); });
-  staffCardsEl.addEventListener('focusin', function(){ STAFF_DIRTY=true; });
-}
-
-window.updateStaffRule=(staffId,name,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId); if(!s)return; if(!s.rules)s.rules={default:0.5}; const n=Number(value||0); s.rules[name]=Math.max(0,Math.min(100,n))/100; markStaffDirty(); renderAssign(); renderReport();}
-window.saveStaffChanges=()=>{if(guardBossAction()) return; STAFF_DIRTY=false; saveState(true); renderAssign(); renderReport(); renderManage(); alert('員工資料已儲存')}
+window.updateStaffRule=(staffId,name,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId); if(!s)return; if(!s.rules)s.rules={default:0.5}; const n=Number(value||0); s.rules[name]=Math.max(0,Math.min(100,n))/100; renderAssign(); renderReport(); renderManage()}
+window.saveStaffChanges=()=>{if(guardBossAction()) return; saveState(); renderAssign(); renderReport(); renderManage(); alert('員工資料已儲存')}
 window.saveItemsChanges=()=>{if(guardBossAction()) return; saveState(); ITEM_DIRTY=false; renderCashier(); renderAssign(); renderReport(); renderManage(); alert('品項資料已儲存')}
-window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; markStaffDirty(); renderAssign(); updateCashierDisplay()}
-window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; markStaffDirty(); renderAssign();}
-window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; markStaffDirty();}
-window.updateSystemRoleByRole=(staffId)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); markStaffDirty(); renderManage()}
-window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(!Array.isArray(s.permissions))s.permissions=[]; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); markStaffDirty(); renderAssign(); renderReport();}
-window.deleteStaff=(id)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); markStaffDirty(); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
-document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); markStaffDirty(); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
+window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; renderAssign(); renderManage(); updateCashierDisplay()}
+window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; renderAssign(); renderManage()}
+window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; renderManage()}
+window.updateSystemRoleByRole=(staffId)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; renderManage()}
+window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(!Array.isArray(s.permissions))s.permissions=[]; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); saveState(); renderAssign(); renderReport(); renderManage()}
+window.deleteStaff=(id)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
+document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
 window.updateItemField=(id,field,val)=>{if(guardBossAction()) return; const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; ITEM_DIRTY=true; renderCashier(); renderManage()}
 document.getElementById('btnAddItem').onclick=()=>{if(guardBossAction()) return; const category=$('#newItemCategory').value.trim(), name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!category||!name||!price){alert('請輸入分類、品項名稱與價格');return} const newItem={id:'item'+Date.now(),category,name,price,active:true,quick:false}; state.items.unshift(newItem); $('#newItemCategory').value=''; $('#newItemName').value=''; $('#newItemPrice').value=''; ITEM_DIRTY=true; renderCashier(); renderManage(); setActiveTab('manage'); const list=$('#itemManageList'); if(list) list.scrollIntoView({behavior:'smooth',block:'start'}); alert('已新增品項，會歸在「'+category+'」分類；請按儲存品項資料')}
 window.deleteItem=(id)=>{if(guardBossAction()) return; const item=state.items.find(x=>x.id===id);if(!item)return;if(!confirm('確定刪除「'+item.name+'」嗎？'))return;state.items=state.items.filter(x=>x.id!==id);ITEM_DIRTY=true;renderCashier();renderManage();alert('已刪除，請按儲存品項資料')}
@@ -1048,8 +1031,7 @@ window.deleteItem=(id)=>{if(guardBossAction()) return; const item=state.items.fi
 document.addEventListener('click', function(e){
   if(e.target && e.target.id==='btnSaveStaff'){
     if(guardBossAction()) return;
-    STAFF_DIRTY=false;
-    saveState(true);
+    saveState();
     renderAssign();
     renderReport();
     renderManage();
