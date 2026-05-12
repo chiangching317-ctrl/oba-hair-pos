@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.48 免入口密碼歸零版</title>
+<title>OBA Hair V11.0.49a 測試同步版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -103,19 +103,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </script>
 </head>
 <body>
-<div class="access-gate hidden-gate" id="accessGate">
-  <div class="access-card">
-    <h2 class="access-title">OBA Hair 內部系統</h2>
-    <div class="access-sub">此系統僅供公司內部使用。請先輸入進入密碼。</div>
-    <div class="label">進入密碼</div>
-    <input id="accessPassword" class="input" type="password" placeholder="請輸入內部密碼" />
-    <div class="space"></div>
-    <div class="row">
-      <button class="btn btn-primary" id="btnAccessEnter">進入系統</button>
-    </div>
-    <div class="note">員工手機會自動鎖定刷單入業績頁；平板與電腦保留收銀系統。</div>
-  </div>
-</div>
+<!-- V11.0.48：已移除入口密碼遮罩，開啟後直接進系統。 -->
 <div class="wrap">
   <div class="hero">
     <div><h1 class="title">OBA Hair 收銀系統</h1></div>
@@ -1239,12 +1227,8 @@ function closeAccessGate(){
   if(gate) gate.classList.add('hidden-gate');
 }
 function openAccessGate(){
-  const gate=$('#accessGate');
-  if(gate) gate.classList.remove('hidden-gate');
-  setTimeout(function(){
-    const el=$('#accessPassword');
-    if(el){ el.focus(); try{el.click();}catch(e){} }
-  },80);
+  // V11.0.48：免入口密碼，不再打開入口遮罩。
+  closeAccessGate();
 }
 function verifyAccessPassword(){
   const input=$('#accessPassword');
