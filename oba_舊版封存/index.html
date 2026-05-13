@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.70 JS啟動修正版</title>
+<title>OBA Hair V11.0.71 授權遮罩版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -1598,6 +1598,7 @@ async function authorizeCashierDevice(){
     alert('本機下載檔已完整放行，不需要設備授權。');
     return;
   }
+  // V11.0.71：平板/電腦設備授權密碼一律走遮罩輸入，不使用明碼輸入。
   const pwd = await askMaskedPassword('請輸入管理密碼，授權這台設備可以收銀', '管理密碼');
   if(pwd===null) return;
   const val=String(pwd||'').trim();

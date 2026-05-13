@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.75 移除舊個人業績區塊版</title>
+<title>OBA Hair V11.0.72 全方位密碼_JEAN勾選可改版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -225,8 +225,25 @@ const DEFAULT_BRANCH_NAME = "總店";
           <div class="stat"><div class="k">LINE Pay</div><div class="v" id="payLine">$0</div></div>
         </div>
       </div>
-      
-<div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button><button class="btn btn-ok" id="btnSalaryClose">薪資結算歸零</button><button class="btn btn-danger" id="btnResetAll">清空測試資料</button></div></div>
+      <div class="card">
+        <div class="section-title">個人業績</div>
+        <div class="stats">
+          <div class="stat"><div class="k">選定員工業績</div><div class="v" id="personalSales">$0</div></div>
+          <div class="stat"><div class="k">選定員工抽成</div><div class="v" id="personalCommission">$0</div></div>
+          <div class="stat"><div class="k">選定員工筆數</div><div class="v" id="personalCount">0</div></div>
+        </div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">JEAN 業績 / 抽成</div><div class="v" id="jeanStats">$0 / $0</div></div>
+          <div class="stat"><div class="k">ALAN 業績 / 抽成</div><div class="v" id="alanStats">$0 / $0</div></div>
+          <div class="stat"><div class="k">資料匯出</div><div class="v"><button class="btn btn-soft" id="btnExport">匯出</button></div></div>
+        </div>
+        <div class="space"></div>
+        <div class="section-title" style="font-size:18px">全部員工本月業績</div>
+        <div class="small-list" id="allStaffMonthStats">尚無員工資料</div>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button><button class="btn btn-ok" id="btnSalaryClose">薪資結算歸零</button><button class="btn btn-danger" id="btnResetAll">清空測試資料</button></div></div>
         <div class="table" id="reportTable"></div>
       </div>
     </div>

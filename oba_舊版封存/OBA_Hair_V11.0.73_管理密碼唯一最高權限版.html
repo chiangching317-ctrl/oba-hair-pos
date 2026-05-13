@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.75 移除舊個人業績區塊版</title>
+<title>OBA Hair V11.0.72 全方位密碼_JEAN勾選可改版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -225,8 +225,22 @@ const DEFAULT_BRANCH_NAME = "總店";
           <div class="stat"><div class="k">LINE Pay</div><div class="v" id="payLine">$0</div></div>
         </div>
       </div>
-      
-<div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button><button class="btn btn-ok" id="btnSalaryClose">薪資結算歸零</button><button class="btn btn-danger" id="btnResetAll">清空測試資料</button></div></div>
+      <div class="card">
+        <div class="section-title">個人業績</div>
+        <div class="stats">
+          <div class="stat"><div class="k">選定員工業績</div><div class="v" id="personalSales">$0</div></div>
+          <div class="stat"><div class="k">選定員工抽成</div><div class="v" id="personalCommission">$0</div></div>
+          <div class="stat"><div class="k">選定員工筆數</div><div class="v" id="personalCount">0</div></div>
+        </div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">JEAN 業績 / 抽成</div><div class="v" id="jeanStats">$0 / $0</div></div>
+          <div class="stat"><div class="k">ALAN 業績 / 抽成</div><div class="v" id="alanStats">$0 / $0</div></div>
+          <div class="stat"><div class="k">資料匯出</div><div class="v"><button class="btn btn-soft" id="btnExport">匯出</button></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button><button class="btn btn-ok" id="btnSalaryClose">薪資結算歸零</button><button class="btn btn-danger" id="btnResetAll">清空測試資料</button></div></div>
         <div class="table" id="reportTable"></div>
       </div>
     </div>
@@ -1293,16 +1307,6 @@ function renderReport(){
   const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
   $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
   $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
-  const allStaffBox=$('#allStaffMonthStats');
-  if(allStaffBox){
-    const reportStaffList=activeStaff().filter(s=>Array.isArray(s.permissions) && (s.permissions.includes('assign') || s.permissions.includes('checkout') || s.permissions.includes('report')));
-    allStaffBox.innerHTML = reportStaffList.length ? reportStaffList.map(st=>{
-      const list=monthOrders.filter(o=>o.assignedDesignerId===st.id);
-      const sales=list.reduce((sum,o)=>sum+Number(o.total||0),0);
-      const commission=list.reduce((sum,o)=>sum+Number(o.commission||0),0);
-      return `<div class="small-item"><strong>${st.name||st.id}</strong>｜業績 ${money(sales)}｜抽成 ${money(commission)}｜筆數 ${list.length}</div>`;
-    }).join('') : '尚無員工資料';
-  }
   $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
@@ -1409,13 +1413,13 @@ if(staffCardsEl){
 window.updateStaffRule=(staffId,name,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId); if(!s)return; if(!s.rules)s.rules={default:0.5}; const n=Number(value||0); s.rules[name]=Math.max(0,Math.min(100,n))/100; markStaffDirty(); renderAssign(); renderReport();}
 window.saveStaffChanges=()=>{if(guardBossAction()) return; STAFF_DIRTY=false; saveState(true); renderAssign(); renderReport(); renderManage(); alert('員工資料已儲存')}
 window.saveItemsChanges=()=>{if(guardBossAction()) return; saveState(); ITEM_DIRTY=false; renderCashier(); renderAssign(); renderReport(); renderManage(); alert('品項資料已儲存')}
-window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; s[field]=value; markStaffDirty(); renderAssign(); renderReport(); updateCashierDisplay()}
-window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; markStaffDirty(); renderAssign(); renderReport();}
+window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; s[field]=value; markStaffDirty(); renderAssign(); updateCashierDisplay()}
+window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; markStaffDirty(); renderAssign();}
 window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; s.systemRole=value; markStaffDirty();}
 window.updateSystemRoleByRole=(staffId)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); markStaffDirty(); renderManage()}
 window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(!Array.isArray(s.permissions))s.permissions=[]; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); markStaffDirty(); renderAssign(); renderReport();}
 window.deleteStaff=(id)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); markStaffDirty(); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
-document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); markStaffDirty(); renderAssign(); renderReport(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
+document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); markStaffDirty(); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
 window.updateItemField=(id,field,val)=>{if(guardBossAction()) return; const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; ITEM_DIRTY=true; renderCashier(); renderManage()}
 document.getElementById('btnAddItem').onclick=()=>{if(guardBossAction()) return; const category=$('#newItemCategory').value.trim(), name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!category||!name||!price){alert('請輸入分類、品項名稱與價格');return} const newItem={id:'item'+Date.now(),category,name,price,active:true,quick:false}; state.items.unshift(newItem); $('#newItemCategory').value=''; $('#newItemName').value=''; $('#newItemPrice').value=''; ITEM_DIRTY=true; renderCashier(); renderManage(); setActiveTab('manage'); const list=$('#itemManageList'); if(list) list.scrollIntoView({behavior:'smooth',block:'start'}); alert('已新增品項，會歸在「'+category+'」分類；請按儲存品項資料')}
 window.deleteItem=(id)=>{if(guardBossAction()) return; const item=state.items.find(x=>x.id===id);if(!item)return;if(!confirm('確定刪除「'+item.name+'」嗎？'))return;state.items=state.items.filter(x=>x.id!==id);ITEM_DIRTY=true;renderCashier();renderManage();alert('已刪除，請按儲存品項資料')}
