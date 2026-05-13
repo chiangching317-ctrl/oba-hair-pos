@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.60 本機不受限制修正版</title>
+<title>OBA Hair V11.0.61 本機完整放行修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -1461,18 +1461,49 @@ function applyDeviceMode(){
   }
 }
 
-// V11.0.60：裝置授權收銀。不是入口 PIN；本機測試檔不受限制，線上未授權設備只能刷單。
+// V11.0.61：裝置授權收銀。不是入口 PIN；本機下載檔 file:// 一律完整放行，只有線上網址才需要授權。
 const CASHIER_DEVICE_KEY='oba_hair_cashier_device_v58';
 function isLocalUnrestrictedDevice(){
-  const host = String(location.hostname||'').toLowerCase();
-  return location.protocol==='file:' || host==='localhost' || host==='127.0.0.1';
+  try{
+    const protocol = String(location.protocol || '').toLowerCase();
+    const host = String(location.hostname || '').toLowerCase();
+    const href = String(location.href || '').toLowerCase();
+    // 下載到電腦直接打開的 HTML 會是 file://，主機名稱通常是空白；本機開發才會是 localhost / 127.0.0.1。
+    return protocol === 'file:' || !host || host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || href.startsWith('file:///');
+  }catch(e){
+    return true; // 判斷失敗時偏向保護店長本機，不鎖住本機。
+  }
 }
-function isCashierDevice(){return isLocalUnrestrictedDevice() || localStorage.getItem(CASHIER_DEVICE_KEY)==='yes'}
-function isAssignOnlyDevice(){return !isBossMode() && !isCashierDevice()}
+function isOnlineUrl(){
+  const protocol = String(location.protocol || '').toLowerCase();
+  return protocol === 'http:' || protocol === 'https:';
+}
+function isCashierDevice(){
+  if(isLocalUnrestrictedDevice()) return true;
+  return localStorage.getItem(CASHIER_DEVICE_KEY)==='yes';
+}
+function isAssignOnlyDevice(){
+  if(isLocalUnrestrictedDevice()) return false;
+  return !isBossMode() && isOnlineUrl() && !isCashierDevice();
+}
+function restoreDeviceTabsForLocal(){
+  document.body.classList.remove('assign-only');
+  document.querySelectorAll('.tab').forEach(tab=>{
+    tab.disabled=false;
+    tab.style.opacity='';
+    tab.style.pointerEvents='';
+  });
+}
 function applyDeviceAuthorizationMode(){
   if(isBossMode()){
     document.body.classList.remove('assign-only');
     applyBossMode();
+    return;
+  }
+  if(isLocalUnrestrictedDevice()){
+    restoreDeviceTabsForLocal();
+    applyDeviceMode();
+    updateCashierDisplay();
     return;
   }
   if(isAssignOnlyDevice()){
@@ -1486,6 +1517,13 @@ function applyDeviceAuthorizationMode(){
   updateCashierDisplay();
 }
 function authorizeCashierDevice(){
+  if(isLocalUnrestrictedDevice()){
+    localStorage.setItem(CASHIER_DEVICE_KEY,'yes');
+    restoreDeviceTabsForLocal();
+    applyDeviceAuthorizationMode();
+    alert('本機下載檔已完整放行，不需要設備授權。');
+    return;
+  }
   const pwd = window.prompt('請輸入管理密碼，授權這台設備可以收銀');
   if(pwd===null) return;
   const val=String(pwd||'').trim();

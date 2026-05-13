@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.51 補印單據版</title>
+<title>OBA Hair V11.0.60 本機不受限制修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -42,6 +42,10 @@ body.phone-mode .hero{margin-bottom:12px}
 body.phone-mode .title{font-size:28px}
 body.phone-mode .pill{padding:8px 12px;font-size:13px}
 body.phone-mode .section-title{font-size:20px}
+/* V11.0.60：本機 file:// / localhost 不受裝置授權限制；線上網址仍需授權才可收銀。 */
+body.assign-only #tab-assign{display:block!important}
+.device-auth-row{display:none}
+body.assign-only .device-auth-row{display:flex}
 
 
 .access-gate{position:fixed;inset:0;background:rgba(248,244,241,.98);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
@@ -166,6 +170,7 @@ const DEFAULT_BRANCH_NAME = "總店";
         <div class="label">目前刷單員工</div><select id="assignDesigner" class="select"></select>
         <div class="space"></div>
         <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
+        <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入管理密碼授權一次即可收銀。</div></div>
         <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" />
         <div class="space"></div>
         <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
@@ -308,7 +313,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 const KEY='oba_hair_v2_owner';
 const RESET_MARKER_KEY='oba_hair_v2_owner_reset_at';
 const defaultState={
- managementPassword:'',monthlyOrderCounter:{},cart:[],pendingPay:'',
+ managementPassword:'',monthlyOrderCounter:{},cart:[],pendingPay:'',pendingCheckoutCart:null,
  staff:[
   {id:'JEAN',name:'JEAN',nickname:'JEAN',phone:'',address:'',joinDate:'2024-01-01',role:'店長',systemRole:'擁有者',active:true,owner:true,pin:'1234',rules:{default:0.5},permissions:['checkout','assign','refund','report','manage','item','password','view_all']},
   {id:'ALAN',name:'ALAN',nickname:'ALAN',phone:'',address:'',joinDate:'2024-01-01',role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'5678',rules:{default:0.5,'護髮':0.7,'燙髮':0.7,'染髮':0.7,'加價':0.7,'隔離':0.7},permissions:['assign']}
@@ -598,6 +603,7 @@ function refreshAllScreens(){
 async function startCloudSync(){
   const ok = await pullCloudState();
   if(ok){
+    if(purgeInvalidEmptyOrders()) saveState(true);
     refreshAllScreens();
   }else{
     console.log('目前使用本機資料，請確認 Supabase 資料表是否已建立');
@@ -671,6 +677,22 @@ function findOrderByCode(value){
     return candidates.some(c => orderCandidates.includes(c));
   });
 }
+
+function isValidOrderForBusiness(order){
+  if(!order) return false;
+  const items = Array.isArray(order.items) ? order.items : [];
+  if(order.paymentMethod === '集點卡兌換') return items.length > 0;
+  return items.length > 0 && Number(order.total || 0) > 0;
+}
+function getBusinessOrders(){
+  return (Array.isArray(state.orders) ? state.orders : []).filter(isValidOrderForBusiness);
+}
+function purgeInvalidEmptyOrders(){
+  if(!Array.isArray(state.orders)) state.orders=[];
+  const before = state.orders.length;
+  state.orders = state.orders.filter(isValidOrderForBusiness);
+  return before !== state.orders.length;
+}
 function activeItems(){return state.items.filter(i=>i.active)}
 function activeStaff(){return state.staff.filter(s=>s.active)}
 function staffById(id){return state.staff.find(s=>s.id===id)}
@@ -684,7 +706,7 @@ function ensureOrderPerformance(order){
   return order;
 }
 function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new Date(joinDate), now=new Date();const months=(now.getFullYear()-start.getFullYear())*12+(now.getMonth()-start.getMonth());return `${Math.floor(months/12)}年${months%12}個月`}
-function updateCashierDisplay(){ $('#cashierDisplay').textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 本單經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 尚未驗證收銀 PIN'}
+function updateCashierDisplay(){ if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && !isBossMode()){ $('#cashierDisplay').textContent='未授權設備｜只能刷單入業績'; return; } $('#cashierDisplay').textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 本單經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 尚未驗證收銀 PIN'}
 function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
 function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
 
@@ -742,6 +764,11 @@ document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
   if(isBossMode() && name!=='report'){
     alert('BOSS模式只能查看報表');
     applyBossMode();
+    return;
+  }
+  if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && name!=='assign'){
+    alert('此設備尚未授權為收銀設備，只能刷單入業績。');
+    applyDeviceAuthorizationMode();
     return;
   }
   if(tab.classList.contains('locked')){pendingLockedTab=name;openPassword(name);return}
@@ -825,9 +852,48 @@ function removeCartItem(idx){
   saveState();
   renderCart();
 }
-document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.cart.length===0){alert('請先加入項目');return} CURRENT_CASHIER=null; updateCashierDisplay(); if(!requireCashier())return; const method=btn.dataset.pay; state.pendingPay=method; $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(state.cart.reduce((s,i)=>s+i.price,0))}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`; $('#payDialog').showModal()})
-$('#btnCancelPay').onclick=()=>$('#payDialog').close();
-$('#btnConfirmPay').onclick=()=>{if(guardBossAction()) return; const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);consumeMonthlyOrderNo();state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
+document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{
+  if(state.cart.length===0){alert('請先加入項目');return}
+  const checkoutItems = clone(state.cart);
+  const checkoutTotal = checkoutItems.reduce((s,i)=>s+Number(i.price||0),0);
+  if(checkoutItems.length===0 || checkoutTotal<=0){alert('本單沒有有效品項，不能出單');return}
+  CURRENT_CASHIER=null;
+  updateCashierDisplay();
+  if(!requireCashier())return;
+  const method=btn.dataset.pay;
+  state.pendingPay=method;
+  state.pendingCheckoutCart=checkoutItems; // V11.0.52：鎖住本單快照，避免確認前 cart 被同步洗掉變 0 元空單
+  $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(checkoutTotal)}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`;
+  $('#payDialog').showModal()
+})
+$('#btnCancelPay').onclick=()=>{state.pendingPay='';
+  state.pendingCheckoutCart=null;state.pendingCheckoutCart=null;$('#payDialog').close();};
+$('#btnConfirmPay').onclick=()=>{
+  if(guardBossAction()) return;
+  const checkoutItems = Array.isArray(state.pendingCheckoutCart) && state.pendingCheckoutCart.length ? clone(state.pendingCheckoutCart) : clone(state.cart);
+  const checkoutTotal = checkoutItems.reduce((s,i)=>s+Number(i.price||0),0);
+  if(checkoutItems.length===0 || checkoutTotal<=0){
+    alert('本單資料已遺失或金額為 0，請重新選品項後再出單。');
+    state.pendingPay='';
+  state.pendingCheckoutCart=null;
+    state.pendingCheckoutCart=null;
+    $('#payDialog').close();
+    renderCashier();
+    return;
+  }
+  const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:checkoutItems,total:checkoutTotal,paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};
+  state.orders.unshift(order);
+  consumeMonthlyOrderNo();
+  state.cart=[];
+  state.pendingPay='';
+  state.pendingCheckoutCart=null;
+  state.pendingCheckoutCart=null;
+  CURRENT_CASHIER=null;
+  saveState(true);
+  renderCashier();renderAssign();renderReport();updateCashierDisplay();
+  $('#payDialog').close();
+  openReceipt(order)
+}
 function renderReceiptQr(orderId){
   const box = $('#receiptQr');
   if(!box) return;
@@ -1135,6 +1201,7 @@ function renderReportStaffOptions(){
   if(!staffList.find(s=>s.id===sel.value) && staffList[0]) sel.value=staffList[0].id;
 }
 function renderReport(){
+  purgeInvalidEmptyOrders();
   state.orders.forEach(ensureOrderPerformance);
   renderReportStaffOptions();
   const f=reportFilterValues(), month=f.date.slice(0,7);
@@ -1305,10 +1372,12 @@ function buildGoLiveResetState(){
   clean.refunds=[];
   clean.cart=[];
   clean.pendingPay='';
+  clean.pendingCheckoutCart=null;
   clean.lastResetAt=new Date().toISOString();
   clean.lastTestResetAt=clean.lastResetAt;
   setLocalResetMarker(clean.lastResetAt);
-  if(!clean.monthlyOrderCounter) clean.monthlyOrderCounter={}; // 不動日流水單號規則與目前月份流水。
+  // V11.0.56：清空測試資料時，測試流水號也要歸零；下一張單必須回到 OBA-YYYYMMDD-001。
+  clean.monthlyOrderCounter={};
   clean.branchId=clean.branchId||DEFAULT_BRANCH_ID;
   clean.branchName=clean.branchName||DEFAULT_BRANCH_NAME;
   return clean;
@@ -1342,7 +1411,7 @@ $('#btnResetAll').onclick=async()=>{
   if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表。'))return;
   const cloudOk = await resetAllDataForGoLive();
   if(cloudOk){
-    alert('已完整歸零：雲端 main row 已清乾淨，業績/抽成/今日列表已清空，員工與品項設定已保留');
+    alert('已完整歸零：雲端 main row 已清乾淨，單號已回到 001，業績/抽成/今日列表已清空，員工與品項設定已保留');
   }else{
     alert('本機測試資料已清空，但雲端重建沒有成功。請不要先 F5，先看 Console 的雲端 reset 訊息。');
   }
@@ -1353,6 +1422,7 @@ async function closeSalaryPeriod(){
   state.salaryResetAt=new Date().toISOString();
   state.cart=[];
   state.pendingPay='';
+  state.pendingCheckoutCart=null;
   CURRENT_CASHIER=null;
   LAST_ASSIGNED_ORDER_NO='';
   ['assignOrderNo','refundOrderNo'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
@@ -1389,6 +1459,52 @@ function applyDeviceMode(){
     const active = document.querySelector('.tab.active')?.dataset?.tab || 'cashier';
     setActiveTab(active);
   }
+}
+
+// V11.0.60：裝置授權收銀。不是入口 PIN；本機測試檔不受限制，線上未授權設備只能刷單。
+const CASHIER_DEVICE_KEY='oba_hair_cashier_device_v58';
+function isLocalUnrestrictedDevice(){
+  const host = String(location.hostname||'').toLowerCase();
+  return location.protocol==='file:' || host==='localhost' || host==='127.0.0.1';
+}
+function isCashierDevice(){return isLocalUnrestrictedDevice() || localStorage.getItem(CASHIER_DEVICE_KEY)==='yes'}
+function isAssignOnlyDevice(){return !isBossMode() && !isCashierDevice()}
+function applyDeviceAuthorizationMode(){
+  if(isBossMode()){
+    document.body.classList.remove('assign-only');
+    applyBossMode();
+    return;
+  }
+  if(isAssignOnlyDevice()){
+    document.body.classList.add('assign-only');
+    document.body.classList.remove('phone-mode');
+    setActiveTab('assign');
+  }else{
+    document.body.classList.remove('assign-only');
+    applyDeviceMode();
+  }
+  updateCashierDisplay();
+}
+function authorizeCashierDevice(){
+  const pwd = window.prompt('請輸入管理密碼，授權這台設備可以收銀');
+  if(pwd===null) return;
+  const val=String(pwd||'').trim();
+  if(val===BOSS_PASSWORD){ enterBossMode(); return; }
+  if(!state.managementPassword){ alert('尚未設定管理密碼，請先用已授權設備進入管理設定。'); return; }
+  if(val!==String(state.managementPassword||'').trim()){
+    alert('管理密碼錯誤，這台設備仍只能刷單');
+    applyDeviceAuthorizationMode();
+    return;
+  }
+  localStorage.setItem(CASHIER_DEVICE_KEY,'yes');
+  document.body.classList.remove('assign-only');
+  alert('本機已授權為收銀設備。');
+  applyDeviceAuthorizationMode();
+}
+function revokeCashierDevice(){
+  localStorage.removeItem(CASHIER_DEVICE_KEY);
+  CURRENT_CASHIER=null;
+  applyDeviceAuthorizationMode();
 }
 
 function getRedeemableItems(){
@@ -1465,6 +1581,7 @@ function submitRedeem(){
   alert('已開立集點卡0元票，請至刷單入業績頁籤完成登錄');
 }
 document.addEventListener('click', function(e){
+  if(e.target && e.target.id === 'btnAuthorizeCashierDevice') authorizeCashierDevice();
   if(e.target && e.target.id === 'btnRedeemOpen') openRedeemDialog();
   if(e.target && e.target.id === 'btnRedeemCancel') $('#redeemDialog').close();
    if(e.target && e.target.id === 'btnRedeemSubmit') submitRedeem();
@@ -1628,11 +1745,11 @@ document.addEventListener('click',function(e){
 });
 
 
-const BOOT_TEST_CLEAR_VERSION='V11.0.50_root_test_clear';
+const BOOT_TEST_CLEAR_VERSION='V11.0.56_test_reset_counter_fix';
 const BOOT_TEST_CLEAR_KEY='oba_hair_boot_test_clear_version';
 async function hardClearTestDataOnBoot(){
-  // V11.0.50：測試期根本清除。這一版第一次開啟時，直接把舊測試單/退票/業績從本機與雲端 main row 清乾淨。
-  // 保留：員工、品項、PIN、權限、抽成、管理密碼、日流水規則。
+  // V11.0.56：測試期根本清除。這一版第一次開啟時，直接把舊測試單/退票/業績/流水號從本機與雲端 main row 清乾淨。
+  // 保留：員工、品項、PIN、權限、抽成、管理密碼；測試流水號歸零回 001。
   if(localStorage.getItem(BOOT_TEST_CLEAR_KEY)===BOOT_TEST_CLEAR_VERSION) return true;
   const cleanState=buildGoLiveResetState();
   cleanState.forceTestClearVersion=BOOT_TEST_CLEAR_VERSION;
@@ -1644,10 +1761,10 @@ async function hardClearTestDataOnBoot(){
   localStorage.setItem(KEY,JSON.stringify(state));
   localStorage.setItem(BOOT_TEST_CLEAR_KEY,BOOT_TEST_CLEAR_VERSION);
   setLocalResetMarker(state.lastResetAt);
-  console.log('V11.0.50 測試資料根本清除：本機已清空 orders/refunds/cart，準備重建雲端 main row');
+  console.log('V11.0.58 測試資料根本清除：本機已清空 orders/refunds/cart/monthlyOrderCounter，準備重建雲端 main row');
   const cloudOk=await replaceCloudMainRowForReset(state);
   localStorage.setItem(KEY,JSON.stringify(state));
-  console.log('V11.0.50 測試資料根本清除完成', {cloudOk, orders:state.orders.length, refunds:state.refunds.length, cart:state.cart.length});
+  console.log('V11.0.58 測試資料根本清除完成', {cloudOk, orders:state.orders.length, refunds:state.refunds.length, cart:state.cart.length, monthlyOrderCounter:state.monthlyOrderCounter});
   return cloudOk;
 }
 async function init(){
@@ -1659,8 +1776,8 @@ async function init(){
   renderReport();
   renderManage();
   closeAccessGate();
-  if(isBossMode()){setActiveTab('report'); applyBossMode();} else {applyDeviceMode(); sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');}
-  window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceMode(); });
+  applyDeviceAuthorizationMode();
+  window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceAuthorizationMode(); });
   startCloudSync();
 }
 init();
