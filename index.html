@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.69 線上同步修正版</title>
+<title>OBA Hair V11.0.66 六碼PIN正常版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -93,10 +93,6 @@ body.boss-mode #tab-report{display:block!important}
 
 .camera-box{display:grid;gap:10px;margin:8px 0 12px}
 .btn-camera{background:#e7f6ec;color:#18453f;font-size:18px;padding:14px 18px;border:1px solid rgba(79,145,136,.25)}
-
-.pwd-wrap{position:relative}
-.pwd-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);border:none;background:none;font-size:18px;cursor:pointer}
-
 .scanner-wrap{display:grid;gap:10px}
 #scanVideo{width:100%;max-height:58vh;background:#111;border-radius:18px;object-fit:cover}
 .scan-status{font-weight:800;color:var(--muted);font-size:14px}
@@ -311,7 +307,7 @@ const DEFAULT_BRANCH_NAME = "總店";
   </div>
 </div></dialog>
 <input id="cameraScanFile" class="hidden" type="file" accept="image/*" capture="environment" />
-<dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><div class="pwd-wrap"><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><button type="button" class="pwd-eye" id="togglePwdOld">👁</button></div><div class="space"></div><div id="pwdNewWrap" class="hidden"><div class="pwd-wrap"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /><button type="button" class="pwd-eye" id="togglePwdNew">👁</button></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
+<dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 <dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input id="maskedPasswordInput" class="input" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="輸入後會以 ●●●● 顯示"  maxlength="6" /><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
 
 <script>
@@ -394,14 +390,6 @@ function getCloudClient(){
 function getLocalResetMarker(){return localStorage.getItem(RESET_MARKER_KEY)||''}
 function setLocalResetMarker(value){if(value)localStorage.setItem(RESET_MARKER_KEY,value)}
 function newestStamp(a,b){return String(a||'') > String(b||'') ? String(a||'') : String(b||'')}
-
-function isEmptyOrBrokenCloudData(data){
-  if(!data) return true;
-  const staffEmpty = !Array.isArray(data.staff) || data.staff.length===0;
-  const itemsEmpty = !Array.isArray(data.items) || data.items.length===0;
-  return staffEmpty || itemsEmpty;
-}
-
 function normalizeCloudState(data){
   const merged = ensureBranchFields(Object.assign(clone(defaultState), data || {}));
   if(!merged.staff.find(s=>s.owner)) merged.staff[0].owner=true;
@@ -436,14 +424,6 @@ async function pullCloudState(){
           return String(b.updated_at||'').localeCompare(String(a.updated_at||''));
         });
         const chosen = rows[0];
-
-        // V11.0.69：線上測試保護。雲端若是空資料，不准覆蓋畫面，改成用目前本機/預設資料補回雲端。
-        if(isEmptyOrBrokenCloudData(chosen.data)){
-          console.log('雲端資料是空的或不完整，已阻止覆蓋本機資料，改上傳目前資料到雲端');
-          await saveState(true);
-          return true;
-        }
-
         const localResetAt = newestStamp(state?.lastResetAt, getLocalResetMarker());
         const cloudResetAt = String(chosen.data?.lastResetAt || '');
         const localIsClean = Array.isArray(state.orders) && state.orders.length===0 && Array.isArray(state.refunds) && state.refunds.length===0;
@@ -639,9 +619,7 @@ async function startCloudSync(){
     if(purgeInvalidEmptyOrders()) saveState(true);
     refreshAllScreens();
   }else{
-    console.log('目前使用本機資料，並嘗試補上雲端，避免線上空白');
-    await saveState(true);
-    refreshAllScreens();
+    console.log('目前使用本機資料，請確認 Supabase 資料表是否已建立');
   }
   setInterval(async()=>{
     if(ITEM_DIRTY || STAFF_DIRTY || isManageEditing()){ console.log('資料正在編輯，暫停雲端覆蓋'); return; }
@@ -1927,25 +1905,6 @@ init();
     e.preventDefault();
   }, true);
 })();
-
-
-// V11.0.68：密碼遮罩顯示切換，放在 DOM 載入後，避免整頁按鈕失效。
-
-document.addEventListener('DOMContentLoaded', ()=>{
-  function bindPwdToggle(btnId,inputId){
-    const btn=document.getElementById(btnId);
-    const input=document.getElementById(inputId);
-    if(!btn || !input) return;
-    btn.onclick=()=>{
-      const show=input.type==='password';
-      input.type=show?'text':'password';
-      btn.textContent=show?'🙈':'👁';
-    };
-  }
-  bindPwdToggle('toggleMaskedPwd','maskedPasswordInput');
-  bindPwdToggle('togglePwdOld','pwdOld');
-  bindPwdToggle('togglePwdNew','pwdNew');
-});
 
 </script>
 
