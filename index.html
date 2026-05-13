@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.71 授權遮罩版</title>
+<title>OBA Hair V11.0.72 JEAN權限可勾選版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -778,14 +778,19 @@ function applyBossMode(){
 }
 
 function isValidManagerPin(pin){
+  return isValidPinForTab(pin, 'manage');
+}
+function isValidPinForTab(pin, targetTab){
   const p=String(pin||'').trim();
   if(!p) return false;
+  // 管理密碼本身仍可進入管理/報表；員工 PIN 一律只看權限勾選，不再用 owner / systemRole 放行。
   if(String(state.managementPassword||'').trim()===p) return true;
-  return Array.isArray(state.staff) && state.staff.some(s=>
-    s && s.active &&
-    String(s.pin||'').trim()===p &&
-    (s.owner || s.systemRole==='擁有者' || (Array.isArray(s.permissions) && (s.permissions.includes('manage') || s.permissions.includes('password') || s.permissions.includes('view_all'))))
-  );
+  const staff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===p) : null;
+  if(!staff || !Array.isArray(staff.permissions)) return false;
+  if(targetTab === 'report') return staff.permissions.includes('report');
+  if(targetTab === 'manage') return staff.permissions.includes('manage');
+  if(targetTab === 'password') return staff.permissions.includes('password');
+  return false;
 }
 
 function enterBossMode(){
@@ -852,7 +857,7 @@ function openPassword(targetTab){pwdMode=targetTab;$('#pwdOld').value='';$('#pwd
 $('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
 $('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('BOSS模式不可修改密碼');return} if(!isValidManagerPin(oldPwd)){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
  if(pwdMode==='report' && oldPwd===BOSS_PASSWORD){$('#passwordDialog').close();pendingLockedTab='';enterBossMode();return;}
- if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(!isValidManagerPin(oldPwd)){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
+ if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(!isValidPinForTab(oldPwd, pwdMode)){ alert('密碼錯誤或沒有此頁權限'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
  window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 
@@ -1296,9 +1301,33 @@ function renderReport(){
   $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
   $('#personalCount').textContent=personal.length;
   const monthOrders=salaryBaseOrders().filter(o=>o.date.startsWith(month)&&!o.refunded);
-  const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
-  $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
-  $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
+  // V11.0.74：報表員工業績改成動態抓全部在職員工，不再只寫死 JEAN / ALAN。
+  const monthStaffSummary = activeStaff()
+    .filter(s=>Array.isArray(s.permissions) && (s.permissions.includes('assign') || s.permissions.includes('checkout') || s.permissions.includes('report')))
+    .map(s=>{
+      const list = monthOrders.filter(o=>o.assignedDesignerId===s.id);
+      return {
+        name:s.name || s.id,
+        sales:list.reduce((sum,o)=>sum+Number(o.total||0),0),
+        commission:list.reduce((sum,o)=>sum+Number(o.commission||0),0),
+        count:list.length
+      };
+    });
+  const jeanBox=$('#jeanStats'), alanBox=$('#alanStats');
+  if(jeanBox){
+    const k=jeanBox.closest('.stat')?.querySelector('.k');
+    if(k) k.textContent='本月員工業績 / 抽成';
+    jeanBox.style.fontSize='16px';
+    jeanBox.style.lineHeight='1.7';
+    jeanBox.innerHTML=monthStaffSummary.length?monthStaffSummary.map(s=>`${s.name}：${money(s.sales)} / ${money(s.commission)}`).join('<br>'):'尚無在職員工';
+  }
+  if(alanBox){
+    const k=alanBox.closest('.stat')?.querySelector('.k');
+    if(k) k.textContent='本月員工筆數';
+    alanBox.style.fontSize='16px';
+    alanBox.style.lineHeight='1.7';
+    alanBox.innerHTML=monthStaffSummary.length?monthStaffSummary.map(s=>`${s.name}：${s.count} 筆`).join('<br>'):'0 筆';
+  }
   $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
@@ -1328,7 +1357,7 @@ function markItemsDirty(){
   ITEM_DIRTY=true;
   updateItemSaveStatus();
 }
-function applyPresetPermissions(s){if(s.owner){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all'];return} if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
+function applyPresetPermissions(s){if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
 function rulePercent(s,name){
   if(!s.rules) s.rules={default:0.5};
   const v = s.rules[name] ?? s.rules.default ?? 0.5;
@@ -1385,7 +1414,7 @@ function renderManage(){
       </div>
       ${renderCommissionInputs(s,names)}
       <div class="space"></div>
-      <div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} ${s.owner?'disabled':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div>
+      <div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div>
       <div class="space"></div>
       <div class="row"><button class="btn btn-soft" onclick="updateSystemRoleByRole('${s.id}')">依身份自動套權限</button><button class="btn btn-ok" onclick="saveStaffChanges()">儲存修改</button><button class="btn btn-danger" onclick="deleteStaff('${s.id}')" ${s.owner?'disabled':''}>刪除此員工</button></div>
     </div>`;
@@ -1409,7 +1438,7 @@ window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; co
 window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; markStaffDirty(); renderAssign();}
 window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; markStaffDirty();}
 window.updateSystemRoleByRole=(staffId)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); markStaffDirty(); renderManage()}
-window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(!Array.isArray(s.permissions))s.permissions=[]; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); markStaffDirty(); renderAssign(); renderReport();}
+window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(!Array.isArray(s.permissions))s.permissions=[]; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); markStaffDirty(); renderAssign(); renderReport();}
 window.deleteStaff=(id)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); markStaffDirty(); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
 document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); markStaffDirty(); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
 window.updateItemField=(id,field,val)=>{if(guardBossAction()) return; const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; ITEM_DIRTY=true; renderCashier(); renderManage()}
