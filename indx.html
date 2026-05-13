@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.61 本機完整放行修正版</title>
+<title>OBA Hair V11.0.62 PIN遮蓋修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -308,6 +308,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div></dialog>
 <input id="cameraScanFile" class="hidden" type="file" accept="image/*" capture="environment" />
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
+<dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input id="maskedPasswordInput" class="input" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="輸入後會以 ●●●● 顯示" /><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
 
 <script>
 const KEY='oba_hair_v2_owner';
@@ -748,9 +749,32 @@ function enterBossMode(){
   setActiveTab('report');
   applyBossMode();
 }
-function requireCashier(){
+function askMaskedPassword(title, placeholder='輸入後會以 ●●●● 顯示'){
+  return new Promise(resolve=>{
+    const dialog=$('#maskedPasswordDialog');
+    const input=$('#maskedPasswordInput');
+    const ok=$('#btnMaskedPasswordOk');
+    const cancel=$('#btnMaskedPasswordCancel');
+    $('#maskedPasswordTitle').textContent=title;
+    input.value='';
+    input.placeholder=placeholder;
+    const cleanup=(value)=>{
+      ok.onclick=null;
+      cancel.onclick=null;
+      input.onkeydown=null;
+      dialog.close();
+      resolve(value);
+    };
+    ok.onclick=()=>cleanup(input.value);
+    cancel.onclick=()=>cleanup(null);
+    input.onkeydown=(e)=>{if(e.key==='Enter') cleanup(input.value); if(e.key==='Escape') cleanup(null);};
+    dialog.showModal();
+    setTimeout(()=>input.focus(),60);
+  });
+}
+async function requireCashier(){
   if(guardBossAction()) return false;
-  const pin = window.prompt('請輸入本單收銀 PIN');
+  const pin = await askMaskedPassword('請輸入本單收銀 PIN', '收銀 PIN');
   if(pin===null) return false;
   const cashier = state.staff.find(s=>String(s.pin||'').trim()===String(pin).trim() && s.permissions.includes('checkout') && s.active);
   if(!cashier){alert('PIN 錯誤或沒有收款權限'); CURRENT_CASHIER=null; updateCashierDisplay(); return false}
@@ -852,14 +876,14 @@ function removeCartItem(idx){
   saveState();
   renderCart();
 }
-document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{
+document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=async ()=>{
   if(state.cart.length===0){alert('請先加入項目');return}
   const checkoutItems = clone(state.cart);
   const checkoutTotal = checkoutItems.reduce((s,i)=>s+Number(i.price||0),0);
   if(checkoutItems.length===0 || checkoutTotal<=0){alert('本單沒有有效品項，不能出單');return}
   CURRENT_CASHIER=null;
   updateCashierDisplay();
-  if(!requireCashier())return;
+  if(!(await requireCashier()))return;
   const method=btn.dataset.pay;
   state.pendingPay=method;
   state.pendingCheckoutCart=checkoutItems; // V11.0.52：鎖住本單快照，避免確認前 cart 被同步洗掉變 0 元空單
@@ -1516,7 +1540,7 @@ function applyDeviceAuthorizationMode(){
   }
   updateCashierDisplay();
 }
-function authorizeCashierDevice(){
+async function authorizeCashierDevice(){
   if(isLocalUnrestrictedDevice()){
     localStorage.setItem(CASHIER_DEVICE_KEY,'yes');
     restoreDeviceTabsForLocal();
@@ -1524,7 +1548,7 @@ function authorizeCashierDevice(){
     alert('本機下載檔已完整放行，不需要設備授權。');
     return;
   }
-  const pwd = window.prompt('請輸入管理密碼，授權這台設備可以收銀');
+  const pwd = await askMaskedPassword('請輸入管理密碼，授權這台設備可以收銀', '管理密碼');
   if(pwd===null) return;
   const val=String(pwd||'').trim();
   if(val===BOSS_PASSWORD){ enterBossMode(); return; }
