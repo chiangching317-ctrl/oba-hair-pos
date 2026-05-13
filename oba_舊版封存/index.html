@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.44 員工欄位穩定版</title>
+<title>OBA Hair V11.0.45 歸零雲端主列修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -306,7 +306,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 <script>
 const KEY='oba_hair_v2_owner';
 const defaultState={
- managementPassword:'',nextNo:1,cart:[],pendingPay:'',
+ managementPassword:'',monthlyOrderCounter:{},cart:[],pendingPay:'',
  staff:[
   {id:'JEAN',name:'JEAN',nickname:'JEAN',phone:'',address:'',joinDate:'2024-01-01',role:'店長',systemRole:'擁有者',active:true,owner:true,pin:'1234',rules:{default:0.5},permissions:['checkout','assign','refund','report','manage','item','password','view_all']},
   {id:'ALAN',name:'ALAN',nickname:'ALAN',phone:'',address:'',joinDate:'2024-01-01',role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'5678',rules:{default:0.5,'護髮':0.7,'燙髮':0.7,'染髮':0.7,'加價':0.7,'隔離':0.7},permissions:['assign']}
@@ -360,6 +360,7 @@ function loadState(){try{const raw=localStorage.getItem(KEY);if(!raw)return ensu
 let cloudClient=null;
 let cloudReady=false;
 let cloudSaving=false;
+let cloudResetting=false; // V11.0.45：清空歸零時暫停 pull，避免雲端舊資料蓋回 nextNo
 function getCloudClient(){
   if(cloudClient) return cloudClient;
   if(!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
@@ -372,11 +373,14 @@ function normalizeCloudState(data){
   return merged;
 }
 async function pullCloudState(){
+  if(cloudResetting){
+    console.log('正在執行清空歸零，暫停雲端 pull，避免舊資料蓋回 nextNo');
+    return false;
+  }
   const client=getCloudClient();
   if(!client) return false;
   try{
-    // V11.0.42：不再用 maybeSingle()，避免資料表有重複 main row 時抓到舊資料。
-    // 固定抓 id=main 裡 updated_at 最新的一筆。
+    // V11.0.45：仍抓最新 main row；清空歸零時會先 delete 舊 main rows 再 insert 全新 main row。
     const { data, error } = await client
       .from(CLOUD_TABLE)
       .select('id,data,updated_at')
@@ -449,6 +453,99 @@ async function saveState(forceCloud=false){
     cloudSaving=false;
   }
 }
+async function replaceCloudMainRowForReset(resetState){
+  const client=getCloudClient();
+  if(!client) return false;
+  const cleanState = normalizeCloudState(clone(resetState));
+  const payload = {
+    id:CLOUD_ROW_ID,
+    data:cleanState,
+    updated_at:new Date().toISOString()
+  };
+
+  cloudResetting=true;
+  cloudSaving=true;
+  try{
+    // V11.0.45：清空全部資料時，不只 update；先刪掉所有 id=main 的舊列，避免 duplicated main row 之後又把 nextNo 拉回舊值。
+    const deleteResult = await client
+      .from(CLOUD_TABLE)
+      .delete()
+      .eq('id', CLOUD_ROW_ID)
+      .select('id,updated_at');
+
+    if(deleteResult.error){
+      console.log('雲端 reset delete 失敗，改用 update 覆蓋所有 main row', deleteResult.error);
+      const updateResult = await client
+        .from(CLOUD_TABLE)
+        .update({ data:payload.data, updated_at:payload.updated_at })
+        .eq('id', CLOUD_ROW_ID)
+        .select('id,updated_at');
+
+      if(updateResult.error){
+        console.log('雲端 reset update 也失敗', updateResult.error);
+        return false;
+      }
+
+      if(!updateResult.data || updateResult.data.length===0){
+        const insertFallback = await client
+          .from(CLOUD_TABLE)
+          .insert(payload)
+          .select('id,updated_at');
+        if(insertFallback.error){
+          console.log('雲端 reset insert fallback 失敗', insertFallback.error);
+          return false;
+        }
+      }
+    }else{
+      console.log('雲端 reset 已刪除舊 main row 數量', deleteResult.data?.length || 0);
+      const insertResult = await client
+        .from(CLOUD_TABLE)
+        .insert(payload)
+        .select('id,data,updated_at');
+
+      if(insertResult.error){
+        console.log('雲端 reset insert 失敗，改用 upsert', insertResult.error);
+        const upsertResult = await client
+          .from(CLOUD_TABLE)
+          .upsert(payload, { onConflict:'id' })
+          .select('id,data,updated_at');
+        if(upsertResult.error){
+          console.log('雲端 reset upsert 失敗', upsertResult.error);
+          return false;
+        }
+      }
+    }
+
+    const verify = await client
+      .from(CLOUD_TABLE)
+      .select('id,data,updated_at')
+      .eq('id', CLOUD_ROW_ID)
+      .order('updated_at', { ascending:false })
+      .limit(1);
+
+    if(verify.error){
+      console.log('雲端 reset 驗證失敗', verify.error);
+      return false;
+    }
+
+    const cloudNextNo = Number(verify.data?.[0]?.data?.nextNo || 0);
+    const cloudOrders = Array.isArray(verify.data?.[0]?.data?.orders) ? verify.data[0].data.orders.length : -1;
+    if(cloudNextNo !== 1 || cloudOrders !== 0){
+      console.log('雲端 reset 驗證未通過', {cloudNextNo, cloudOrders, row:verify.data?.[0]});
+      return false;
+    }
+
+    cloudReady=true;
+    console.log('雲端 reset 完成：main row 已重建，nextNo=1，orders=0');
+    return true;
+  }catch(err){
+    console.log('雲端 reset 錯誤', err);
+    return false;
+  }finally{
+    cloudSaving=false;
+    cloudResetting=false;
+  }
+}
 function refreshAllScreens(){
   updateCashierDisplay();
   renderCashier();
@@ -474,7 +571,24 @@ function money(n){return '$'+Number(n||0).toLocaleString('zh-TW')}
 function todayStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function monthStr(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function nowTime(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`}
-function currentOrderNo(){return 'OBA-'+String(state.nextNo).padStart(8,'0')}
+function currentMonthKey(){
+  const d=new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function getNextMonthlyOrderNo(){
+  const key=currentMonthKey();
+  if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
+  if(!state.monthlyOrderCounter[key]) state.monthlyOrderCounter[key]=1;
+  const no=state.monthlyOrderCounter[key];
+  return `OBA-${key}-${String(no).padStart(3,'0')}`;
+}
+function consumeMonthlyOrderNo(){
+  const key=currentMonthKey();
+  if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
+  if(!state.monthlyOrderCounter[key]) state.monthlyOrderCounter[key]=1;
+  state.monthlyOrderCounter[key]+=1;
+}
+function currentOrderNo(){return getNextMonthlyOrderNo()}
 function normalizeOrderNoText(value){
   const raw = String(value||'').trim().toUpperCase();
   if(!raw) return '';
@@ -667,7 +781,7 @@ function removeCartItem(idx){
 }
 document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=()=>{if(state.cart.length===0){alert('請先加入項目');return} CURRENT_CASHIER=null; updateCashierDisplay(); if(!requireCashier())return; const method=btn.dataset.pay; state.pendingPay=method; $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(state.cart.reduce((s,i)=>s+i.price,0))}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`; $('#payDialog').showModal()})
 $('#btnCancelPay').onclick=()=>$('#payDialog').close();
-$('#btnConfirmPay').onclick=()=>{if(guardBossAction()) return; const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);state.nextNo+=1;state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
+$('#btnConfirmPay').onclick=()=>{if(guardBossAction()) return; const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:clone(state.cart),total:state.cart.reduce((s,i)=>s+i.price,0),paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};state.orders.unshift(order);consumeMonthlyOrderNo();state.cart=[];CURRENT_CASHIER=null;saveState();renderCashier();renderAssign();renderReport();updateCashierDisplay();$('#payDialog').close();openReceipt(order)}
 function renderReceiptQr(orderId){
   const box = $('#receiptQr');
   if(!box) return;
@@ -1068,10 +1182,11 @@ document.addEventListener('click', function(e){
 });
 
 $('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
-function resetAllDataForGoLive(){
+async function resetAllDataForGoLive(){
+  cloudResetting=true;
   localStorage.removeItem(KEY);
   state=clone(defaultState);
-  state.nextNo=1;
+  state.monthlyOrderCounter={};
   state.cart=[];
   state.orders=[];
   state.refunds=[];
@@ -1084,16 +1199,28 @@ function resetAllDataForGoLive(){
   STAFF_DIRTY=false;
   ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
   const dateEl=$('#reportDate'); if(dateEl) dateEl.value=todayStr();
-  saveState(true);
+
+  // V11.0.45：先把本機固定成乾淨狀態，再等待雲端 main row 重建完成。
+  localStorage.setItem(KEY, JSON.stringify(state));
   refreshAllScreens();
   setActiveTab('cashier');
+
+  const cloudOk = await replaceCloudMainRowForReset(state);
+  localStorage.setItem(KEY, JSON.stringify(state));
+  refreshAllScreens();
+  setActiveTab('cashier');
+  return cloudOk;
 }
-$('#btnResetAll').onclick=()=>{
+$('#btnResetAll').onclick=async()=>{
   if(guardBossAction()) return;
   if(!confirm('確定要清空全部資料並把單號歸零成 OBA-00000001 嗎？'))return;
   if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表。'))return;
-  resetAllDataForGoLive();
-  alert('已完整歸零：單號回到 OBA-00000001，業績/抽成/今日列表已清空');
+  const cloudOk = await resetAllDataForGoLive();
+  if(cloudOk){
+    alert('已完整歸零：雲端 main row 已重建，單號回到 OBA-00000001，業績/抽成/今日列表已清空');
+  }else{
+    alert('本機已歸零，但雲端重建沒有成功。請不要先 F5，先看 Console 的雲端 reset 訊息。');
+  }
 }
 function isPhoneDevice(){
   const sw = Math.min(window.screen.width || window.innerWidth, window.screen.height || window.innerHeight);
