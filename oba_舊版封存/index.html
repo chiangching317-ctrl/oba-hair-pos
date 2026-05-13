@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.65 owner_pin_view_fix</title>
+<title>OBA Hair V11.0.66 六碼PIN正常版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -307,8 +307,8 @@ const DEFAULT_BRANCH_NAME = "總店";
   </div>
 </div></dialog>
 <input id="cameraScanFile" class="hidden" type="file" accept="image/*" capture="environment" />
-<dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="輸入6碼密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="輸入新的6碼密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
-<dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input id="maskedPasswordInput" class="input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="輸入後會以 ●●●● 顯示" /><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
+<dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
+<dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input id="maskedPasswordInput" class="input" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="輸入後會以 ●●●● 顯示"  maxlength="6" /><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
 
 <script>
 const KEY='oba_hair_v2_owner';
@@ -317,7 +317,7 @@ const defaultState={
  managementPassword:'',monthlyOrderCounter:{},cart:[],pendingPay:'',pendingCheckoutCart:null,
  staff:[
   {id:'JEAN',name:'JEAN',nickname:'JEAN',phone:'',address:'',joinDate:'2024-01-01',role:'店長',systemRole:'擁有者',active:true,owner:true,pin:'123456',rules:{default:0.5},permissions:['checkout','assign','refund','report','manage','item','password','view_all']},
-  {id:'ALAN',name:'ALAN',nickname:'ALAN',phone:'',address:'',joinDate:'2024-01-01',role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'567890',rules:{default:0.5,'護髮':0.7,'燙髮':0.7,'染髮':0.7,'加價':0.7,'隔離':0.7},permissions:['assign']}
+  {id:'ALAN',name:'ALAN',nickname:'ALAN',phone:'',address:'',joinDate:'2024-01-01',role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'123456',rules:{default:0.5,'護髮':0.7,'燙髮':0.7,'染髮':0.7,'加價':0.7,'隔離':0.7},permissions:['assign']}
  ],
  items:[
   {id:'cut',category:'剪髮',name:'cut',price:300,active:true,quick:true},
@@ -337,6 +337,18 @@ const defaultState={
  orders:[],refunds:[]
 };
 let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null;
+
+// V11.0.64：這版第一次開啟時，把管理密碼與員工PIN統一重設成 123456，之後可自行進管理頁修改。
+const PIN_MIGRATE_KEY='oba_hair_v11064_pin_reset_done';
+if(!localStorage.getItem(PIN_MIGRATE_KEY)){
+  state.managementPassword=MASTER_PIN_6;
+  if(Array.isArray(state.staff)){
+    state.staff.forEach(s=>{ s.pin=MASTER_PIN_6; });
+  }
+  localStorage.setItem(KEY, JSON.stringify(state));
+  localStorage.setItem(PIN_MIGRATE_KEY,'yes');
+}
+
 let LAST_ASSIGNED_ORDER_NO='';
 let ITEM_DIRTY=false;
 let STAFF_DIRTY=false;
@@ -352,8 +364,6 @@ function isManageEditing(){
 }
 const $=s=>document.querySelector(s);
 function clone(o){return JSON.parse(JSON.stringify(o))}
-function onlyDigits6(value){return /^\d{6}$/.test(String(value||'').trim())}
-function normalizeDigits(value){return String(value||'').replace(/\D/g,'').slice(0,6)}
 function ensureBranchFields(data){
   const d = data || clone(defaultState);
   if(!d.branchId) d.branchId = DEFAULT_BRANCH_ID;
@@ -715,6 +725,7 @@ function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrd
 
 // V11.0.40：BOSS限制模式＋分店欄位預留＋歸零退票帳務（只可看報表，不可操作收款/退票/管理）
 const BOSS_PASSWORD = '269527';
+const MASTER_PIN_6='123456'; // V11.0.65：六碼保底PIN，避免舊資料鎖住
 const BOSS_SESSION_KEY = 'oba_boss_mode_v38';
 window.USER_ROLE = sessionStorage.getItem(BOSS_SESSION_KEY)==='yes' ? 'boss' : (window.USER_ROLE || 'staff');
 function isBossMode(){return window.USER_ROLE === 'boss'}
@@ -743,6 +754,18 @@ function applyBossMode(){
   if(badge) badge.textContent = 'BOSS限制模式｜只可查看報表｜'+(state.branchName||DEFAULT_BRANCH_NAME);
   renderReport();
 }
+
+function isValidManagerPin(pin){
+  const p=String(pin||'').trim();
+  if(!p) return false;
+  if(String(state.managementPassword||'').trim()===p) return true;
+  return Array.isArray(state.staff) && state.staff.some(s=>
+    s && s.active &&
+    String(s.pin||'').trim()===p &&
+    (s.owner || s.systemRole==='擁有者' || (Array.isArray(s.permissions) && (s.permissions.includes('manage') || s.permissions.includes('password') || s.permissions.includes('view_all'))))
+  );
+}
+
 function enterBossMode(){
   window.USER_ROLE='boss';
   sessionStorage.setItem(BOSS_SESSION_KEY,'yes');
@@ -760,13 +783,10 @@ function askMaskedPassword(title, placeholder='輸入後會以 ●●●● 顯�
     $('#maskedPasswordTitle').textContent=title;
     input.value='';
     input.placeholder=placeholder;
-    input.maxLength=6;
-    input.oninput=()=>{ input.value = normalizeDigits(input.value); };
     const cleanup=(value)=>{
       ok.onclick=null;
       cancel.onclick=null;
       input.onkeydown=null;
-      input.oninput=null;
       dialog.close();
       resolve(value);
     };
@@ -781,8 +801,10 @@ async function requireCashier(){
   if(guardBossAction()) return false;
   const pin = await askMaskedPassword('請輸入本單收銀 PIN', '收銀 PIN');
   if(pin===null) return false;
-  if(!onlyDigits6(pin)){alert('收銀 PIN 請輸入6位數字'); return false;}
-  const cashier = state.staff.find(s=>String(s.pin||'').trim()===String(pin).trim() && s.permissions.includes('checkout') && s.active);
+  let cashier = state.staff.find(s=>String(s.pin||'').trim()===String(pin).trim() && s.permissions.includes('checkout') && s.active);
+  if(!cashier && String(pin).trim()===MASTER_PIN_6){
+    cashier = state.staff.find(s=>s.id==='JEAN') || state.staff.find(s=>s.active) || {id:'JEAN',name:'JEAN'};
+  }
   if(!cashier){alert('PIN 錯誤或沒有收款權限'); CURRENT_CASHIER=null; updateCashierDisplay(); return false}
   CURRENT_CASHIER={id:cashier.id,name:cashier.name};
   updateCashierDisplay();
@@ -806,9 +828,9 @@ document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
 });
 function openPassword(targetTab){pwdMode=targetTab;$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.add('hidden');$('#pwdTitle').textContent=state.managementPassword?'輸入管理密碼':'第一次設定管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 $('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
-$('#btnPwdOk').onclick=()=>{const oldPwd=normalizeDigits($('#pwdOld').value), newPwd=normalizeDigits($('#pwdNew').value); if(pwdMode==='change'){if(isBossMode()){alert('BOSS模式不可修改密碼');return} if(oldPwd!==state.managementPassword){alert('舊密碼錯誤');return} if(!onlyDigits6(newPwd)){alert('新管理密碼請設定6位數字');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
+$('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('BOSS模式不可修改密碼');return} if(!isValidManagerPin(oldPwd)){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
  if(pwdMode==='report' && oldPwd===BOSS_PASSWORD){$('#passwordDialog').close();pendingLockedTab='';enterBossMode();return;}
- if(!state.managementPassword){ if(!onlyDigits6(oldPwd)){alert('第一次設定管理密碼請輸入6位數字');return} state.managementPassword=oldPwd; saveState(); } else if(oldPwd!==state.managementPassword){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
+ if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(!isValidManagerPin(oldPwd)){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
  window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 
@@ -1331,7 +1353,7 @@ function renderManage(){
       <div class="grid4">
         <div><div class="label">到職日</div><input class="input" type="date" value="${s.joinDate||''}" onchange="updateStaffField('${s.id}','joinDate',this.value)"></div>
         <div><div class="label">年資</div><div class="pill">${getYearsText(s.joinDate)}</div></div>
-        <div><div class="label">PIN</div><div class="row" style="gap:6px;flex-wrap:nowrap"><input id="staffPin_${s.id}" class="input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="${s.pin||''}" oninput="this.value=this.value.replace(/\D/g,'').slice(0,6)" onchange="updateStaffField('${s.id}','pin',this.value)"><button type="button" class="btn btn-soft" style="padding:10px 12px;white-space:nowrap" onclick="toggleStaffPinVisibility('${s.id}')">👁</button></div></div>
+        <div><div class="label">PIN</div><input class="input" inputmode="numeric" value="${s.pin||''}" onchange="updateStaffField('${s.id}','pin',this.value)"></div>
         <div><div class="label">是否在職</div><select class="select" onchange="updateStaffActive('${s.id}',this.value)"><option value="true" ${s.active?'selected':''}>在職</option><option value="false" ${!s.active?'selected':''}>離職</option></select></div>
       </div>
       <div class="space"></div>
@@ -1359,23 +1381,15 @@ if(staffCardsEl){
 }
 
 window.updateStaffRule=(staffId,name,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId); if(!s)return; if(!s.rules)s.rules={default:0.5}; const n=Number(value||0); s.rules[name]=Math.max(0,Math.min(100,n))/100; markStaffDirty(); renderAssign(); renderReport();}
-// V11.0.65：管理頁 PIN 預設遮蓋，擁有者可用 👁 查看 / 再遮回員工 PIN。
-window.toggleStaffPinVisibility=(staffId)=>{
-  if(guardBossAction()) return;
-  const el=document.getElementById('staffPin_'+staffId);
-  if(!el) return;
-  el.type = el.type === 'password' ? 'text' : 'password';
-  setTimeout(()=>{ try{ el.focus(); }catch(e){} },20);
-}
 window.saveStaffChanges=()=>{if(guardBossAction()) return; STAFF_DIRTY=false; saveState(true); renderAssign(); renderReport(); renderManage(); alert('員工資料已儲存')}
 window.saveItemsChanges=()=>{if(guardBossAction()) return; saveState(); ITEM_DIRTY=false; renderCashier(); renderAssign(); renderReport(); renderManage(); alert('品項資料已儲存')}
-window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; if(field==='pin'){value=normalizeDigits(value); if(!onlyDigits6(value)){alert('員工收銀 PIN 請設定6位數字'); renderManage(); return;}} s[field]=value; markStaffDirty(); renderAssign(); updateCashierDisplay()}
+window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&field==='systemRole')return; s[field]=value; markStaffDirty(); renderAssign(); updateCashierDisplay()}
 window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; markStaffDirty(); renderAssign();}
 window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; s.systemRole=value; markStaffDirty();}
 window.updateSystemRoleByRole=(staffId)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(s.role==='老闆'||s.role==='店長')s.systemRole='管理者'; else s.systemRole='一般員工'; applyPresetPermissions(s); markStaffDirty(); renderManage()}
 window.togglePermission=(staffId,key,checked)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s||s.owner)return; if(!Array.isArray(s.permissions))s.permissions=[]; const has=s.permissions.includes(key); if(checked&&!has)s.permissions.push(key); if(!checked&&has)s.permissions=s.permissions.filter(x=>x!==key); markStaffDirty(); renderAssign(); renderReport();}
 window.deleteStaff=(id)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===id);if(!s)return; if(s.owner){alert('此資料不可刪除');return} if(!confirm(`確定刪除 ${s.name} 嗎？`))return; state.staff=state.staff.filter(x=>x.id!==id); markStaffDirty(); renderAssign(); renderManage(); alert('已從畫面移除，請按儲存員工資料')}
-document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'000000',rules:{default:0.5},permissions:['assign']}); markStaffDirty(); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
+document.getElementById('btnAddStaff').onclick=()=>{if(guardBossAction()) return; const id='staff_'+Date.now(); state.staff.push({id,name:'新員工',nickname:'新員工',phone:'',address:'',joinDate:todayStr(),role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'0000',rules:{default:0.5},permissions:['assign']}); markStaffDirty(); renderAssign(); renderManage(); alert('已新增員工，請補完整資料後按儲存員工資料')}
 window.updateItemField=(id,field,val)=>{if(guardBossAction()) return; const i=state.items.find(x=>x.id===id);if(!i)return; if(field==='price')i[field]=Number(val||0); else if(field==='active' || field==='redeemable')i[field]=val==='true'; else i[field]=val; ITEM_DIRTY=true; renderCashier(); renderManage()}
 document.getElementById('btnAddItem').onclick=()=>{if(guardBossAction()) return; const category=$('#newItemCategory').value.trim(), name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!category||!name||!price){alert('請輸入分類、品項名稱與價格');return} const newItem={id:'item'+Date.now(),category,name,price,active:true,quick:false}; state.items.unshift(newItem); $('#newItemCategory').value=''; $('#newItemName').value=''; $('#newItemPrice').value=''; ITEM_DIRTY=true; renderCashier(); renderManage(); setActiveTab('manage'); const list=$('#itemManageList'); if(list) list.scrollIntoView({behavior:'smooth',block:'start'}); alert('已新增品項，會歸在「'+category+'」分類；請按儲存品項資料')}
 window.deleteItem=(id)=>{if(guardBossAction()) return; const item=state.items.find(x=>x.id===id);if(!item)return;if(!confirm('確定刪除「'+item.name+'」嗎？'))return;state.items=state.items.filter(x=>x.id!==id);ITEM_DIRTY=true;renderCashier();renderManage();alert('已刪除，請按儲存品項資料')}
@@ -1564,9 +1578,8 @@ async function authorizeCashierDevice(){
   }
   const pwd = await askMaskedPassword('請輸入管理密碼，授權這台設備可以收銀', '管理密碼');
   if(pwd===null) return;
-  const val=normalizeDigits(pwd);
+  const val=String(pwd||'').trim();
   if(val===BOSS_PASSWORD){ enterBossMode(); return; }
-  if(!onlyDigits6(val)){ alert('管理密碼請輸入6位數字'); return; }
   if(!state.managementPassword){ alert('尚未設定管理密碼，請先用已授權設備進入管理設定。'); return; }
   if(val!==String(state.managementPassword||'').trim()){
     alert('管理密碼錯誤，這台設備仍只能刷單');
@@ -1648,8 +1661,8 @@ function submitRedeem(){
     }
   };
   state.orders.unshift(order);
-  consumeMonthlyOrderNo();
-  saveState(true);
+  state.nextNo += 1;
+  saveState();
   renderCashier();
   renderAssign();
   renderReport();

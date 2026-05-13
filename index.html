@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.66 六碼PIN正常版</title>
+<title>OBA Hair V11.0.67 密碼遮罩可顯示版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -93,6 +93,10 @@ body.boss-mode #tab-report{display:block!important}
 
 .camera-box{display:grid;gap:10px;margin:8px 0 12px}
 .btn-camera{background:#e7f6ec;color:#18453f;font-size:18px;padding:14px 18px;border:1px solid rgba(79,145,136,.25)}
+
+.pwd-wrap{position:relative}
+.pwd-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);border:none;background:none;font-size:18px;cursor:pointer}
+
 .scanner-wrap{display:grid;gap:10px}
 #scanVideo{width:100%;max-height:58vh;background:#111;border-radius:18px;object-fit:cover}
 .scan-status{font-weight:800;color:var(--muted);font-size:14px}
@@ -307,7 +311,7 @@ const DEFAULT_BRANCH_NAME = "總店";
   </div>
 </div></dialog>
 <input id="cameraScanFile" class="hidden" type="file" accept="image/*" capture="environment" />
-<dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><div class="space"></div><div id="pwdNewWrap" class="hidden"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
+<dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入管理密碼</h3><div class="space"></div><div class="pwd-wrap"><input id="pwdOld" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" /><button type="button" class="pwd-eye" id="togglePwdOld">👁</button></div><div class="space"></div><div id="pwdNewWrap" class="hidden"><div class="pwd-wrap"><input id="pwdNew" class="input" type="password" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" /><button type="button" class="pwd-eye" id="togglePwdNew">👁</button></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 <dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input id="maskedPasswordInput" class="input" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="輸入後會以 ●●●● 顯示"  maxlength="6" /><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
 
 <script>
@@ -833,6 +837,21 @@ $('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#p
  if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(!isValidManagerPin(oldPwd)){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
  window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
+
+
+function bindPwdToggle(btnId,inputId){
+  const btn=document.getElementById(btnId);
+  const input=document.getElementById(inputId);
+  if(!btn || !input) return;
+  btn.onclick=()=>{
+    const show=input.type==='password';
+    input.type=show?'text':'password';
+    btn.textContent=show?'🙈':'👁';
+  };
+}
+bindPwdToggle('toggleMaskedPwd','maskedPasswordInput');
+bindPwdToggle('togglePwdOld','pwdOld');
+bindPwdToggle('togglePwdNew','pwdNew');
 
 function renderCashier(){
   $('#todayText').textContent=todayStr();
