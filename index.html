@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.45 歸零雲端主列修正版</title>
+<title>OBA Hair V11.0.46 日流水單號版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -166,7 +166,7 @@ const DEFAULT_BRANCH_NAME = "總店";
         <div class="label">目前刷單員工</div><select id="assignDesigner" class="select"></select>
         <div class="space"></div>
         <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
-        <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-000001" />
+        <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" />
         <div class="space"></div>
         <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
         <div class="space"></div>
@@ -269,7 +269,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 
 <dialog id="itemPickDialog"><div class="modal"><h3 id="itemPickTitle">選擇品項</h3><div class="chip-grid" id="itemPickGrid"></div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseItemPick">取消</button></div></div></dialog>
 <dialog id="payDialog"><div class="modal"><h3>確認收款與出單</h3><div id="paySummary" class="note"></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnConfirmPay">確認收款並列印</button><button class="btn btn-soft" id="btnCancelPay">取消</button></div></div></dialog>
-<dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input id="refundOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-000001" /><div class="space"></div><div class="label">退票原因</div><select id="refundReason" class="select"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input id="refundReasonOther" class="input hidden" placeholder="請輸入其他原因" /><div class="space"></div><div id="refundPreview" class="bill">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
+<dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input id="refundOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" /><div class="space"></div><div class="label">退票原因</div><select id="refundReason" class="select"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input id="refundReasonOther" class="input hidden" placeholder="請輸入其他原因" /><div class="space"></div><div id="refundPreview" class="bill">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
 
 <dialog id="redeemDialog"><div class="modal">
   <h3>集點卡兌換</h3>
@@ -546,39 +546,6 @@ async function replaceCloudMainRowForReset(resetState){
     cloudResetting=false;
   }
 }
-
-async function fullResetAllData(){
-  if(!confirm('確定清空全部資料？\n將清空業績、單據、退票與月流水號。')) return;
-
-  state.orders=[];
-  state.refunds=[];
-  state.cart=[];
-  state.monthlyOrderCounter={};
-
-  localStorage.setItem(KEY, JSON.stringify(state));
-
-  const client=getCloudClient();
-
-  if(client){
-    try{
-      await client
-        .from(CLOUD_TABLE)
-        .update({
-          data:state,
-          updated_at:new Date().toISOString()
-        })
-        .eq('id', CLOUD_ROW_ID);
-
-      console.log('Supabase 已完整歸零');
-    }catch(e){
-      console.log(e);
-    }
-  }
-
-  refreshAllScreens();
-  alert('已完整歸零（業績 / 單號 / 退票）');
-}
-
 function refreshAllScreens(){
   updateCashierDisplay();
   renderCashier();
@@ -608,22 +575,23 @@ function currentMonthKey(){
   const d=new Date();
   return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
 }
+function currentDateKey(){
+  const d=new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+}
 function getNextMonthlyOrderNo(){
-  const key=currentMonthKey();
-  if(!state.monthlyOrderCounter) state.orders=[];
-state.refunds=[];
-state.monthlyOrderCounter={};
-  if(!state.monthlyOrderCounter[key]) state.monthlyOrderCounter[key]=1;
-  const no=state.monthlyOrderCounter[key];
-  return `OBA-${key}-${String(no).padStart(3,'0')}`;
+  const monthKey=currentMonthKey();
+  const dateKey=currentDateKey();
+  if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
+  if(!state.monthlyOrderCounter[monthKey]) state.monthlyOrderCounter[monthKey]=1;
+  const no=state.monthlyOrderCounter[monthKey];
+  return `OBA-${dateKey}-${String(no).padStart(3,'0')}`;
 }
 function consumeMonthlyOrderNo(){
-  const key=currentMonthKey();
-  if(!state.monthlyOrderCounter) state.orders=[];
-state.refunds=[];
-state.monthlyOrderCounter={};
-  if(!state.monthlyOrderCounter[key]) state.monthlyOrderCounter[key]=1;
-  state.monthlyOrderCounter[key]+=1;
+  const monthKey=currentMonthKey();
+  if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
+  if(!state.monthlyOrderCounter[monthKey]) state.monthlyOrderCounter[monthKey]=1;
+  state.monthlyOrderCounter[monthKey]+=1;
 }
 function currentOrderNo(){return getNextMonthlyOrderNo()}
 function normalizeOrderNoText(value){
@@ -743,7 +711,7 @@ $('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
 $('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('BOSS模式不可修改密碼');return} if(oldPwd!==state.managementPassword){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
  if(pwdMode==='report' && oldPwd===BOSS_PASSWORD){$('#passwordDialog').close();pendingLockedTab='';enterBossMode();return;}
  if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(oldPwd!==state.managementPassword){ alert('密碼錯誤'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
- window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }}*/;
+ window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改管理密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 
 function renderCashier(){
@@ -1223,9 +1191,7 @@ async function resetAllDataForGoLive(){
   cloudResetting=true;
   localStorage.removeItem(KEY);
   state=clone(defaultState);
-  state.orders=[];
-state.refunds=[];
-state.monthlyOrderCounter={};
+  state.monthlyOrderCounter={};
   state.cart=[];
   state.orders=[];
   state.refunds=[];
