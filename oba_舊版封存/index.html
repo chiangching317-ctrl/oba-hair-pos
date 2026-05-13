@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.50 測試資料根本清除版</title>
+<title>OBA Hair V11.0.51 補印單據版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -231,7 +231,7 @@ const DEFAULT_BRANCH_NAME = "總店";
         </div>
       </div>
       <div class="card">
-        <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><div class="row"><button class="btn btn-ok" id="btnSalaryClose">薪資結算歸零</button><button class="btn btn-danger" id="btnResetAll">清空測試資料</button></div></div>
+        <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button><button class="btn btn-ok" id="btnSalaryClose">薪資結算歸零</button><button class="btn btn-danger" id="btnResetAll">清空測試資料</button></div></div>
         <div class="table" id="reportTable"></div>
       </div>
     </div>
@@ -270,6 +270,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 <dialog id="itemPickDialog"><div class="modal"><h3 id="itemPickTitle">選擇品項</h3><div class="chip-grid" id="itemPickGrid"></div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseItemPick">取消</button></div></div></dialog>
 <dialog id="payDialog"><div class="modal"><h3>確認收款與出單</h3><div id="paySummary" class="note"></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnConfirmPay">確認收款並列印</button><button class="btn btn-soft" id="btnCancelPay">取消</button></div></div></dialog>
 <dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input id="refundOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" /><div class="space"></div><div class="label">退票原因</div><select id="refundReason" class="select"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input id="refundReasonOther" class="input hidden" placeholder="請輸入其他原因" /><div class="space"></div><div id="refundPreview" class="bill">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
+<dialog id="reprintDialog"><div class="modal"><h3>補印單據</h3><div class="note">已經開過的單都可以補印；補印不會新增業績、不會改單號。</div><div class="space"></div><div class="grid2"><div><div class="label">指定日期</div><input id="reprintDate" class="input" type="date" /></div><div><div class="label">輸入單號搜尋</div><input id="reprintOrderNo" class="input" placeholder="例如 OBA-20260513-001" /></div></div><div class="space"></div><div class="bill" id="reprintList">請選日期或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseReprint">關閉</button></div></div></dialog>
 
 <dialog id="redeemDialog"><div class="modal">
   <h3>集點卡兌換</h3>
@@ -1032,6 +1033,41 @@ function renderMyStats(){
 
 function openRefund(code=''){ if(guardBossAction()) return; $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
 $('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=()=>openRefund($('#assignOrderNo').value.trim()); $('#btnCloseRefund').onclick=()=>$('#refundDialog').close();
+
+function openReprintDialog(){
+  if(guardBossAction()) return;
+  const d=$('#reprintDate');
+  const no=$('#reprintOrderNo');
+  if(d && !d.value) d.value=todayStr();
+  if(no) no.value='';
+  renderReprintList();
+  $('#reprintDialog').showModal();
+  setTimeout(()=>$('#reprintOrderNo')?.focus(),80);
+}
+function reprintOrder(orderId){
+  const order=findOrderByCode(orderId);
+  if(!order){alert('找不到這張單，請確認單號');return;}
+  openReceipt(order);
+}
+function renderReprintList(){
+  const list=$('#reprintList');
+  if(!list) return;
+  const no=($('#reprintOrderNo')?.value||'').trim();
+  const date=($('#reprintDate')?.value||todayStr()).trim();
+  let orders=[];
+  if(no){
+    const found=findOrderByCode(no);
+    orders=found?[found]:[];
+  }else{
+    orders=state.orders.filter(o=>o.date===date).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  }
+  if(!orders.length){
+    list.innerHTML='<div class="note">找不到可補印的單據</div>';
+    return;
+  }
+  list.innerHTML=orders.map(o=>`<div class="bill-row"><div><strong>${o.id}</strong><br><span style="color:#6b7280">${o.date} ${o.time||''}｜${o.items.map(i=>i.name).join('、')}｜${o.refunded?'已退票':'正常'}</span></div><div><button class="btn btn-primary" type="button" onclick="reprintOrder('${String(o.id).replace(/'/g,"\\'")}')">補印</button></div></div>`).join('');
+}
+
 $('#refundReason').onchange=()=>$('#refundReasonOther').classList.toggle('hidden',$('#refundReason').value!=='其他');
 $('#refundOrderNo').addEventListener('input',renderRefundPreview);
 function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=findOrderByCode(code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
@@ -1433,6 +1469,14 @@ document.addEventListener('click', function(e){
   if(e.target && e.target.id === 'btnRedeemCancel') $('#redeemDialog').close();
    if(e.target && e.target.id === 'btnRedeemSubmit') submitRedeem();
 if(e.target && e.target.id === 'btnClearCart'){ state.cart=[]; CURRENT_CASHIER=null; renderCart(); updateCashierDisplay(); saveState(true); }
+  if(e.target && e.target.id === 'btnReprintOpen') openReprintDialog();
+  if(e.target && e.target.id === 'btnCloseReprint') $('#reprintDialog').close();
+});
+document.addEventListener('input', function(e){
+  if(e.target && ['reprintDate','reprintOrderNo'].includes(e.target.id)) renderReprintList();
+});
+document.addEventListener('change', function(e){
+  if(e.target && ['reprintDate','reprintOrderNo'].includes(e.target.id)) renderReprintList();
 });
 
 
