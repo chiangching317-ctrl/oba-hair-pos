@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.72 權限勾選版</title>
+<title>OBA Hair V11.0.72 JEAN權限可勾選版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -845,7 +845,7 @@ document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
     applyBossMode();
     return;
   }
-  if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && name!=='assign' && name!=='report'){
+  if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && name!=='assign'){
     alert('此設備尚未授權為收銀設備，只能刷單入業績。');
     applyDeviceAuthorizationMode();
     return;
@@ -1301,33 +1301,9 @@ function renderReport(){
   $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
   $('#personalCount').textContent=personal.length;
   const monthOrders=salaryBaseOrders().filter(o=>o.date.startsWith(month)&&!o.refunded);
-  // V11.0.74：報表員工業績改成動態抓全部在職員工，不再只寫死 JEAN / ALAN。
-  const monthStaffSummary = activeStaff()
-    .filter(s=>Array.isArray(s.permissions) && (s.permissions.includes('assign') || s.permissions.includes('checkout') || s.permissions.includes('report')))
-    .map(s=>{
-      const list = monthOrders.filter(o=>o.assignedDesignerId===s.id);
-      return {
-        name:s.name || s.id,
-        sales:list.reduce((sum,o)=>sum+Number(o.total||0),0),
-        commission:list.reduce((sum,o)=>sum+Number(o.commission||0),0),
-        count:list.length
-      };
-    });
-  const jeanBox=$('#jeanStats'), alanBox=$('#alanStats');
-  if(jeanBox){
-    const k=jeanBox.closest('.stat')?.querySelector('.k');
-    if(k) k.textContent='本月員工業績 / 抽成';
-    jeanBox.style.fontSize='16px';
-    jeanBox.style.lineHeight='1.7';
-    jeanBox.innerHTML=monthStaffSummary.length?monthStaffSummary.map(s=>`${s.name}：${money(s.sales)} / ${money(s.commission)}`).join('<br>'):'尚無在職員工';
-  }
-  if(alanBox){
-    const k=alanBox.closest('.stat')?.querySelector('.k');
-    if(k) k.textContent='本月員工筆數';
-    alanBox.style.fontSize='16px';
-    alanBox.style.lineHeight='1.7';
-    alanBox.innerHTML=monthStaffSummary.length?monthStaffSummary.map(s=>`${s.name}：${s.count} 筆`).join('<br>'):'0 筆';
-  }
+  const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
+  $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
+  $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
   $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
