@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.72 JEAN權限可勾選版</title>
+<title>OBA Hair V11.0.72 權限勾選版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -845,7 +845,7 @@ document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
     applyBossMode();
     return;
   }
-  if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && name!=='assign'){
+  if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && name!=='assign' && name!=='report'){
     alert('此設備尚未授權為收銀設備，只能刷單入業績。');
     applyDeviceAuthorizationMode();
     return;
