@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.81 QR置中緊湊版</title>
+<title>OBA Hair V11.0.82 薪水標準防重複刷業績版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -28,7 +28,7 @@
 .badge{display:inline-block;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;background:#f3f4f6}.badge-ok{background:#e8f5eb;color:#245f38}.badge-off{background:#f5f5f5;color:#666}
 .hidden{display:none!important}.owner-card{border:1px solid #d9cabf;background:#fffbf8;border-radius:18px;padding:12px}.owner-title{font-size:15px;font-weight:900;color:#7a4b2c}
 dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow:0 24px 90px rgba(0,0,0,.3)}dialog::backdrop{background:rgba(0,0,0,.35)}.modal{padding:18px;background:#fff}
-.receiptWrap{display:flex;justify-content:center}.receipt{width:76mm;background:#fff;color:#111;padding:1.5mm 3mm;font-family:"Courier New",monospace;line-height:1.28}.receipt h3{text-align:center;margin:0 0 2px;font-size:18px}.receipt .center{text-align:center}.receipt .line{border-top:1px dashed #333;margin:3px 0}.receipt .r{display:flex;justify-content:space-between;gap:8px}
+.receiptWrap{display:flex;justify-content:center}.receipt{width:76mm;background:#fff;color:#111;padding:2mm 3mm;font-family:"Courier New",monospace;line-height:1.35}.receipt h3{text-align:center;margin:0 0 3px;font-size:18px}.receipt .center{text-align:center}.receipt .line{border-top:1px dashed #333;margin:4px 0}.receipt .r{display:flex;justify-content:space-between;gap:8px}
 .permission-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 
 /* V10.2：手機專用鎖定刷單模式。平板即使直放也保留完整收銀功能。 */
@@ -54,9 +54,9 @@ body.assign-only .device-auth-row{display:flex}
 .access-sub{color:var(--muted);margin:0 0 16px;font-size:14px}
 .hidden-gate{display:none!important}
 /* V11.0.75：恢復入口密碼，進入系統 */
-.receipt svg{width:100%;height:42px;display:block;margin:1mm 0 .5mm}
-.receipt .qr-box{display:flex;justify-content:center;align-items:center;margin:.5mm auto .3mm;width:100%;text-align:center}
-.receipt .qr-box canvas,.receipt .qr-box img{width:86px!important;height:86px!important;display:block!important;margin:0 auto!important}
+.receipt svg{width:100%;height:46px;display:block;margin:2mm 0 1mm}
+.receipt .qr-box{display:flex;justify-content:center;align-items:center;margin:1mm auto .5mm;width:100%;text-align:center}
+.receipt .qr-box canvas,.receipt .qr-box img{width:86px!important;height:86px!important}
 .receipt .barcode-note{font-size:12px;text-align:center;letter-spacing:1px}
 
 .manage-fold{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:0;overflow:hidden}
@@ -78,11 +78,11 @@ body.boss-mode .panel-readonly a{opacity:.55;pointer-events:none}
   html,body{width:80mm;margin:0!important;padding:0!important;background:#fff!important}
   body *{visibility:hidden!important}
   #printArea,#printArea *{visibility:visible!important}
-  #printArea{position:absolute!important;left:0!important;top:0!important;width:80mm!important;margin:0!important;padding:1.5mm 3mm!important;box-shadow:none!important;border:none!important}
-  .receipt{width:80mm!important;padding:1.5mm 3mm!important;font-size:13px!important;line-height:1.28!important}
-  .receipt h3{font-size:20px!important;margin-bottom:2px!important}
-  .receipt svg{height:42px!important;margin:1mm 0 .5mm!important}
-  .receipt .qr-box{display:flex!important;justify-content:center!important;align-items:center!important;margin:.5mm auto .3mm!important;width:100%!important;text-align:center!important}
+  #printArea{position:absolute!important;left:0!important;top:0!important;width:80mm!important;margin:0!important;padding:2mm 3mm!important;box-shadow:none!important;border:none!important}
+  .receipt{width:80mm!important;padding:2mm 3mm!important;font-size:13px!important;line-height:1.35!important}
+  .receipt h3{font-size:20px!important;margin-bottom:3px!important}
+  .receipt svg{height:44px!important}
+  .receipt .qr-box{display:flex!important;justify-content:center!important;align-items:center!important;margin:1mm auto .5mm!important;width:100%!important;text-align:center!important}
   .receipt .qr-box canvas,.receipt .qr-box img{width:86px!important;height:86px!important;display:block!important;margin:0 auto!important}
 }
 @media (max-width:768px){
@@ -235,9 +235,11 @@ const DEFAULT_BRANCH_NAME = "總店";
           <div class="stat"><div class="k">選定員工筆數</div><div class="v" id="personalCount">0</div></div>
         </div>
         <div class="space"></div>
+        <div class="stats" id="monthlyStaffStats">
+          <div class="stat"><div class="k">員工本月業績 / 抽成</div><div class="v">$0 / $0</div></div>
+        </div>
+        <div class="space"></div>
         <div class="stats">
-          <div class="stat"><div class="k">JEAN 業績 / 抽成</div><div class="v" id="jeanStats">$0 / $0</div></div>
-          <div class="stat"><div class="k">ALAN 業績 / 抽成</div><div class="v" id="alanStats">$0 / $0</div></div>
           <div class="stat"><div class="k">資料匯出</div><div class="v"><button class="btn btn-soft" id="btnExport">匯出</button></div></div>
         </div>
       </div>
@@ -989,11 +991,6 @@ function renderReceiptQr(orderId){
   try{
     if(window.QRCode){
       new QRCode(box,{text:String(orderId||''),width:86,height:86,correctLevel:QRCode.CorrectLevel.M});
-      Array.from(box.children).forEach(el=>{
-        el.style.display='block';
-        el.style.marginLeft='auto';
-        el.style.marginRight='auto';
-      });
     }else{
       box.innerHTML='<div class="note">QR Code 套件尚未載入</div>';
       alert('QR Code 套件尚未載入，請確認網路後重新整理');
@@ -1163,6 +1160,12 @@ $('#btnAssignOrder').onclick=()=>{
   const order=findOrderByCode(code);
   if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
   if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return}
+  // V11.0.82：薪水標準保護。同一張單已掛業績後，不可重複刷入，避免薪資/抽成被覆蓋。
+  if(order.assignedDesignerId){
+    alert('這張單已經刷過業績：'+(order.assignedDesignerName||order.assignedDesignerId)+'，不能重複刷。');
+    clearAssignScanField();
+    return;
+  }
   const staff=staffById(staffId);
   if(!staff){alert('找不到員工資料，請先到員工資料確認此員工仍在職');return}
   order.assignedDesignerId=staff.id;
@@ -1315,9 +1318,19 @@ function renderReport(){
   $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
   $('#personalCount').textContent=personal.length;
   const monthOrders=salaryBaseOrders().filter(o=>o.date.startsWith(month)&&!o.refunded);
-  const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
-  $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
-  $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
+  // V11.0.83：個人業績區改成依員工資料動態產生，不再只固定顯示 JEAN / ALAN。
+  const monthlyBox=$('#monthlyStaffStats');
+  if(monthlyBox){
+    const payrollStaff=activeStaff().filter(s=>s.permissions?.includes('assign')||s.owner);
+    monthlyBox.innerHTML=payrollStaff.length
+      ? payrollStaff.map(s=>{
+          const list=monthOrders.filter(o=>o.assignedDesignerId===s.id);
+          const sales=list.reduce((sum,o)=>sum+Number(o.total||0),0);
+          const commission=list.reduce((sum,o)=>sum+Number(o.commission||0),0);
+          return `<div class="stat"><div class="k">${s.name} 業績 / 抽成 / 筆數</div><div class="v">${money(sales)} / ${money(commission)} / ${list.length}</div></div>`;
+        }).join('')
+      : '<div class="stat"><div class="k">員工本月業績 / 抽成</div><div class="v">$0 / $0 / 0</div></div>';
+  }
   $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;

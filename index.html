@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.82 薪水標準防重複刷業績版</title>
+<title>OBA Hair V11.0.83 平板優化版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -85,6 +85,55 @@ body.boss-mode .panel-readonly a{opacity:.55;pointer-events:none}
   .receipt .qr-box{display:flex!important;justify-content:center!important;align-items:center!important;margin:1mm auto .5mm!important;width:100%!important;text-align:center!important}
   .receipt .qr-box canvas,.receipt .qr-box img{width:86px!important;height:86px!important;display:block!important;margin:0 auto!important}
 }
+
+/* V11.0.83 平板優化版：只縮平板 keypad/dialog/間距；手機 768px 以下維持原本大按鈕 */
+@media (min-width:769px) and (max-width:1180px){
+  .wrap{max-width:1080px;padding:14px}
+  .hero{gap:12px;margin-bottom:12px}
+  .title{font-size:clamp(26px,3.2vw,34px)}
+  .sub{font-size:13px;margin-top:5px}
+  .pill{padding:8px 12px;font-size:13px}
+  .tabs{gap:7px;margin-bottom:12px}
+  .tab{padding:9px 13px;font-size:14px}
+  .shell{grid-template-columns:1.08fr .92fr;gap:12px}
+  .stack{gap:12px}
+  .card{border-radius:20px;padding:14px}
+  .section-title{font-size:19px;margin-bottom:8px}
+  .label{font-size:12px;margin-bottom:6px}
+  .space{height:8px}
+  .row{gap:8px}
+  .grid2,.grid3,.grid4{gap:9px}
+  .btn{border-radius:15px;padding:9px 13px;font-size:14px;min-height:40px}
+  .input,.select,textarea{border-radius:14px;padding:9px 12px;font-size:14px;min-height:40px}
+  .chip-grid{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+  .chip{border-radius:15px;padding:10px;min-height:66px}
+  .chip .name{font-size:14px}
+  .chip .price{font-size:12px;margin-top:4px}
+  .bill{border-radius:15px;padding:11px;min-height:128px}
+  .bill-row{padding:6px 0;font-size:13px}
+  .stats{gap:8px}
+  .stat{border-radius:15px;padding:10px}
+  .stat .k{font-size:12px}
+  .stat .v{font-size:18px;margin-top:4px}
+  .table{border-radius:15px}
+  .tr{gap:8px;padding:9px;font-size:13px}
+  .small-list{border-radius:15px;padding:10px}
+  .small-item{padding:6px 0;font-size:13px}
+  dialog{width:min(640px,88vw);border-radius:20px}
+  .modal{padding:14px}
+  .modal h3{margin:0 0 8px;font-size:19px}
+  #itemPickDialog{width:min(720px,90vw)}
+  #refundDialog,#reprintDialog,#redeemDialog{width:min(680px,90vw)}
+  #receiptDialog{width:min(520px,88vw)}
+  #passwordDialog,#maskedPasswordDialog{width:min(390px,84vw)}
+  #cameraScanDialog{width:min(720px,90vw)}
+  #scanVideo{max-height:46vh;border-radius:15px}
+  .btn-camera{font-size:16px;padding:11px 15px}
+  .pwd-eye{right:10px;font-size:16px}
+  .access-card{width:min(380px,86vw);border-radius:20px;padding:18px}
+  .access-title{font-size:23px}
+}
+
 @media (max-width:768px){
   .btn{min-height:48px;font-size:16px}
   .input,.select{min-height:48px;font-size:16px}
