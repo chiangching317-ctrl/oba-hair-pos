@@ -235,9 +235,11 @@ const DEFAULT_BRANCH_NAME = "總店";
           <div class="stat"><div class="k">選定員工筆數</div><div class="v" id="personalCount">0</div></div>
         </div>
         <div class="space"></div>
+        <div class="stats" id="monthlyStaffStats">
+          <div class="stat"><div class="k">員工本月業績 / 抽成</div><div class="v">$0 / $0</div></div>
+        </div>
+        <div class="space"></div>
         <div class="stats">
-          <div class="stat"><div class="k">JEAN 業績 / 抽成</div><div class="v" id="jeanStats">$0 / $0</div></div>
-          <div class="stat"><div class="k">ALAN 業績 / 抽成</div><div class="v" id="alanStats">$0 / $0</div></div>
           <div class="stat"><div class="k">資料匯出</div><div class="v"><button class="btn btn-soft" id="btnExport">匯出</button></div></div>
         </div>
       </div>
@@ -1316,9 +1318,19 @@ function renderReport(){
   $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
   $('#personalCount').textContent=personal.length;
   const monthOrders=salaryBaseOrders().filter(o=>o.date.startsWith(month)&&!o.refunded);
-  const jean=monthOrders.filter(o=>o.assignedDesignerId==='JEAN'), alan=monthOrders.filter(o=>o.assignedDesignerId==='ALAN');
-  $('#jeanStats').textContent=`${money(jean.reduce((s,o)=>s+o.total,0))} / ${money(jean.reduce((s,o)=>s+o.commission,0))}`;
-  $('#alanStats').textContent=`${money(alan.reduce((s,o)=>s+o.total,0))} / ${money(alan.reduce((s,o)=>s+o.commission,0))}`;
+  // V11.0.83：個人業績區改成依員工資料動態產生，不再只固定顯示 JEAN / ALAN。
+  const monthlyBox=$('#monthlyStaffStats');
+  if(monthlyBox){
+    const payrollStaff=activeStaff().filter(s=>s.permissions?.includes('assign')||s.owner);
+    monthlyBox.innerHTML=payrollStaff.length
+      ? payrollStaff.map(s=>{
+          const list=monthOrders.filter(o=>o.assignedDesignerId===s.id);
+          const sales=list.reduce((sum,o)=>sum+Number(o.total||0),0);
+          const commission=list.reduce((sum,o)=>sum+Number(o.commission||0),0);
+          return `<div class="stat"><div class="k">${s.name} 業績 / 抽成 / 筆數</div><div class="v">${money(sales)} / ${money(commission)} / ${list.length}</div></div>`;
+        }).join('')
+      : '<div class="stat"><div class="k">員工本月業績 / 抽成</div><div class="v">$0 / $0 / 0</div></div>';
+  }
   $('#reportRecordTitle').textContent='區間紀錄｜'+(state.branchName||DEFAULT_BRANCH_NAME)+'｜'+rangeText;
   const rows=[...rangeOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
