@@ -1163,11 +1163,6 @@ $('#btnAssignOrder').onclick=()=>{
   const order=findOrderByCode(code);
   if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
   if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return}
-  if(order.assignedDesignerId){
-    alert('這張單已經刷過業績：'+(order.assignedDesignerName||order.assignedDesignerId)+'，不能重複刷。');
-    clearAssignScanField();
-    return;
-  }
   const staff=staffById(staffId);
   if(!staff){alert('找不到員工資料，請先到員工資料確認此員工仍在職');return}
   order.assignedDesignerId=staff.id;
