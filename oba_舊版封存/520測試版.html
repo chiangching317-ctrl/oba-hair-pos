@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.84 補印查單修正版</title>
+<title>OBA Hair V11.0.83 平板優化版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -741,63 +741,36 @@ function currentOrderNo(){return getNextMonthlyOrderNo()}
 function normalizeOrderNoText(value){
   const raw = String(value||'').trim().toUpperCase();
   if(!raw) return '';
-  const text = raw.replace(/\s+/g,'');
-  const digits = (text.match(/\d+/g)||[]).join('');
-
-  // V11.0.84：補印查單修正。正式單號是 OBA-YYYYMMDD-001，
-  // 舊版會把數字全部合併成 OBA-20260520001，導致補印 find 不到。
-  if(digits.length >= 11){
-    const datePart = digits.slice(0,8);
-    const seqPart = digits.slice(8).padStart(3,'0');
-    return `OBA-${datePart}-${seqPart}`;
+  const digits = (raw.match(/\d+/g)||[]).join('');
+  if(digits){
+    const n = parseInt(digits,10);
+    if(!Number.isNaN(n)) return 'OBA-' + String(n).padStart(8,'0');
   }
-  if(digits.length === 8){
-    return `OBA-${digits}`;
-  }
-  return text;
+  return raw.replace(/\s+/g,'');
 }
 function orderNoCandidates(value){
   const raw = String(value||'').trim().toUpperCase();
-  const text = raw.replace(/\s+/g,'');
   const normalized = normalizeOrderNoText(raw);
-  const digits = (text.match(/\d+/g)||[]).join('');
-  const compact = text.replace(/[^A-Z0-9]/g,'');
-  const list = [raw, text, normalized, compact, normalized.replace(/[^A-Z0-9]/g,'')];
-
+  const digits = (raw.match(/\d+/g)||[]).join('');
+  const list = [raw, raw.replace(/\s+/g,''), normalized];
   if(digits){
-    list.push(digits);
-    if(digits.length >= 11){
-      const datePart = digits.slice(0,8);
-      const seqRaw = digits.slice(8);
-      const seq3 = seqRaw.padStart(3,'0');
-      list.push(`OBA-${datePart}-${seq3}`);
-      list.push(`OBA${datePart}${seq3}`);
-      list.push(`${datePart}-${seq3}`);
-      list.push(`${datePart}${seq3}`);
-    }else{
-      const n = parseInt(digits,10);
-      if(!Number.isNaN(n)){
-        list.push('OBA-' + String(n).padStart(8,'0'));
-        list.push('OBA' + String(n).padStart(8,'0'));
-        list.push(String(n).padStart(8,'0'));
-        list.push('OBA-' + String(n).padStart(6,'0'));
-        list.push('OBA' + String(n).padStart(6,'0'));
-        list.push(String(n).padStart(6,'0'));
-        list.push(String(n));
-      }
+    const n = parseInt(digits,10);
+    if(!Number.isNaN(n)){
+      list.push('OBA-' + String(n).padStart(8,'0'));
+      list.push('OBA' + String(n).padStart(8,'0'));
+      list.push(String(n).padStart(8,'0'));
+      list.push('OBA-' + String(n).padStart(6,'0'));
+      list.push('OBA' + String(n).padStart(6,'0'));
+      list.push(String(n).padStart(6,'0'));
+      list.push(String(n));
     }
   }
   return [...new Set(list.filter(Boolean))];
 }
-function orderIdentityValues(order){
-  if(!order) return [];
-  return [order.id, order.orderNo, order.orderId, order.no, order.code, order.receiptNo];
-}
 function findOrderByCode(value){
   const candidates = orderNoCandidates(value);
-  const orders = Array.isArray(state.orders) ? state.orders : [];
-  return orders.find(o => {
-    const orderCandidates = orderIdentityValues(o).flatMap(v=>orderNoCandidates(v));
+  return state.orders.find(o => {
+    const orderCandidates = orderNoCandidates(o.id);
     return candidates.some(c => orderCandidates.includes(c));
   });
 }
