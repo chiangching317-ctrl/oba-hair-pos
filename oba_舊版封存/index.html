@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.82 薪水標準防重複刷業績版</title>
+<title>OBA Hair V11.0.87 開單品項防消失版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -85,6 +85,55 @@ body.boss-mode .panel-readonly a{opacity:.55;pointer-events:none}
   .receipt .qr-box{display:flex!important;justify-content:center!important;align-items:center!important;margin:1mm auto .5mm!important;width:100%!important;text-align:center!important}
   .receipt .qr-box canvas,.receipt .qr-box img{width:86px!important;height:86px!important;display:block!important;margin:0 auto!important}
 }
+
+/* V11.0.83 平板優化版：只縮平板 keypad/dialog/間距；手機 768px 以下維持原本大按鈕 */
+@media (min-width:769px) and (max-width:1180px){
+  .wrap{max-width:1080px;padding:14px}
+  .hero{gap:12px;margin-bottom:12px}
+  .title{font-size:clamp(26px,3.2vw,34px)}
+  .sub{font-size:13px;margin-top:5px}
+  .pill{padding:8px 12px;font-size:13px}
+  .tabs{gap:7px;margin-bottom:12px}
+  .tab{padding:9px 13px;font-size:14px}
+  .shell{grid-template-columns:1.08fr .92fr;gap:12px}
+  .stack{gap:12px}
+  .card{border-radius:20px;padding:14px}
+  .section-title{font-size:19px;margin-bottom:8px}
+  .label{font-size:12px;margin-bottom:6px}
+  .space{height:8px}
+  .row{gap:8px}
+  .grid2,.grid3,.grid4{gap:9px}
+  .btn{border-radius:15px;padding:9px 13px;font-size:14px;min-height:40px}
+  .input,.select,textarea{border-radius:14px;padding:9px 12px;font-size:14px;min-height:40px}
+  .chip-grid{grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+  .chip{border-radius:15px;padding:10px;min-height:66px}
+  .chip .name{font-size:14px}
+  .chip .price{font-size:12px;margin-top:4px}
+  .bill{border-radius:15px;padding:11px;min-height:128px}
+  .bill-row{padding:6px 0;font-size:13px}
+  .stats{gap:8px}
+  .stat{border-radius:15px;padding:10px}
+  .stat .k{font-size:12px}
+  .stat .v{font-size:18px;margin-top:4px}
+  .table{border-radius:15px}
+  .tr{gap:8px;padding:9px;font-size:13px}
+  .small-list{border-radius:15px;padding:10px}
+  .small-item{padding:6px 0;font-size:13px}
+  dialog{width:min(640px,88vw);border-radius:20px}
+  .modal{padding:14px}
+  .modal h3{margin:0 0 8px;font-size:19px}
+  #itemPickDialog{width:min(720px,90vw)}
+  #refundDialog,#reprintDialog,#redeemDialog{width:min(680px,90vw)}
+  #receiptDialog{width:min(520px,88vw)}
+  #passwordDialog,#maskedPasswordDialog{width:min(390px,84vw)}
+  #cameraScanDialog{width:min(720px,90vw)}
+  #scanVideo{max-height:46vh;border-radius:15px}
+  .btn-camera{font-size:16px;padding:11px 15px}
+  .pwd-eye{right:10px;font-size:16px}
+  .access-card{width:min(380px,86vw);border-radius:20px;padding:18px}
+  .access-title{font-size:23px}
+}
+
 @media (max-width:768px){
   .btn{min-height:48px;font-size:16px}
   .input,.select{min-height:48px;font-size:16px}
@@ -325,12 +374,11 @@ const defaultState={
  managementPassword:'',monthlyOrderCounter:{},cart:[],pendingPay:'',pendingCheckoutCart:null,
  staff:[
   {id:'JEAN',name:'JEAN',nickname:'JEAN',phone:'',address:'',joinDate:'2024-01-01',role:'店長',systemRole:'擁有者',active:true,owner:true,pin:'123456',rules:{default:0.5},permissions:['checkout','assign','refund','report','manage','item','password','view_all']},
-  {id:'ALAN',name:'ALAN',nickname:'ALAN',phone:'',address:'',joinDate:'2024-01-01',role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'123456',rules:{default:0.5,'護髮':0.7,'燙髮':0.7,'染髮':0.7,'加價':0.7,'隔離':0.7},permissions:['assign']}
+  {id:'ALAN',name:'ALAN',nickname:'ALAN',phone:'',address:'',joinDate:'2024-01-01',role:'設計師',systemRole:'一般員工',active:true,owner:false,pin:'123456',rules:{default:0.5,'護髮':0.7,'燙髮':0.7,'染髮':0.7,'隔離':0.7},permissions:['assign']}
  ],
  items:[
   {id:'cut',category:'剪髮',name:'cut',price:300,active:true,quick:true},
   {id:'wash',category:'沖洗',name:'沖洗',price:100,active:true,quick:true},
-  {id:'extra',category:'加價',name:'加價',price:100,active:true,quick:true},
   {id:'isolation',category:'隔離',name:'隔離',price:100,active:true,quick:true},
   {id:'color_s',category:'染髮',name:'染髮(S)',price:700,active:true},
   {id:'color_m',category:'染髮',name:'染髮(M)',price:1000,active:true},
@@ -359,6 +407,14 @@ if(!localStorage.getItem(PIN_MIGRATE_KEY)){
 }
 
 let LAST_ASSIGNED_ORDER_NO='';
+let CHECKOUT_SNAPSHOT=null; // V11.0.85：收款確認前鎖住本單完整快照，避免 LINE Pay/同步造成無品項單
+function isCheckoutInProgress(){
+  const payDialog=document.getElementById('payDialog');
+  return (Array.isArray(state?.cart) && state.cart.length>0) ||
+    (Array.isArray(state?.pendingCheckoutCart) && state.pendingCheckoutCart.length>0) ||
+    !!CHECKOUT_SNAPSHOT ||
+    !!(payDialog && payDialog.open);
+}
 let ITEM_DIRTY=false;
 let STAFF_DIRTY=false;
 function markStaffDirty(){
@@ -381,8 +437,18 @@ function renderManageKeepScroll(){
 
 const $=s=>document.querySelector(s);
 function clone(o){return JSON.parse(JSON.stringify(o))}
+function removeExtraItemFromState(d){
+  if(!d) return d;
+  if(Array.isArray(d.items)){
+    d.items = d.items.filter(i => !(String(i?.id||'')==='extra' || String(i?.category||'')==='加價' || String(i?.name||'')==='加價'));
+  }
+  if(Array.isArray(d.staff)){
+    d.staff.forEach(s=>{ if(s && s.rules && Object.prototype.hasOwnProperty.call(s.rules,'加價')) delete s.rules['加價']; });
+  }
+  return d;
+}
 function ensureBranchFields(data){
-  const d = data || clone(defaultState);
+  const d = removeExtraItemFromState(data || clone(defaultState));
   if(!d.branchId) d.branchId = DEFAULT_BRANCH_ID;
   if(!d.branchName) d.branchName = DEFAULT_BRANCH_NAME;
   if(Array.isArray(d.orders)){
@@ -465,7 +531,18 @@ async function pullCloudState(){
           console.log('已擋下舊雲端 orders：本機已歸零，雲端 row 較舊，不覆蓋', {localResetAt, cloudResetAt, cloudOrders:chosen.data.orders.length});
           return false;
         }
+        // V11.0.87：開單中保護。若正在選品項或確認收款，雲端 15 秒 pull 不可把本單 cart 洗掉。
+        const keepCheckout = (typeof isCheckoutInProgress === 'function') && isCheckoutInProgress();
+        const localCartSnapshot = keepCheckout ? clone(state.cart || []) : null;
+        const localPendingPaySnapshot = keepCheckout ? (state.pendingPay || '') : '';
+        const localPendingCheckoutSnapshot = keepCheckout ? clone(state.pendingCheckoutCart || null) : null;
         state = normalizeCloudState(chosen.data);
+        if(keepCheckout){
+          state.cart = Array.isArray(localCartSnapshot) ? localCartSnapshot : [];
+          state.pendingPay = localPendingPaySnapshot;
+          state.pendingCheckoutCart = localPendingCheckoutSnapshot;
+          localStorage.setItem(KEY, JSON.stringify(state));
+        }
         const effectiveResetAt = newestStamp(state.lastResetAt, getLocalResetMarker());
         if(effectiveResetAt){
           state.lastResetAt = effectiveResetAt;
@@ -657,7 +734,7 @@ async function startCloudSync(){
     refreshAllScreens();
   }
   setInterval(async()=>{
-    if(ITEM_DIRTY || STAFF_DIRTY || isManageEditing()){ console.log('資料正在編輯，暫停雲端覆蓋'); return; }
+    if(ITEM_DIRTY || STAFF_DIRTY || isManageEditing() || ((typeof isCheckoutInProgress === 'function') && isCheckoutInProgress())){ console.log('資料正在編輯或開單中，暫停雲端覆蓋'); return; }
     const ok = await pullCloudState();
     if(ok) refreshAllScreens();
   }, 15000);
@@ -692,36 +769,63 @@ function currentOrderNo(){return getNextMonthlyOrderNo()}
 function normalizeOrderNoText(value){
   const raw = String(value||'').trim().toUpperCase();
   if(!raw) return '';
-  const digits = (raw.match(/\d+/g)||[]).join('');
-  if(digits){
-    const n = parseInt(digits,10);
-    if(!Number.isNaN(n)) return 'OBA-' + String(n).padStart(8,'0');
+  const text = raw.replace(/\s+/g,'');
+  const digits = (text.match(/\d+/g)||[]).join('');
+
+  // V11.0.84：補印查單修正。正式單號是 OBA-YYYYMMDD-001，
+  // 舊版會把數字全部合併成 OBA-20260520001，導致補印 find 不到。
+  if(digits.length >= 11){
+    const datePart = digits.slice(0,8);
+    const seqPart = digits.slice(8).padStart(3,'0');
+    return `OBA-${datePart}-${seqPart}`;
   }
-  return raw.replace(/\s+/g,'');
+  if(digits.length === 8){
+    return `OBA-${digits}`;
+  }
+  return text;
 }
 function orderNoCandidates(value){
   const raw = String(value||'').trim().toUpperCase();
+  const text = raw.replace(/\s+/g,'');
   const normalized = normalizeOrderNoText(raw);
-  const digits = (raw.match(/\d+/g)||[]).join('');
-  const list = [raw, raw.replace(/\s+/g,''), normalized];
+  const digits = (text.match(/\d+/g)||[]).join('');
+  const compact = text.replace(/[^A-Z0-9]/g,'');
+  const list = [raw, text, normalized, compact, normalized.replace(/[^A-Z0-9]/g,'')];
+
   if(digits){
-    const n = parseInt(digits,10);
-    if(!Number.isNaN(n)){
-      list.push('OBA-' + String(n).padStart(8,'0'));
-      list.push('OBA' + String(n).padStart(8,'0'));
-      list.push(String(n).padStart(8,'0'));
-      list.push('OBA-' + String(n).padStart(6,'0'));
-      list.push('OBA' + String(n).padStart(6,'0'));
-      list.push(String(n).padStart(6,'0'));
-      list.push(String(n));
+    list.push(digits);
+    if(digits.length >= 11){
+      const datePart = digits.slice(0,8);
+      const seqRaw = digits.slice(8);
+      const seq3 = seqRaw.padStart(3,'0');
+      list.push(`OBA-${datePart}-${seq3}`);
+      list.push(`OBA${datePart}${seq3}`);
+      list.push(`${datePart}-${seq3}`);
+      list.push(`${datePart}${seq3}`);
+    }else{
+      const n = parseInt(digits,10);
+      if(!Number.isNaN(n)){
+        list.push('OBA-' + String(n).padStart(8,'0'));
+        list.push('OBA' + String(n).padStart(8,'0'));
+        list.push(String(n).padStart(8,'0'));
+        list.push('OBA-' + String(n).padStart(6,'0'));
+        list.push('OBA' + String(n).padStart(6,'0'));
+        list.push(String(n).padStart(6,'0'));
+        list.push(String(n));
+      }
     }
   }
   return [...new Set(list.filter(Boolean))];
 }
+function orderIdentityValues(order){
+  if(!order) return [];
+  return [order.id, order.orderNo, order.orderId, order.no, order.code, order.receiptNo];
+}
 function findOrderByCode(value){
   const candidates = orderNoCandidates(value);
-  return state.orders.find(o => {
-    const orderCandidates = orderNoCandidates(o.id);
+  const orders = Array.isArray(state.orders) ? state.orders : [];
+  return orders.find(o => {
+    const orderCandidates = orderIdentityValues(o).flatMap(v=>orderNoCandidates(v));
     return candidates.some(c => orderCandidates.includes(c));
   });
 }
@@ -944,40 +1048,57 @@ function removeCartItem(idx){
 }
 document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=async ()=>{
   if(state.cart.length===0){alert('請先加入項目');return}
-  const checkoutItems = clone(state.cart);
+  const checkoutItems = clone(state.cart).filter(i=>i && String(i.name||'').trim());
   const checkoutTotal = checkoutItems.reduce((s,i)=>s+Number(i.price||0),0);
   if(checkoutItems.length===0 || checkoutTotal<=0){alert('本單沒有有效品項，不能出單');return}
   CURRENT_CASHIER=null;
   updateCashierDisplay();
   if(!(await requireCashier()))return;
   const method=btn.dataset.pay;
+  const lockedOrderNo=currentOrderNo();
+  CHECKOUT_SNAPSHOT={
+    orderNo:lockedOrderNo,
+    items:clone(checkoutItems),
+    total:checkoutTotal,
+    paymentMethod:method,
+    cashierId:CURRENT_CASHIER?.id||'',
+    cashierName:CURRENT_CASHIER?.name||''
+  };
   state.pendingPay=method;
-  state.pendingCheckoutCart=checkoutItems; // V11.0.52：鎖住本單快照，避免確認前 cart 被同步洗掉變 0 元空單
-  $('#paySummary').textContent=`單號：${currentOrderNo()}｜總金額：${money(checkoutTotal)}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`;
+  state.pendingCheckoutCart=clone(checkoutItems); // V11.0.85：雙重鎖住本單快照，避免確認前 cart 被同步洗掉變無品項單
+  localStorage.setItem(KEY, JSON.stringify(state));
+  $('#paySummary').textContent=`單號：${lockedOrderNo}｜總金額：${money(checkoutTotal)}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`;
   $('#payDialog').showModal()
 })
-$('#btnCancelPay').onclick=()=>{state.pendingPay='';
-  state.pendingCheckoutCart=null;state.pendingCheckoutCart=null;$('#payDialog').close();};
+$('#btnCancelPay').onclick=()=>{
+  CHECKOUT_SNAPSHOT=null;
+  state.pendingPay='';
+  state.pendingCheckoutCart=null;
+  localStorage.setItem(KEY, JSON.stringify(state));
+  $('#payDialog').close();
+};
 $('#btnConfirmPay').onclick=()=>{
   if(guardBossAction()) return;
-  const checkoutItems = Array.isArray(state.pendingCheckoutCart) && state.pendingCheckoutCart.length ? clone(state.pendingCheckoutCart) : clone(state.cart);
-  const checkoutTotal = checkoutItems.reduce((s,i)=>s+Number(i.price||0),0);
-  if(checkoutItems.length===0 || checkoutTotal<=0){
-    alert('本單資料已遺失或金額為 0，請重新選品項後再出單。');
+  const snap = CHECKOUT_SNAPSHOT || {};
+  const checkoutItems = Array.isArray(snap.items) && snap.items.length ? clone(snap.items) : (Array.isArray(state.pendingCheckoutCart) && state.pendingCheckoutCart.length ? clone(state.pendingCheckoutCart) : clone(state.cart));
+  const checkoutTotal = Number(snap.total || checkoutItems.reduce((s,i)=>s+Number(i.price||0),0));
+  const hasValidItems = checkoutItems.length>0 && checkoutItems.every(i=>i && String(i.name||'').trim());
+  if(!hasValidItems || checkoutTotal<=0){
+    alert('本單品項資料已遺失，系統已阻止出單。請重新選品項後再收款。');
+    CHECKOUT_SNAPSHOT=null;
     state.pendingPay='';
-  state.pendingCheckoutCart=null;
     state.pendingCheckoutCart=null;
     $('#payDialog').close();
     renderCashier();
     return;
   }
-  const order={id:currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:checkoutItems,total:checkoutTotal,paymentMethod:state.pendingPay,cashierId:CURRENT_CASHIER?.id||'',cashierName:CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};
+  const order={id:snap.orderNo||currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:checkoutItems,total:checkoutTotal,paymentMethod:snap.paymentMethod||state.pendingPay,cashierId:snap.cashierId||CURRENT_CASHIER?.id||'',cashierName:snap.cashierName||CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};
   state.orders.unshift(order);
   consumeMonthlyOrderNo();
   state.cart=[];
   state.pendingPay='';
   state.pendingCheckoutCart=null;
-  state.pendingCheckoutCart=null;
+  CHECKOUT_SNAPSHOT=null;
   CURRENT_CASHIER=null;
   saveState(true);
   renderCashier();renderAssign();renderReport();updateCashierDisplay();

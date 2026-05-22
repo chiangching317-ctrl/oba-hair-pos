@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.87 開單品項防消失版</title>
+<title>OBA Hair V11.0.88 入口總控密碼修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -1891,9 +1891,11 @@ function verifyAccessPassword(){
     enterBossMode();
     return;
   }
+  // V11.0.88：入口登入修正。總控管理密碼也可以進入系統；員工 PIN 維持原本可進。
+  const isManagementPassword = String(state.managementPassword||'').trim() === val;
   const loginStaff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===val) : null;
-  if(loginStaff){
-    window.USER_ROLE='staff';
+  if(isManagementPassword || loginStaff){
+    window.USER_ROLE = isManagementPassword ? 'owner' : 'staff';
     sessionStorage.removeItem(BOSS_SESSION_KEY);
     sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
     closeAccessGate();
