@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.91 BOSS報表查詢修正版</title>
+<title>OBA Hair V11.0.90 正式合併版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -72,8 +72,6 @@ body.assign-only .device-auth-row{display:flex}
 /* V11.0.75：檢視 同網址四頁籤檢視，不再隱藏頁籤 */
 body.boss-mode .tab{display:inline-flex!important}
 body.boss-mode .panel-readonly button:not(.tab),body.boss-mode .panel-readonly input,body.boss-mode .panel-readonly select,body.boss-mode .panel-readonly textarea{opacity:.55;pointer-events:none}
-/* V11.0.91：BOSS 模式允許報表篩選欄位查詢；其他操作仍維持唯讀。 */
-body.boss-mode #tab-report input,body.boss-mode #tab-report select{opacity:1!important;pointer-events:auto!important}
 body.boss-mode .panel-readonly a{opacity:.55;pointer-events:none}
 @media print{
   @page{size:80mm auto;margin:0}
@@ -949,14 +947,8 @@ function applyBossMode(){
     tab.style.pointerEvents = '';
   });
   document.querySelectorAll('.panel button,.panel input,.panel select,.panel textarea').forEach(el=>{
-    const allowBossReportQuery = el.closest('#tab-report') && (el.tagName === 'INPUT' || el.tagName === 'SELECT');
-    if(allowBossReportQuery){
-      el.disabled = false;
-      el.removeAttribute('aria-disabled');
-    }else{
-      el.disabled = true;
-      el.setAttribute('aria-disabled','true');
-    }
+    el.disabled = true;
+    el.setAttribute('aria-disabled','true');
   });
   document.querySelectorAll('.panel a').forEach(el=>{
     el.setAttribute('aria-disabled','true');
