@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.90 正式合併版</title>
+<title>OBA Hair V11.0.89 補印選單版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -151,13 +151,6 @@ body.boss-mode .panel-readonly a{opacity:.55;pointer-events:none}
 .scanner-wrap{display:grid;gap:10px}
 #scanVideo{width:100%;max-height:58vh;background:#111;border-radius:18px;object-fit:cover}
 .scan-status{font-weight:800;color:var(--muted);font-size:14px}
-
-
-/* V11.1.04a DEV 損益報表顯示修正版：損益區塊固定放在支出頁。 */
-.expense-table .tr{grid-template-columns:.9fr .9fr 1fr 1.5fr 1.4fr}
-.expense-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-@media (max-width:900px){.expense-table .tr{grid-template-columns:1fr}.expense-summary{grid-template-columns:1fr}}
-
 </style>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
@@ -192,7 +185,6 @@ const DEFAULT_BRANCH_NAME = "總店";
     <button class="tab active" data-tab="cashier">收款出單</button>
     <button class="tab" data-tab="assign">刷單入業績</button>
     <button class="tab locked" data-tab="report">報表</button>
-    <button class="tab locked" data-tab="expense">支出</button>
     <button class="tab locked" data-tab="manage">員工 / 品項 / 密碼</button>
   </div>
 
@@ -263,13 +255,12 @@ const DEFAULT_BRANCH_NAME = "總店";
       <div class="card">
         <div class="section-title">報表篩選</div>
         <div class="grid4">
-          <div><div class="label">開始日期</div><input id="reportStartDate" class="input" type="date" /></div>
-          <div><div class="label">結束日期</div><input id="reportEndDate" class="input" type="date" /></div>
+          <div><div class="label">查詢日期</div><input id="reportDate" class="input" type="date" /></div>
           <div><div class="label">開始時間</div><input id="reportStartTime" class="input" type="time" /></div>
           <div><div class="label">結束時間</div><input id="reportEndTime" class="input" type="time" /></div>
           <div><div class="label">個人業績</div><select id="reportStaff" class="select"></select></div>
         </div>
-        <div class="note">可查單日或多日區間；不填開始/結束時間＝查整天。</div>
+        <div class="note">不填開始/結束時間＝查整天；可查早班、晚班或任一時間段。</div>
       </div>
       <div class="card">
         <div class="section-title">總體業績</div>
@@ -280,13 +271,9 @@ const DEFAULT_BRANCH_NAME = "總店";
         </div>
         <div class="space"></div>
         <div class="stats">
-          <div class="stat"><div class="k">現金合計</div><div class="v" id="payCash">$0</div></div>
-          <div class="stat"><div class="k">轉帳合計</div><div class="v" id="payTransfer">$0</div></div>
-          <div class="stat"><div class="k">LINE Pay 合計</div><div class="v" id="payLine">$0</div></div>
-        </div>
-        <div class="space"></div>
-        <div class="stats">
-          <div class="stat"><div class="k">集點卡兌換合計</div><div class="v" id="payRedeem">$0</div></div>
+          <div class="stat"><div class="k">現金</div><div class="v" id="payCash">$0</div></div>
+          <div class="stat"><div class="k">轉帳</div><div class="v" id="payTransfer">$0</div></div>
+          <div class="stat"><div class="k">LINE Pay</div><div class="v" id="payLine">$0</div></div>
         </div>
       </div>
       <div class="card">
@@ -311,58 +298,6 @@ const DEFAULT_BRANCH_NAME = "總店";
       </div>
     </div>
   </div>
-
-  <div class="panel hidden" id="tab-expense">
-    <div class="stack">
-      <div class="card">
-        <div class="section-title">支出登記</div>
-        <div class="grid4">
-          <div><div class="label">日期</div><input id="expenseDate" class="input" type="date" /></div>
-          <div><div class="label">分類</div><select id="expenseCategory" class="select"><option value="材料">材料</option><option value="進貨">進貨</option><option value="租金">租金</option><option value="水電">水電</option><option value="廣告">廣告</option><option value="雜支">雜支</option></select></div>
-          <div><div class="label">金額</div><input id="expenseAmount" class="input" type="number" min="0" placeholder="例如 1200" /></div>
-          <div><div class="label">備註</div><input id="expenseNote" class="input" placeholder="例如 染膏 / 電費 / 房租" /></div>
-        </div>
-        <div class="space"></div>
-        <div class="row"><button class="btn btn-primary" id="btnSaveExpense" type="button">儲存支出</button><button class="btn btn-soft hidden" id="btnCancelExpenseEdit" type="button">取消編輯</button><button class="btn btn-soft" id="btnClearExpenseForm" type="button">清空欄位</button><span class="save-status saved" id="expenseSaveStatus">等待輸入</span></div>
-        <div class="note">V11.1.04a：支出可新增、編輯、取消編輯；損益報表固定顯示在本頁下方，不寫進正式 Supabase。</div>
-      </div>
-      <div class="card">
-        <div class="section-title">支出統計</div>
-        <div class="expense-summary">
-          <div class="stat"><div class="k">今日支出</div><div class="v" id="expenseTodayTotal">$0</div></div>
-          <div class="stat"><div class="k">本月支出</div><div class="v" id="expenseMonthTotal">$0</div></div>
-          <div class="stat"><div class="k">本月筆數</div><div class="v" id="expenseMonthCount">0</div></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-title">損益報表 初版（支出頁）</div>
-        <div class="note">V11.1.04a：固定顯示在支出頁；只讀取收銀、退票、支出資料，不反寫收銀、不寫 Supabase。</div>
-        <div class="space"></div>
-        <div class="stats">
-          <div class="stat"><div class="k">今日營業額</div><div class="v" id="profitTodaySales">$0</div></div>
-          <div class="stat"><div class="k">今日退票</div><div class="v" id="profitTodayRefund">$0</div></div>
-          <div class="stat"><div class="k">今日支出</div><div class="v" id="profitTodayExpense">$0</div></div>
-        </div>
-        <div class="space"></div>
-        <div class="stats">
-          <div class="stat"><div class="k">今日淨利</div><div class="v" id="profitTodayNet">$0</div></div>
-          <div class="stat"><div class="k">本月營業額</div><div class="v" id="profitMonthSales">$0</div></div>
-          <div class="stat"><div class="k">本月支出</div><div class="v" id="profitMonthExpense">$0</div></div>
-        </div>
-        <div class="space"></div>
-        <div class="stats">
-          <div class="stat"><div class="k">本月退票</div><div class="v" id="profitMonthRefund">$0</div></div>
-          <div class="stat"><div class="k">本月淨利</div><div class="v" id="profitMonthNet">$0</div></div>
-          <div class="stat"><div class="k">計算公式</div><div class="v" style="font-size:14px">營業額－退票－支出</div></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="row" style="justify-content:space-between"><div class="section-title">支出紀錄</div><button class="btn btn-soft" id="btnExpenseRefresh" type="button">重新整理</button></div>
-        <div class="table expense-table" id="expenseTable"></div>
-      </div>
-    </div>
-  </div>
-
 
   <div class="panel hidden" id="tab-manage">
     <div class="stack">
@@ -435,7 +370,6 @@ const DEFAULT_BRANCH_NAME = "總店";
 <script>
 const KEY='oba_hair_v2_owner';
 const RESET_MARKER_KEY='oba_hair_v2_owner_reset_at';
-const EXPENSE_KEY='oba_hair_dev_expenses_v11101'; // V11.1.04a：沿用 V11.1.01~V11.1.03 支出本機資料，不寫入正式雲端
 const defaultState={
  managementPassword:'',monthlyOrderCounter:{},cart:[],pendingPay:'',pendingCheckoutCart:null,
  staff:[
@@ -786,7 +720,6 @@ function refreshAllScreens(){
   renderCashier();
   renderAssign();
   renderReport();
-  renderExpenses();
   renderManage();
   applyBossMode();
 }
@@ -972,7 +905,6 @@ function isValidPinForTab(pin, targetTab){
   if(targetTab === 'report') return staff.permissions.includes('report');
   if(targetTab === 'manage') return staff.permissions.includes('manage');
   if(targetTab === 'password') return staff.permissions.includes('password');
-  if(targetTab === 'expense') return staff.permissions.includes('report') || staff.permissions.includes('manage') || staff.permissions.includes('view_all');
   return false;
 }
 
@@ -1454,230 +1386,10 @@ $('#btnDoRefund').onclick=()=>{
   alert('已完成退票，業績與抽成已從報表扣回');
 }
 
-
-// ===== V11.1.03 DEV 支出編輯版 =====
-// 支出獨立記錄，不接收銀、不接薪資、不寫入 Supabase。
-function escapeHtml(value){
-  return String(value ?? '').replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
-}
-let expenseEditingId='';
-function loadExpenses(){
-  try{
-    const raw=localStorage.getItem(EXPENSE_KEY);
-    const list=raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list : [];
-  }catch(e){
-    return [];
-  }
-}
-function saveExpenses(list){
-  localStorage.setItem(EXPENSE_KEY, JSON.stringify(Array.isArray(list)?list:[]));
-}
-function setExpenseStatus(text, mode='saved'){
-  const status=$('#expenseSaveStatus');
-  if(!status) return;
-  status.textContent=text;
-  status.className='save-status '+(mode==='dirty'?'dirty':'saved');
-}
-function setExpenseEditingMode(id=''){
-  expenseEditingId=String(id||'');
-  const saveBtn=$('#btnSaveExpense');
-  const cancelBtn=$('#btnCancelExpenseEdit');
-  const clearBtn=$('#btnClearExpenseForm');
-  if(saveBtn) saveBtn.textContent = expenseEditingId ? '儲存修改' : '儲存支出';
-  if(cancelBtn) cancelBtn.classList.toggle('hidden', !expenseEditingId);
-  if(clearBtn) clearBtn.textContent = expenseEditingId ? '清空重填' : '清空欄位';
-}
-
-function clearExpenseForm(){
-  const dateEl=$('#expenseDate'), categoryEl=$('#expenseCategory'), amountEl=$('#expenseAmount'), noteEl=$('#expenseNote');
-  if(dateEl) dateEl.value=todayStr();
-  if(categoryEl) categoryEl.value='材料';
-  if(amountEl) amountEl.value='';
-  if(noteEl) noteEl.value='';
-  setExpenseEditingMode('');
-  setExpenseStatus('等待輸入','saved');
-}
-
-function cancelExpenseEdit(){
-  clearExpenseForm();
-  setExpenseStatus('已取消編輯','saved');
-}
-
-function expenseMonthOf(date){
-  return String(date||'').slice(0,7);
-}
-function renderExpenses(){
-  bindExpenseEvents();
-  const dateEl=$('#expenseDate');
-  if(dateEl && !dateEl.value) dateEl.value=todayStr();
-  const list=loadExpenses().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  const today=todayStr();
-  const month=monthStr();
-  const todayList=list.filter(e=>e.date===today);
-  const monthList=list.filter(e=>expenseMonthOf(e.date)===month);
-  const todayTotal=todayList.reduce((s,e)=>s+Number(e.amount||0),0);
-  const monthTotal=monthList.reduce((s,e)=>s+Number(e.amount||0),0);
-  const t1=$('#expenseTodayTotal'), t2=$('#expenseMonthTotal'), t3=$('#expenseMonthCount');
-  if(t1) t1.textContent=money(todayTotal);
-  if(t2) t2.textContent=money(monthTotal);
-  if(t3) t3.textContent=monthList.length;
-  const table=$('#expenseTable');
-  if(!table) return;
-  if(!list.length){
-    table.innerHTML='<div class="tr"><div>目前還沒有支出紀錄</div></div>';
-    return;
-  }
-  table.innerHTML='<div class="tr header"><div>日期</div><div>分類</div><div>金額</div><div>備註</div><div>操作</div></div>'+list.map(e=>`
-    <div class="tr">
-      <div>${escapeHtml(e.date)}</div>
-      <div>${escapeHtml(e.category)}</div>
-      <div>${money(e.amount)}</div>
-      <div>${escapeHtml(e.note||'-')}</div>
-      <div class="row">
-        <button class="btn btn-soft btnEditExpense" data-id="${escapeHtml(e.id)}" type="button">編輯</button>
-        <button class="btn btn-danger btnDeleteExpense" data-id="${escapeHtml(e.id)}" type="button">刪除</button>
-      </div>
-    </div>`).join('');
-}
-
-function startExpenseEdit(id){
-  if(guardBossAction()) return;
-  const list=loadExpenses();
-  const item=list.find(e=>String(e.id)===String(id));
-  if(!item){ alert('找不到這筆支出'); return; }
-  const dateEl=$('#expenseDate'), categoryEl=$('#expenseCategory'), amountEl=$('#expenseAmount'), noteEl=$('#expenseNote');
-  if(dateEl) dateEl.value=item.date||todayStr();
-  if(categoryEl) categoryEl.value=item.category||'材料';
-  if(amountEl) amountEl.value=Number(item.amount||0);
-  if(noteEl) noteEl.value=item.note||'';
-  setExpenseEditingMode(item.id);
-  setExpenseStatus('正在編輯這筆支出','dirty');
-  const panel=$('#tab-expense');
-  if(panel) panel.scrollIntoView({behavior:'smooth', block:'start'});
-  setTimeout(()=>amountEl?.focus(),120);
-}
-
-function saveExpenseEntry(){
-  if(guardBossAction()) return;
-  const date=($('#expenseDate')?.value || todayStr()).trim();
-  const category=($('#expenseCategory')?.value || '').trim();
-  const rawAmount=String($('#expenseAmount')?.value || '').trim();
-  const amount=Number(rawAmount);
-  const note=($('#expenseNote')?.value || '').trim();
-
-  if(!date){ alert('請選擇支出日期'); $('#expenseDate')?.focus(); setExpenseStatus('日期未填','dirty'); return; }
-  if(!category){ alert('請選擇支出分類'); $('#expenseCategory')?.focus(); setExpenseStatus('分類未選','dirty'); return; }
-  if(!rawAmount || !Number.isFinite(amount) || amount<=0){ alert('請輸入正確的支出金額'); $('#expenseAmount')?.focus(); setExpenseStatus('金額未完成','dirty'); return; }
-
-  const list=loadExpenses();
-  if(expenseEditingId){
-    const idx=list.findIndex(e=>String(e.id)===String(expenseEditingId));
-    if(idx<0){
-      alert('找不到原本那筆支出，請重新整理後再試');
-      setExpenseStatus('修改失敗','dirty');
-      return;
-    }
-    list[idx]={
-      ...list[idx],
-      date,
-      category,
-      amount:Math.round(amount),
-      note,
-      updatedAt:new Date().toISOString()
-    };
-    saveExpenses(list);
-    clearExpenseForm();
-    setExpenseStatus('支出修改已儲存','saved');
-    renderExpenses();
-    return;
-  }
-
-  list.unshift({
-    id:'EXP-'+Date.now(),
-    date,
-    category,
-    amount:Math.round(amount),
-    note,
-    createdAt:new Date().toISOString()
-  });
-  saveExpenses(list);
-  clearExpenseForm();
-  setExpenseStatus('支出已儲存','saved');
-  renderExpenses();
-}
-function addExpense(){
-  // 保留舊函式名稱，避免舊按鈕或舊事件找不到。
-  saveExpenseEntry();
-}
-function deleteExpense(id){
-  if(guardBossAction()) return;
-  const list=loadExpenses();
-  const item=list.find(e=>String(e.id)===String(id));
-  const label=item ? `${item.date || ''} ${item.category || ''} ${money(item.amount || 0)}` : '這筆支出';
-  if(!confirm(`確定刪除 ${label} 嗎？`)) return;
-  const next=list.filter(e=>String(e.id)!==String(id));
-  saveExpenses(next);
-  if(String(expenseEditingId)===String(id)) clearExpenseForm();
-  setExpenseStatus('支出已刪除','saved');
-  renderExpenses();
-}
-
-function bindExpenseEvents(){
-  const saveBtn=$('#btnSaveExpense') || $('#btnAddExpense');
-  const clearBtn=$('#btnClearExpenseForm');
-  const cancelBtn=$('#btnCancelExpenseEdit');
-  const refreshBtn=$('#btnExpenseRefresh');
-  const table=$('#expenseTable');
-  const inputs=['#expenseDate','#expenseCategory','#expenseAmount','#expenseNote'];
-
-  if(saveBtn && !saveBtn.dataset.bound){
-    saveBtn.dataset.bound='yes';
-    saveBtn.onclick=saveExpenseEntry;
-  }
-  if(clearBtn && !clearBtn.dataset.bound){
-    clearBtn.dataset.bound='yes';
-    clearBtn.onclick=clearExpenseForm;
-  }
-  if(cancelBtn && !cancelBtn.dataset.bound){
-    cancelBtn.dataset.bound='yes';
-    cancelBtn.onclick=cancelExpenseEdit;
-  }
-  if(refreshBtn && !refreshBtn.dataset.bound){
-    refreshBtn.dataset.bound='yes';
-    refreshBtn.onclick=renderExpenses;
-  }
-  if(table && !table.dataset.bound){
-    table.dataset.bound='yes';
-    table.addEventListener('click', e=>{
-      const editBtn=e.target.closest('.btnEditExpense');
-      const deleteBtn=e.target.closest('.btnDeleteExpense');
-      if(editBtn) startExpenseEdit(editBtn.dataset.id);
-      if(deleteBtn) deleteExpense(deleteBtn.dataset.id);
-    });
-  }
-  inputs.forEach(sel=>{
-    const el=$(sel);
-    if(el && !el.dataset.expenseDirtyBound){
-      el.dataset.expenseDirtyBound='yes';
-      el.addEventListener('input', ()=>setExpenseStatus(expenseEditingId?'修改尚未儲存':'尚未儲存','dirty'));
-      el.addEventListener('change', ()=>setExpenseStatus(expenseEditingId?'修改尚未儲存':'尚未儲存','dirty'));
-      if(sel==='#expenseAmount'){
-        el.addEventListener('keydown', e=>{ if(e.key==='Enter') saveExpenseEntry(); });
-      }
-    }
-  });
-  setExpenseEditingMode(expenseEditingId);
-}
-
 function reportFilterValues(){
-  const startDateEl=$('#reportStartDate'), endDateEl=$('#reportEndDate'), startEl=$('#reportStartTime'), endEl=$('#reportEndTime'), staffEl=$('#reportStaff');
-  if(startDateEl && !startDateEl.value) startDateEl.value=todayStr();
-  if(endDateEl && !endDateEl.value) endDateEl.value=startDateEl?.value||todayStr();
-  let startDate=startDateEl?.value||todayStr();
-  let endDate=endDateEl?.value||startDate;
-  if(endDate<startDate){ const tmp=startDate; startDate=endDate; endDate=tmp; }
-  return {startDate,endDate,start:startEl?.value||'',end:endEl?.value||'',staffId:staffEl?.value||'JEAN'};
+  const dateEl=$('#reportDate'), startEl=$('#reportStartTime'), endEl=$('#reportEndTime'), staffEl=$('#reportStaff');
+  if(dateEl && !dateEl.value) dateEl.value=todayStr();
+  return {date:dateEl?.value||todayStr(),start:startEl?.value||'',end:endEl?.value||'',staffId:staffEl?.value||'JEAN'};
 }
 
 function timeStampOfOrder(o){
@@ -1709,49 +1421,6 @@ function isTimeInRange(time,start,end){
   if(end && t>end) return false;
   return true;
 }
-function isDateTimeInReportRange(rowDate,rowTime,f){
-  const d=String(rowDate||'');
-  if(!d || d<f.startDate || d>f.endDate) return false;
-  const t=String(rowTime||'00:00').slice(0,5);
-  if(f.start && d===f.startDate && t<f.start) return false;
-  if(f.end && d===f.endDate && t>f.end) return false;
-  return true;
-}
-
-function safeSetText(id, value){
-  const el=document.getElementById(id);
-  if(el) el.textContent=value;
-}
-function getExpenseListForProfit(){
-  return loadExpenses().filter(e=>e && e.date);
-}
-function renderProfitSummary(){
-  const today=todayStr();
-  const month=monthStr();
-  const orders=activeReportOrders().filter(o=>!o.refunded);
-  const refunds=activeReportRefunds();
-  const expenses=getExpenseListForProfit();
-
-  const todaySales=orders.filter(o=>o.date===today).reduce((s,o)=>s+Number(o.total||0),0);
-  const todayRefund=refunds.filter(r=>r.date===today).reduce((s,r)=>s+Number(r.total||0),0);
-  const todayExpense=expenses.filter(e=>e.date===today).reduce((s,e)=>s+Number(e.amount||0),0);
-  const todayNet=todaySales-todayRefund-todayExpense;
-
-  const monthSales=orders.filter(o=>String(o.date||'').startsWith(month)).reduce((s,o)=>s+Number(o.total||0),0);
-  const monthRefund=refunds.filter(r=>String(r.date||'').startsWith(month)).reduce((s,r)=>s+Number(r.total||0),0);
-  const monthExpense=expenses.filter(e=>String(e.date||'').startsWith(month)).reduce((s,e)=>s+Number(e.amount||0),0);
-  const monthNet=monthSales-monthRefund-monthExpense;
-
-  safeSetText('profitTodaySales', money(todaySales));
-  safeSetText('profitTodayRefund', money(todayRefund));
-  safeSetText('profitTodayExpense', money(todayExpense));
-  safeSetText('profitTodayNet', money(todayNet));
-  safeSetText('profitMonthSales', money(monthSales));
-  safeSetText('profitMonthRefund', money(monthRefund));
-  safeSetText('profitMonthExpense', money(monthExpense));
-  safeSetText('profitMonthNet', money(monthNet));
-}
-
 function renderReportStaffOptions(){
   const sel=$('#reportStaff');
   if(!sel) return;
@@ -1764,13 +1433,12 @@ function renderReport(){
   purgeInvalidEmptyOrders();
   state.orders.forEach(ensureOrderPerformance);
   renderReportStaffOptions();
-  const f=reportFilterValues(), month=f.startDate.slice(0,7);
-  renderProfitSummary();
-  const rangeText=`${f.startDate}～${f.endDate}${f.start||f.end?' '+(f.start||'00:00')+'～'+(f.end||'23:59'):' 全日'}`;
+  const f=reportFilterValues(), month=f.date.slice(0,7);
+  const rangeText=`${f.date}${f.start||f.end?' '+(f.start||'00:00')+'～'+(f.end||'23:59'):' 全日'}`;
   const reportOrders=activeReportOrders();
   const reportRefunds=activeReportRefunds();
-  const rangeOrders=reportOrders.filter(o=>!o.refunded&&isDateTimeInReportRange(o.date,o.time,f));
-  const rangeRefunds=reportRefunds.filter(r=>isDateTimeInReportRange(r.date,r.time,f));
+  const rangeOrders=reportOrders.filter(o=>o.date===f.date&&!o.refunded&&isTimeInRange(o.time,f.start,f.end));
+  const rangeRefunds=reportRefunds.filter(r=>r.date===f.date&&isTimeInRange(r.time,f.start,f.end));
   $('#daySalesLabel').textContent='區間營業額';
   $('#daySales').textContent=money(rangeOrders.reduce((s,o)=>s+o.total,0));
   $('#dayRefund').textContent=money(rangeRefunds.reduce((s,o)=>s+o.total,0));
@@ -1778,7 +1446,6 @@ function renderReport(){
   $('#payCash').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='現金').reduce((s,o)=>s+o.total,0));
   $('#payTransfer').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='轉帳').reduce((s,o)=>s+o.total,0));
   $('#payLine').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='LINE Pay').reduce((s,o)=>s+o.total,0));
-  $('#payRedeem').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='集點卡兌換').reduce((s,o)=>s+o.total,0));
   const personal=rangeOrders.filter(o=>o.assignedDesignerId===f.staffId);
   $('#personalSales').textContent=money(personal.reduce((s,o)=>s+o.total,0));
   $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
@@ -1802,7 +1469,7 @@ function renderReport(){
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成</div><div>時間</div><div>狀態</div></div>${rows.map(r=>r.kind==='sale'?`<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${money(r.commission||0)}</div><div>${r.time}</div><div>${r.assignedDesignerId?'已掛業績':'未掛業績'}</div></div>`:`<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
 }
 document.addEventListener('change',function(e){
-  if(e.target && ['reportStartDate','reportEndDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
+  if(e.target && ['reportDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
 });
 
 
@@ -1964,8 +1631,7 @@ async function resetAllDataForGoLive(){
   ITEM_DIRTY=false;
   STAFF_DIRTY=false;
   ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
-  const startDateEl=$('#reportStartDate'); if(startDateEl) startDateEl.value=todayStr();
-  const endDateEl=$('#reportEndDate'); if(endDateEl) endDateEl.value=todayStr();
+  const dateEl=$('#reportDate'); if(dateEl) dateEl.value=todayStr();
 
   // 先把本機固定成乾淨狀態，再重建/覆蓋雲端 main row。
   localStorage.setItem(KEY, JSON.stringify(state));
@@ -2398,7 +2064,6 @@ async function init(){
   renderCashier();
   renderAssign();
   renderReport();
-  renderExpenses();
   renderManage();
   if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes' || isBossMode()){
     closeAccessGate();
