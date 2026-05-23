@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.91 BOSS報表查詢修正版</title>
+<title>OBA Hair V11.0.92 正式版 個人業績簡化版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -293,12 +293,6 @@ const DEFAULT_BRANCH_NAME = "總店";
       </div>
       <div class="card">
         <div class="section-title">個人業績</div>
-        <div class="stats">
-          <div class="stat"><div class="k">選定員工業績</div><div class="v" id="personalSales">$0</div></div>
-          <div class="stat"><div class="k">選定員工抽成</div><div class="v" id="personalCommission">$0</div></div>
-          <div class="stat"><div class="k">選定員工筆數</div><div class="v" id="personalCount">0</div></div>
-        </div>
-        <div class="space"></div>
         <div class="stats" id="monthlyStaffStats">
           <div class="stat"><div class="k">員工本月業績 / 抽成</div><div class="v">$0 / $0</div></div>
         </div>
@@ -1787,10 +1781,6 @@ function renderReport(){
   $('#payTransfer').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='轉帳').reduce((s,o)=>s+o.total,0));
   $('#payLine').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='LINE Pay').reduce((s,o)=>s+o.total,0));
   $('#payRedeem').textContent=money(rangeOrders.filter(o=>o.paymentMethod==='集點卡兌換').reduce((s,o)=>s+o.total,0));
-  const personal=rangeOrders.filter(o=>o.assignedDesignerId===f.staffId);
-  $('#personalSales').textContent=money(personal.reduce((s,o)=>s+o.total,0));
-  $('#personalCommission').textContent=money(personal.reduce((s,o)=>s+(o.commission||0),0));
-  $('#personalCount').textContent=personal.length;
   const monthOrders=salaryBaseOrders().filter(o=>o.date.startsWith(month)&&!o.refunded);
   // V11.0.83：個人業績區改成依員工資料動態產生，不再只固定顯示 JEAN / ALAN。
   const monthlyBox=$('#monthlyStaffStats');
