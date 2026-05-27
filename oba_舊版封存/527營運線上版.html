@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.93 DEV 刷入紀錄版</title>
+<title>OBA Hair V11.0.92 正式版 個人業績簡化版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -25,14 +25,6 @@
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{border:1px solid var(--line);background:#fcfbfa;border-radius:18px;padding:14px}.stat .k{font-size:13px;color:var(--muted);font-weight:800}.stat .v{font-size:22px;font-weight:900;margin-top:6px}
 .table{border:1px solid var(--line);border-radius:18px;overflow:hidden}.tr{display:grid;grid-template-columns:1.2fr .8fr .8fr .8fr .8fr .7fr auto;gap:10px;align-items:center;padding:12px;border-bottom:1px solid #f1ece7;font-size:14px}.tr.header{background:#fbf8f5;font-weight:900;color:#555}.tr:last-child{border-bottom:none}
 .small-list{border:1px solid var(--line);border-radius:18px;padding:12px;background:#fcfbfa}.small-item{padding:8px 0;border-bottom:1px dashed #eee}.small-item:last-child{border-bottom:none}
-
-.assign-records{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#fcfbfa}
-.assign-record-row{display:grid;grid-template-columns:1.25fr .8fr .7fr .7fr .9fr .8fr .7fr;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid #f1ece7;font-size:13px}
-.assign-record-row:last-child{border-bottom:none}
-.assign-record-row.header{background:#fbf8f5;font-weight:900;color:#555}
-.assign-record-row .muted{color:var(--muted);font-size:12px}
-@media (max-width:900px){.assign-record-row{grid-template-columns:1fr}.assign-record-row.header{display:none}}
-
 .badge{display:inline-block;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;background:#f3f4f6}.badge-ok{background:#e8f5eb;color:#245f38}.badge-off{background:#f5f5f5;color:#666}
 .hidden{display:none!important}.owner-card{border:1px solid #d9cabf;background:#fffbf8;border-radius:18px;padding:12px}.owner-title{font-size:15px;font-weight:900;color:#7a4b2c}
 dialog{border:none;border-radius:22px;padding:0;width:min(860px,96vw);box-shadow:0 24px 90px rgba(0,0,0,.3)}dialog::backdrop{background:rgba(0,0,0,.35)}.modal{padding:18px;background:#fff}
@@ -255,13 +247,6 @@ const DEFAULT_BRANCH_NAME = "總店";
           <div class="stat"><div class="k">本張單金額 / 抽成</div><div class="v" id="myThisOrder">$0 / $0</div></div>
         </div>
         <div class="space"></div><div class="section-title" style="font-size:18px">我的今日單號列表</div><div class="small-list" id="myTodayOrderList">今天還沒有單</div>
-        <div class="space"></div>
-        <div class="section-title" style="font-size:18px">今日刷入紀錄</div>
-        <div class="assign-records" id="todayAssignLogs">
-          <div class="assign-record-row header">
-            <div>單號</div><div>員工</div><div>金額</div><div>抽成</div><div>刷入時間</div><div>操作人</div><div>狀態</div>
-          </div>
-        </div>
       </div>
       <div class="card">
         <div class="section-title">單據內容</div><div class="bill" id="assignPreview">請先掃描或輸入單號</div>
@@ -467,7 +452,7 @@ const defaultState={
   {id:'care_struct',category:'護理',name:'結構式頭皮護理',price:600,active:true},
   {id:'scalp_basic',category:'護理',name:'頭皮護理',price:300,active:true}
  ],
- orders:[],refunds:[],assignLogs:[]
+ orders:[],refunds:[]
 };
 const MASTER_PIN_6='123456'; // V11.0.70：提前宣告，避免 JS 啟動時中斷
 let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null;
@@ -1330,76 +1315,7 @@ $('#btnShareReceiptImage').onclick=async()=>{
 };
 $('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay(); $('#receiptDialog').close();};
 
-
-function ensureAssignLogs(){
-  if(!Array.isArray(state.assignLogs)) state.assignLogs=[];
-  return state.assignLogs;
-}
-function addAssignLog(order, staff, status='正常'){
-  const logs=ensureAssignLogs();
-  const now=new Date();
-  const existed=logs.find(l=>String(l.orderNo||'')===String(order.id||'') && String(l.staffId||'')===String(staff.id||'') && l.status!=='已退票' && l.status!=='作廢');
-  if(existed){
-    existed.amount=Number(order.total||0);
-    existed.commission=Number(order.commission||0);
-    existed.status=status;
-    existed.updatedAt=now.toISOString();
-    return existed;
-  }
-  const log={
-    id:'ASSIGN-'+Date.now()+'-'+Math.random().toString(16).slice(2),
-    orderNo:order.id,
-    staffId:staff.id,
-    staffName:staff.name,
-    amount:Number(order.total||0),
-    commission:Number(order.commission||0),
-    sourceType:'刷單入業績',
-    createdBy:CURRENT_CASHIER?.name || '刷單頁',
-    date:todayStr(),
-    time:nowTime(),
-    createdAt:now.toISOString(),
-    status:status,
-    remark:''
-  };
-  logs.unshift(log);
-  return log;
-}
-function markAssignLogsRefunded(order, reason=''){
-  const logs=ensureAssignLogs();
-  logs.forEach(l=>{
-    if(String(l.orderNo||'')===String(order.id||'')){
-      l.status='已退票';
-      l.voidedAt=new Date().toISOString();
-      l.voidedBy=CURRENT_CASHIER?.name || '前台操作';
-      l.remark=reason || l.remark || '';
-    }
-  });
-}
-function renderTodayAssignLogs(){
-  const box=$('#todayAssignLogs');
-  if(!box) return;
-  const today=todayStr();
-  const logs=ensureAssignLogs()
-    .filter(l=>l.date===today)
-    .sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  const header=`<div class="assign-record-row header"><div>單號</div><div>員工</div><div>金額</div><div>抽成</div><div>刷入時間</div><div>操作人</div><div>狀態</div></div>`;
-  if(!logs.length){
-    box.innerHTML=header+`<div class="assign-record-row"><div>今天還沒有刷入紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
-    return;
-  }
-  box.innerHTML=header+logs.map(l=>`
-    <div class="assign-record-row">
-      <div><strong>${escapeHtmlText(l.orderNo||'')}</strong></div>
-      <div>${escapeHtmlText(l.staffName||l.staffId||'')}</div>
-      <div>${money(l.amount||0)}</div>
-      <div>${money(l.commission||0)}</div>
-      <div>${escapeHtmlText(l.time||'')}</div>
-      <div>${escapeHtmlText(l.createdBy||'-')}</div>
-      <div><span class="badge ${l.status==='正常'?'badge-ok':'badge-off'}">${escapeHtmlText(l.status||'正常')}</span></div>
-    </div>`).join('');
-}
-
-function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats();renderTodayAssignLogs()}
+function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats()}
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
 function renderAssignPreview(){
   const code=$('#assignOrderNo').value.trim();
@@ -1447,7 +1363,6 @@ $('#btnAssignOrder').onclick=()=>{
   order.assignedDesignerName=staff.name;
   order.commission=calcCommission(order,staff.id);
   order.assignedAt=new Date().toISOString();
-  addAssignLog(order,staff,'正常');
   LAST_ASSIGNED_ORDER_NO=order.id;
   const reportStaff=$('#reportStaff');
   if(reportStaff) reportStaff.value=staff.id;
@@ -1467,7 +1382,6 @@ function renderMyStats(){
   $('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(todayOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${todayOrders.length}`;
   $('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(monthOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${monthOrders.length}`;
   $('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單';
-  renderTodayAssignLogs();
 }
 
 function openRefund(code=''){ if(guardBossAction()) return; $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
@@ -1532,7 +1446,6 @@ $('#btnDoRefund').onclick=()=>{
   order.refunded=true;
   order.refundedAt=new Date().toISOString();
   order.refundReason=reason;
-  markAssignLogsRefunded(order,reason);
   state.refunds.unshift({orderId:order.id,date:todayStr(),time:nowTime(),total:Number(order.total||0),reason:reason,by:CURRENT_CASHIER?.name||'前台操作',createdAt:new Date().toISOString()});
   if(LAST_ASSIGNED_ORDER_NO===order.id) LAST_ASSIGNED_ORDER_NO='';
   saveState(true);
@@ -1849,15 +1762,6 @@ function renderReportStaffOptions(){
   sel.innerHTML=staffList.map(s=>`<option value="${s.id}" ${s.id===current?'selected':''}>${s.name}</option>`).join('');
   if(!staffList.find(s=>s.id===sel.value) && staffList[0]) sel.value=staffList[0].id;
 }
-
-function showStaffSalesDetail(staffId, month){
-  const staff=staffById(staffId);
-  const list=salaryBaseOrders().filter(o=>o.assignedDesignerId===staffId && o.date.startsWith(month) && !o.refunded);
-  if(!list.length){ alert((staff?.name||staffId)+' 這個月份沒有業績明細'); return; }
-  const lines=list.map(o=>`${o.id}｜${o.date} ${o.time||''}｜${money(o.total||0)}｜抽成 ${money(o.commission||0)}`);
-  alert(`${staff?.name||staffId} 業績明細\n\n`+lines.join('\n'));
-}
-
 function renderReport(){
   purgeInvalidEmptyOrders();
   state.orders.forEach(ensureOrderPerformance);
@@ -1887,7 +1791,7 @@ function renderReport(){
           const list=monthOrders.filter(o=>o.assignedDesignerId===s.id);
           const sales=list.reduce((sum,o)=>sum+Number(o.total||0),0);
           const commission=list.reduce((sum,o)=>sum+Number(o.commission||0),0);
-          return `<div class="stat"><div class="k">${s.name} 業績 / 抽成 / 筆數</div><div class="v">${money(sales)} / ${money(commission)} / ${list.length}</div><div class="space"></div><button class="btn btn-soft" type="button" onclick="showStaffSalesDetail('${String(s.id).replace(/'/g,'\\\'')}', '${month}')">查看明細</button></div>`;
+          return `<div class="stat"><div class="k">${s.name} 業績 / 抽成 / 筆數</div><div class="v">${money(sales)} / ${money(commission)} / ${list.length}</div></div>`;
         }).join('')
       : '<div class="stat"><div class="k">員工本月業績 / 抽成</div><div class="v">$0 / $0 / 0</div></div>';
   }
