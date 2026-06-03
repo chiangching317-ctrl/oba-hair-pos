@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.08 取消掛業績正式版</title>
+<title>OBA Hair V11.1.00 DEV 刷單身份切換版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -251,7 +251,7 @@ const DEFAULT_BRANCH_NAME = "總店";
         <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入密碼授權一次即可收銀。</div></div>
         <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" />
         <div class="space"></div>
-        <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-soft" id="btnUnassignOrder" type="button">取消掛業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
+        <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
         <div class="space"></div>
         <div class="section-title" style="font-size:18px">我的即時數據</div>
         <div class="stats">
@@ -1390,70 +1390,6 @@ function markAssignLogsRefunded(order, reason=''){
     }
   });
 }
-
-// V11.1.08 DEV：取消掛業績。只取消設計師業績，不作廢單據、不寫退票。
-function isValidUnassignPin(pin){
-  const p=String(pin||'').trim();
-  if(!p) return false;
-  // 總控 / 管理密碼可取消掛業績
-  if(String(state.managementPassword||'').trim()===p) return true;
-  // 店長 / 管理者 / 有 manage 權限的人可取消掛業績
-  const staff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===p) : null;
-  if(!staff) return false;
-  return !!(staff.owner || staff.systemRole==='管理者' || (Array.isArray(staff.permissions) && staff.permissions.includes('manage')));
-}
-function getUnassignOperatorName(pin){
-  const p=String(pin||'').trim();
-  if(String(state.managementPassword||'').trim()===p) return '總控';
-  const staff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===p) : null;
-  return staff?.name || CURRENT_CASHIER?.name || '店長';
-}
-function markAssignLogsUnassigned(order, reason='', operatorName='店長'){
-  const logs=ensureAssignLogs();
-  logs.forEach(l=>{
-    if(String(l.orderNo||'')===String(order.id||'') && l.status!=='已退票' && l.status!=='作廢'){
-      l.status='已取消掛業績';
-      l.unassignedAt=new Date().toISOString();
-      l.unassignedBy=operatorName;
-      l.remark=reason || l.remark || '取消掛業績';
-    }
-  });
-}
-async function unassignOrderPerformance(){
-  if(guardBossAction()) return;
-  const code=$('#assignOrderNo').value.trim();
-  const order=findOrderByCode(code);
-  if(!order){alert('找不到單號：'+code+'。請先掃描或輸入要取消掛業績的單號。');setTimeout(()=>$('#assignOrderNo').focus(),80);return;}
-  if(order.refunded){alert('這張單已退票，不需要取消掛業績。');clearAssignScanField();return;}
-  if(!order.assignedDesignerId){alert('這張單目前沒有掛業績，不需要取消。');clearAssignScanField();return;}
-  const oldName=order.assignedDesignerName || order.assignedDesignerId;
-  const ok=confirm('確認要取消這張單的掛業績？\n\n單號：'+order.id+'\n目前掛給：'+oldName+'\n\n注意：這不會退票、不會作廢單據，只會把業績改回「未掛業績」。');
-  if(!ok) return;
-  const pin = await askMaskedPassword('店長確認：取消掛業績', '請輸入店長 PIN 或總控密碼');
-  if(pin===null) return;
-  if(!isValidUnassignPin(pin)){alert('PIN 錯誤或沒有取消掛業績權限');return;}
-  const operatorName=getUnassignOperatorName(pin);
-  markAssignLogsUnassigned(order,'取消掛業績',operatorName);
-  order.unassignHistory = Array.isArray(order.unassignHistory) ? order.unassignHistory : [];
-  order.unassignHistory.unshift({
-    oldDesignerId:order.assignedDesignerId || '',
-    oldDesignerName:order.assignedDesignerName || '',
-    oldCommission:Number(order.commission||0),
-    by:operatorName,
-    at:new Date().toISOString(),
-    reason:'取消掛業績'
-  });
-  order.assignedDesignerId='';
-  order.assignedDesignerName='';
-  order.commission=0;
-  order.assignedAt='';
-  if(LAST_ASSIGNED_ORDER_NO===order.id) LAST_ASSIGNED_ORDER_NO='';
-  saveState(true);
-  renderAssign();
-  renderReport();
-  clearAssignScanField();
-  alert('已取消掛業績：'+oldName+' 的業績/抽成已扣回，單據仍然有效，可由正確員工重新刷入。');
-}
 function renderTodayAssignLogs(){
   const box=$('#todayAssignLogs');
   if(!box) return;
@@ -1614,7 +1550,7 @@ function renderAssignPreview(){
     return;
   }
   const commission=order.refunded ? 0 : calcCommission(order,selectedId);
-  $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?('已掛業績：'+(order.assignedDesignerName||order.assignedDesignerId)):'未掛業績')}</div></div>`;
+  $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;
   $('#assignShowNo').textContent=order.id;
   $('#assignShowTotal').textContent=order.refunded ? '$0' : money(order.total);
   $('#assignShowCommission').textContent=money(commission);
@@ -1629,7 +1565,6 @@ function clearAssignScanField(){
   setTimeout(()=>input.focus(),80);
 }
 $('#btnSwitchAssignStaff').onclick=()=>{switchAssignStaffIdentity()};
-$('#btnUnassignOrder').onclick=()=>{unassignOrderPerformance()};
 $('#btnAssignOrder').onclick=()=>{
   if(needAssignPinFirst()){
     const staff = promptAssignPinOnce();
