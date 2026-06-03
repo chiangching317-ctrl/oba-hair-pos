@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.09 登出連續掃碼正式版</title>
+<title>OBA Hair V11.1.10 薪資月份關帳正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -414,6 +414,19 @@ const DEFAULT_BRANCH_NAME = "總店";
 <dialog id="payDialog"><div class="modal"><h3>確認收款與出單</h3><div id="paySummary" class="note"></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnConfirmPay">確認收款並列印</button><button class="btn btn-soft" id="btnCancelPay">取消</button></div></div></dialog>
 <dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input id="refundOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" /><div class="space"></div><div class="label">退票原因</div><select id="refundReason" class="select"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input id="refundReasonOther" class="input hidden" placeholder="請輸入其他原因" /><div class="space"></div><div id="refundPreview" class="bill">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
 <dialog id="reprintDialog"><div class="modal"><h3>補印單據</h3><div class="note">已經開過的單都可以補印；補印不會新增業績、不會改單號。選日期後，直接點選下面單據即可補印。</div><div class="space"></div><div class="grid2"><div><div class="label">指定日期</div><input id="reprintDate" class="input" type="date" /></div><div><div class="label">輸入單號搜尋（可不填）</div><input id="reprintOrderNo" class="input" placeholder="可留空，直接從列表選單" /></div></div><div class="space"></div><div class="bill" id="reprintList">請選日期，或直接點選單據補印</div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseReprint">關閉</button></div></div></dialog>
+<dialog id="salaryCloseDialog"><div class="modal">
+  <h3>薪資月份封帳</h3>
+  <div class="note">選擇要結算的月份。封帳後，該月份單據不可再刷入業績；歷史單據與報表仍會保留。</div>
+  <div class="space"></div>
+  <div><div class="label">結算月份</div><select id="salaryCloseMonth" class="select"></select></div>
+  <div class="space"></div>
+  <div class="bill" id="salaryClosedMonthList">尚未讀取已結算月份</div>
+  <div class="space"></div>
+  <div class="row">
+    <button class="btn btn-ok" id="btnConfirmSalaryMonthClose" type="button">確認封帳</button>
+    <button class="btn btn-soft" id="btnCancelSalaryMonthClose" type="button">取消</button>
+  </div>
+</div></dialog>
 
 <dialog id="redeemDialog"><div class="modal">
   <h3>集點卡兌換</h3>
@@ -1656,6 +1669,13 @@ $('#btnAssignOrder').onclick=()=>{
   const staffId=$('#assignDesigner').value||getAssignLoginStaff()?.id||'';
   const order=findOrderByCode(code);
   if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
+  // V11.1.10：已封帳月份不可再刷入業績，避免薪資結算後被補刷改動。
+  if(isOrderMonthClosedForAssign(order)){
+    const m=orderMonthKey(order);
+    alert('此單據所屬月份 '+m+' 已完成薪資結算，不能再刷入業績。\n如有特殊情況，請由店長另外處理。');
+    clearAssignScanField();
+    return;
+  }
   if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return}
   // V11.0.82：薪水標準保護。同一張單已掛業績後，不可重複刷入，避免薪資/抽成被覆蓋。
   if(order.assignedDesignerId){
@@ -2008,6 +2028,85 @@ function isAfterStamp(value, stamp){
   if(!value) return false;
   return String(value) > String(stamp);
 }
+function ensureClosedSalaryMonths(){
+  if(!Array.isArray(state.closedSalaryMonths)) state.closedSalaryMonths=[];
+  state.closedSalaryMonths=[...new Set(state.closedSalaryMonths.map(m=>String(m||'').slice(0,7)).filter(m=>/^\d{4}-\d{2}$/.test(m)))].sort();
+  return state.closedSalaryMonths;
+}
+function orderMonthKey(order){
+  const dateText=String(order?.date||'').slice(0,10);
+  if(/^\d{4}-\d{2}/.test(dateText)) return dateText.slice(0,7);
+  const idText=String(order?.id||order?.orderNo||'');
+  const m=idText.match(/OBA-(\d{4})(\d{2})(\d{2})/i);
+  if(m) return `${m[1]}-${m[2]}`;
+  return '';
+}
+function currentMonthDash(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function previousMonthDash(){
+  const d=new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth()-1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function monthAdd(monthText, offset){
+  const m=String(monthText||'').match(/^(\d{4})-(\d{2})$/);
+  const d=m ? new Date(Number(m[1]), Number(m[2])-1, 1) : new Date();
+  d.setMonth(d.getMonth()+offset);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function isOrderMonthClosedForAssign(order){
+  const m=orderMonthKey(order);
+  return !!m && ensureClosedSalaryMonths().includes(m);
+}
+function getDefaultSalaryCloseMonth(){
+  const end=$('#reportEndDate')?.value || '';
+  const start=$('#reportStartDate')?.value || '';
+  const current=currentMonthDash();
+  const endMonth=/^\d{4}-\d{2}/.test(end) ? end.slice(0,7) : '';
+  const startMonth=/^\d{4}-\d{2}/.test(start) ? start.slice(0,7) : '';
+  if(endMonth && endMonth <= current) return endMonth;
+  if(startMonth && startMonth <= current) return startMonth;
+  return previousMonthDash();
+}
+function renderSalaryClosedMonthList(){
+  const box=$('#salaryClosedMonthList');
+  if(!box) return;
+  const closed=ensureClosedSalaryMonths();
+  box.innerHTML=closed.length ? `<strong>已封帳月份</strong><br>${closed.map(m=>`✓ ${m}`).join('<br>')}` : '目前尚未封帳任何月份。';
+}
+function openSalaryCloseDialog(){
+  const sel=$('#salaryCloseMonth');
+  if(!sel) return;
+  const base=getDefaultSalaryCloseMonth();
+  const months=[];
+  for(let i=-13;i<=1;i++) months.push(monthAdd(currentMonthDash(), i));
+  const unique=[...new Set([base, ...months])].sort().reverse();
+  sel.innerHTML=unique.map(m=>`<option value="${m}" ${m===base?'selected':''}>${m}</option>`).join('');
+  renderSalaryClosedMonthList();
+  $('#salaryCloseDialog')?.showModal();
+}
+async function closeSalaryMonth(monthText){
+  if(guardBossAction()) return false;
+  const month=String(monthText||'').slice(0,7);
+  if(!/^\d{4}-\d{2}$/.test(month)){alert('請選擇正確的結算月份');return false;}
+  ensureClosedSalaryMonths();
+  if(state.closedSalaryMonths.includes(month)){
+    alert(month+' 已經封帳過，不需要重複封帳。');
+    return false;
+  }
+  state.closedSalaryMonths.push(month);
+  state.closedSalaryMonths.sort();
+  state.salaryLastClosedMonth=month;
+  state.salaryClosedAt=new Date().toISOString();
+  localStorage.setItem(KEY, JSON.stringify(state));
+  await saveState(true);
+  refreshAllScreens();
+  return true;
+}
+
 function salaryBaseOrders(){
   // 本月/個人薪資統計要同時避開：測試清空前舊單、正式薪資結算前舊單。
   const resetAt = newestStamp(newestStamp(state.lastResetAt, getLocalResetMarker()), state.salaryResetAt);
@@ -2315,28 +2414,30 @@ $('#btnResetAll').onclick=async()=>{
   }
 }
 
-async function closeSalaryPeriod(){
-  if(guardBossAction()) return false;
-  state.salaryResetAt=new Date().toISOString();
-  state.cart=[];
-  state.pendingPay='';
-  state.pendingCheckoutCart=null;
-  CURRENT_CASHIER=null;
-  LAST_ASSIGNED_ORDER_NO='';
-  ['assignOrderNo','refundOrderNo'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
-  localStorage.setItem(KEY, JSON.stringify(state));
-  await saveState(true);
-  refreshAllScreens();
-  return true;
-}
 const salaryBtn=$('#btnSalaryClose');
 if(salaryBtn){
-  salaryBtn.onclick=async()=>{
+  salaryBtn.onclick=()=>{
     if(guardBossAction()) return;
-    if(!confirm('確定要做薪資結算歸零嗎？正式營運後使用：歷史訂單會保留，但本期薪資/本月個人業績會從現在重新計算。'))return;
-    if(!confirm('再次確認：這不是刪單，是把現在設為新的薪資起算點。'))return;
-    const ok=await closeSalaryPeriod();
-    if(ok) alert('薪資結算已歸零：歷史訂單保留，本期個人業績與抽成從現在重新計算。');
+    openSalaryCloseDialog();
+  };
+}
+const salaryCloseCancelBtn=$('#btnCancelSalaryMonthClose');
+if(salaryCloseCancelBtn){
+  salaryCloseCancelBtn.onclick=()=>$('#salaryCloseDialog')?.close();
+}
+const salaryCloseConfirmBtn=$('#btnConfirmSalaryMonthClose');
+if(salaryCloseConfirmBtn){
+  salaryCloseConfirmBtn.onclick=async()=>{
+    if(guardBossAction()) return;
+    const month=$('#salaryCloseMonth')?.value || '';
+    if(!month){alert('請先選擇結算月份');return;}
+    if(!confirm('確認要將 '+month+' 薪資月份封帳嗎？\n\n封帳後，該月份單據不可再刷入業績；歷史單據與報表仍會保留。')) return;
+    if(!confirm('再次確認：'+month+' 封帳後，一般刷單不能再補刷這個月份的業績。')) return;
+    const ok=await closeSalaryMonth(month);
+    if(ok){
+      $('#salaryCloseDialog')?.close();
+      alert(month+' 已完成薪資月份封帳，該月份不可再刷入業績。');
+    }
   };
 }
 function isPhoneDevice(){
