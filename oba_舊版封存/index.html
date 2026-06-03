@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.0.93 DEV 刷入紀錄版</title>
+<title>OBA Hair V11.1.09 登出連續掃碼正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -240,13 +240,18 @@ const DEFAULT_BRANCH_NAME = "總店";
     <div class="shell">
       <div class="card">
         <div class="section-title">刷單入業績</div>
-        <div class="label">目前刷單員工</div><select id="assignDesigner" class="select"></select>
+        <div class="label">目前刷單員工</div>
+        <div class="row">
+          <select id="assignDesigner" class="select" style="flex:1;min-width:220px"></select>
+          <button class="btn btn-soft" id="btnSwitchAssignStaff" type="button">登出</button>
+        </div>
+        <div class="note" id="assignIdentityNote">未登入：請先選擇員工，刷單時會要求輸入自己的 PIN。</div>
         <div class="space"></div>
         <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
         <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入密碼授權一次即可收銀。</div></div>
         <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" />
         <div class="space"></div>
-        <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
+        <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-soft" id="btnUnassignOrder" type="button">取消掛業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
         <div class="space"></div>
         <div class="section-title" style="font-size:18px">我的即時數據</div>
         <div class="stats">
@@ -470,7 +475,7 @@ const defaultState={
  orders:[],refunds:[],assignLogs:[]
 };
 const MASTER_PIN_6='123456'; // V11.0.70：提前宣告，避免 JS 啟動時中斷
-let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null;
+let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null, CURRENT_LOGIN_LEVEL='staff';
 
 // V11.0.64：這版第一次開啟時，把密碼與密碼統一重設成 123456，之後可自行進管理頁修改。
 const PIN_MIGRATE_KEY='oba_hair_v11064_pin_reset_done';
@@ -976,8 +981,18 @@ function applyBossMode(){
   renderReport();
 }
 
+
+function markOwnerLoginLevel(){
+  CURRENT_LOGIN_LEVEL='owner';
+}
+function markStaffLoginLevel(){
+  CURRENT_LOGIN_LEVEL='staff';
+}
+
 function isValidManagerPin(pin){
-  return isValidPinForTab(pin, 'manage');
+  const ok = isValidPinForTab(pin, 'manage');
+  if(ok) CURRENT_LOGIN_LEVEL='manage';
+  return ok;
 }
 function isValidPinForTab(pin, targetTab){
   const p=String(pin||'').trim();
@@ -1354,7 +1369,7 @@ function addAssignLog(order, staff, status='正常'){
     amount:Number(order.total||0),
     commission:Number(order.commission||0),
     sourceType:'刷單入業績',
-    createdBy:CURRENT_CASHIER?.name || '刷單頁',
+    createdBy:getAssignLoginStaff()?.name || '刷單頁',
     date:todayStr(),
     time:nowTime(),
     createdAt:now.toISOString(),
@@ -1375,18 +1390,103 @@ function markAssignLogsRefunded(order, reason=''){
     }
   });
 }
+
+// V11.1.08 DEV：取消掛業績。只取消設計師業績，不作廢單據、不寫退票。
+function isValidUnassignPin(pin){
+  const p=String(pin||'').trim();
+  if(!p) return false;
+  // 總控 / 管理密碼可取消掛業績
+  if(String(state.managementPassword||'').trim()===p) return true;
+  // 店長 / 管理者 / 有 manage 權限的人可取消掛業績
+  const staff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===p) : null;
+  if(!staff) return false;
+  return !!(staff.owner || staff.systemRole==='管理者' || (Array.isArray(staff.permissions) && staff.permissions.includes('manage')));
+}
+function getUnassignOperatorName(pin){
+  const p=String(pin||'').trim();
+  if(String(state.managementPassword||'').trim()===p) return '總控';
+  const staff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===p) : null;
+  return staff?.name || CURRENT_CASHIER?.name || '店長';
+}
+function markAssignLogsUnassigned(order, reason='', operatorName='店長'){
+  const logs=ensureAssignLogs();
+  logs.forEach(l=>{
+    if(String(l.orderNo||'')===String(order.id||'') && l.status!=='已退票' && l.status!=='作廢'){
+      l.status='已取消掛業績';
+      l.unassignedAt=new Date().toISOString();
+      l.unassignedBy=operatorName;
+      l.remark=reason || l.remark || '取消掛業績';
+    }
+  });
+}
+async function unassignOrderPerformance(){
+  if(guardBossAction()) return;
+  const code=$('#assignOrderNo').value.trim();
+  const order=findOrderByCode(code);
+  if(!order){alert('找不到單號：'+code+'。請先掃描或輸入要取消掛業績的單號。');setTimeout(()=>$('#assignOrderNo').focus(),80);return;}
+  if(order.refunded){alert('這張單已退票，不需要取消掛業績。');clearAssignScanField();return;}
+  if(!order.assignedDesignerId){alert('這張單目前沒有掛業績，不需要取消。');clearAssignScanField();return;}
+  const oldName=order.assignedDesignerName || order.assignedDesignerId;
+  const ok=confirm('確認要取消這張單的掛業績？\n\n單號：'+order.id+'\n目前掛給：'+oldName+'\n\n注意：這不會退票、不會作廢單據，只會把業績改回「未掛業績」。');
+  if(!ok) return;
+  const pin = await askMaskedPassword('店長確認：取消掛業績', '請輸入店長 PIN 或總控密碼');
+  if(pin===null) return;
+  if(!isValidUnassignPin(pin)){alert('PIN 錯誤或沒有取消掛業績權限');return;}
+  const operatorName=getUnassignOperatorName(pin);
+  markAssignLogsUnassigned(order,'取消掛業績',operatorName);
+  order.unassignHistory = Array.isArray(order.unassignHistory) ? order.unassignHistory : [];
+  order.unassignHistory.unshift({
+    oldDesignerId:order.assignedDesignerId || '',
+    oldDesignerName:order.assignedDesignerName || '',
+    oldCommission:Number(order.commission||0),
+    by:operatorName,
+    at:new Date().toISOString(),
+    reason:'取消掛業績'
+  });
+  order.assignedDesignerId='';
+  order.assignedDesignerName='';
+  order.commission=0;
+  order.assignedAt='';
+  if(LAST_ASSIGNED_ORDER_NO===order.id) LAST_ASSIGNED_ORDER_NO='';
+  saveState(true);
+  renderAssign();
+  renderReport();
+  clearAssignScanField();
+  alert('已取消掛業績：'+oldName+' 的業績/抽成已扣回，單據仍然有效，可由正確員工重新刷入。');
+}
 function renderTodayAssignLogs(){
   const box=$('#todayAssignLogs');
   if(!box) return;
+
   const today=todayStr();
-  const logs=ensureAssignLogs()
+
+  // V11.0.95：權限改用「登入者 CURRENT_CASHIER」判斷，不用刷單下拉選到誰來判斷。
+  // 避免一般員工把下拉選成 JEAN 就看到全部紀錄。
+  const loginStaff = getAssignLoginStaff();
+  const loginStaffId = loginStaff?.id || '';
+  const canViewAll = !!(
+    isBossMode() ||
+    loginStaff?.owner ||
+    loginStaff?.permissions?.includes('view_all') ||
+    loginStaff?.permissions?.includes('view_all_assign_logs')
+  );
+
+  let logs=ensureAssignLogs()
     .filter(l=>l.date===today)
     .sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+
+  if(!canViewAll){
+    logs = logs.filter(l=>String(l.staffId||'')===String(loginStaffId||''));
+  }
+
   const header=`<div class="assign-record-row header"><div>單號</div><div>員工</div><div>金額</div><div>抽成</div><div>刷入時間</div><div>操作人</div><div>狀態</div></div>`;
+
   if(!logs.length){
-    box.innerHTML=header+`<div class="assign-record-row"><div>今天還沒有刷入紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
+    const msg = canViewAll ? '今天還沒有刷入紀錄' : '今天沒有你的刷入紀錄';
+    box.innerHTML=header+`<div class="assign-record-row"><div>${msg}</div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
     return;
   }
+
   box.innerHTML=header+logs.map(l=>`
     <div class="assign-record-row">
       <div><strong>${escapeHtmlText(l.orderNo||'')}</strong></div>
@@ -1399,7 +1499,120 @@ function renderTodayAssignLogs(){
     </div>`).join('');
 }
 
-function renderAssign(){const sel=$('#assignDesigner');const currentVal=sel.value||'JEAN';const assignable=activeStaff().filter(s=>s.permissions.includes('assign'));sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');renderAssignPreview();renderMyStats();renderTodayAssignLogs()}
+
+function getAssignPinSessionKey(){
+  return 'oba_assign_pin_staff_id_v11099';
+}
+function getAssignPinStaffId(){
+  return sessionStorage.getItem(getAssignPinSessionKey()) || '';
+}
+function setAssignPinStaffId(staffId){
+  if(staffId) sessionStorage.setItem(getAssignPinSessionKey(), staffId);
+}
+function clearAssignPinStaffId(){
+  sessionStorage.removeItem(getAssignPinSessionKey());
+}
+function getAssignLoginStaff(){
+  const sid = getAssignPinStaffId();
+  if(sid) return staffById(sid);
+  return CURRENT_CASHIER || null;
+}
+function needAssignPinFirst(){
+  const loginStaff = getAssignLoginStaff();
+  if(loginStaff?.id) return false;
+  return true;
+}
+function promptAssignPinOnce(message='第一次刷單請輸入自己的 6 位數 PIN'){
+  const pin = prompt(message);
+  if(pin === null) return null;
+  const p = String(pin || '').trim();
+  const staff = activeStaff().find(s => s.permissions?.includes('assign') && String(s.pin || '') === p);
+  if(!staff){
+    alert('PIN 錯誤，請輸入自己的員工 PIN');
+    return null;
+  }
+  setAssignPinStaffId(staff.id);
+  CURRENT_CASHIER = {id:staff.id,name:staff.name,permissions:staff.permissions||[]};
+  CURRENT_LOGIN_LEVEL = 'staff';
+  updateCashierDisplay();
+  return staff;
+}
+function resetAssignPanelAfterLogout(){
+  const input=$('#assignOrderNo');
+  if(input) input.value='';
+  LAST_ASSIGNED_ORDER_NO='';
+  const preview=$('#assignPreview'); if(preview) preview.innerHTML='請先掃描或輸入單號';
+  const showNo=$('#assignShowNo'); if(showNo) showNo.textContent='--';
+  const showTotal=$('#assignShowTotal'); if(showTotal) showTotal.textContent='$0';
+  const showCommission=$('#assignShowCommission'); if(showCommission) showCommission.textContent='$0';
+  const myThis=$('#myThisOrder'); if(myThis) myThis.textContent='$0 / $0';
+  const today=$('#myTodayStats'); if(today) today.textContent='$0 / $0 / 0';
+  const month=$('#myMonthStats'); if(month) month.textContent='$0 / $0 / 0';
+  const list=$('#myTodayOrderList'); if(list) list.innerHTML='請先登入員工';
+}
+function switchAssignStaffIdentity(){
+  clearAssignPinStaffId();
+  CURRENT_LOGIN_LEVEL='staff';
+  CURRENT_CASHIER=null;
+  updateCashierDisplay();
+  resetAssignPanelAfterLogout();
+  renderAssign();
+  setTimeout(()=>$('#assignOrderNo')?.focus(),80);
+  alert('已登出刷單身份，下一位員工刷單時請輸入自己的 PIN。');
+}
+function renderAssignIdentityNote(){
+  const note=$('#assignIdentityNote');
+  if(!note) return;
+  const staff=getAssignLoginStaff();
+  note.textContent = staff?.name ? `目前刷單身份：${staff.name}。刷完請按「登出」，避免下一位看到個人業績。` : '未登入：請先選擇員工，刷單時會要求輸入自己的 PIN。';
+}
+
+function canLoginUserAssignForOthers(){
+  // 首次刷單 PIN 只建立員工身份，不給代刷他人權限。
+  return !!(
+    isBossMode() ||
+    CURRENT_LOGIN_LEVEL === 'owner' ||
+    CURRENT_LOGIN_LEVEL === 'manage'
+  );
+}
+function enforceAssignDesignerPermission(){
+  const sel=$('#assignDesigner');
+  if(!sel) return;
+  const loginStaff = getAssignLoginStaff();
+  const canAssignOthers = canLoginUserAssignForOthers();
+
+  if(!canAssignOthers && loginStaff?.id){
+    sel.value = loginStaff.id;
+    sel.disabled = true;
+    sel.title = '一般員工刷單時只能刷入自己的業績';
+  }else{
+    sel.disabled = false;
+    sel.title = '';
+  }
+}
+
+function renderAssign(){
+  const sel=$('#assignDesigner');
+  if(!sel) return;
+  const loginStaff = getAssignLoginStaff();
+  const canAssignOthers = canLoginUserAssignForOthers();
+  let assignable=activeStaff().filter(s=>s.permissions.includes('assign'));
+
+  // V11.0.99：未做首次刷單 PIN 前，先不讓用選單決定身份；刷單時會要求 PIN。
+  if(!canAssignOthers && loginStaff?.id){
+    assignable = assignable.filter(s=>String(s.id)===String(loginStaff.id));
+  }
+
+  const currentVal=(!canAssignOthers && loginStaff?.id) ? loginStaff.id : (sel.value||assignable[0]?.id||'');
+  sel.innerHTML=assignable.map(s=>`<option value="${s.id}" ${s.id===currentVal?'selected':''}>${s.name}</option>`).join('');
+  if(!sel.value && assignable[0]) sel.value=assignable[0].id;
+
+  enforceAssignDesignerPermission();
+  renderAssignPreview();
+  renderMyStats();
+  renderTodayAssignLogs();
+  renderAssignIdentityNote();
+}
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
 function renderAssignPreview(){
   const code=$('#assignOrderNo').value.trim();
@@ -1415,7 +1628,7 @@ function renderAssignPreview(){
     return;
   }
   const commission=order.refunded ? 0 : calcCommission(order,selectedId);
-  $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;
+  $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?('已掛業績：'+(order.assignedDesignerName||order.assignedDesignerId)):'未掛業績')}</div></div>`;
   $('#assignShowNo').textContent=order.id;
   $('#assignShowTotal').textContent=order.refunded ? '$0' : money(order.total);
   $('#assignShowCommission').textContent=money(commission);
@@ -1425,13 +1638,22 @@ function clearAssignScanField(){
   const input=$('#assignOrderNo');
   if(!input) return;
   input.value='';
+  LAST_ASSIGNED_ORDER_NO='';
   renderAssignPreview();
   renderMyStats();
   setTimeout(()=>input.focus(),80);
 }
+$('#btnSwitchAssignStaff').onclick=()=>{switchAssignStaffIdentity()};
+$('#btnUnassignOrder').onclick=()=>{unassignOrderPerformance()};
 $('#btnAssignOrder').onclick=()=>{
+  if(needAssignPinFirst()){
+    const staff = promptAssignPinOnce();
+    if(!staff) return;
+    renderAssign();
+  }
+  enforceAssignDesignerPermission();
   const code=$('#assignOrderNo').value.trim();
-  const staffId=$('#assignDesigner').value||'JEAN';
+  const staffId=$('#assignDesigner').value||getAssignLoginStaff()?.id||'';
   const order=findOrderByCode(code);
   if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
   if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return}
@@ -1454,12 +1676,21 @@ $('#btnAssignOrder').onclick=()=>{
   saveState(true);
   renderAssign();
   renderReport();
-  clearAssignScanField();
   alert('已成功掛入業績，報表已更新到 '+staff.name);
+  clearAssignScanField();
 }
 function renderMyStats(){
   state.orders.forEach(ensureOrderPerformance);
-  const id=$('#assignDesigner').value||'JEAN', today=todayStr(), month=monthStr();
+  enforceAssignDesignerPermission();
+  const loginStaff=getAssignLoginStaff();
+  if(!loginStaff?.id){
+    $('#myTodayStats').textContent='$0 / $0 / 0';
+    $('#myMonthStats').textContent='$0 / $0 / 0';
+    $('#myThisOrder').textContent='$0 / $0';
+    $('#myTodayOrderList').innerHTML='請先登入員工';
+    return;
+  }
+  const id=$('#assignDesigner').value||loginStaff.id, today=todayStr(), month=monthStr();
   const visibleOrders=activeReportOrders();
   const salaryOrders=salaryBaseOrders();
   const todayOrders=visibleOrders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded);
@@ -2336,10 +2567,14 @@ function verifyAccessPassword(){
   const loginStaff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===val) : null;
   if(isManagementPassword || loginStaff){
     window.USER_ROLE = isManagementPassword ? 'owner' : 'staff';
+    CURRENT_LOGIN_LEVEL = isManagementPassword ? 'owner' : 'staff';
+    CURRENT_CASHIER = loginStaff ? {id:loginStaff.id,name:loginStaff.name,permissions:loginStaff.permissions||[]} : null;
     sessionStorage.removeItem(BOSS_SESSION_KEY);
     sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
     closeAccessGate();
     applyDeviceAuthorizationMode();
+    updateCashierDisplay();
+    renderAssign();
     return;
   }
   if(val!==getAccessPassword()){
