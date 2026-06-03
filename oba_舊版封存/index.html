@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.10 薪資月份關帳正式版</title>
+<title>OBA Hair V11.1.12 刷單PIN登入保持正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -245,11 +245,11 @@ const DEFAULT_BRANCH_NAME = "總店";
           <select id="assignDesigner" class="select" style="flex:1;min-width:220px"></select>
           <button class="btn btn-soft" id="btnSwitchAssignStaff" type="button">登出</button>
         </div>
-        <div class="note" id="assignIdentityNote">未登入：請先選擇員工，刷單時會要求輸入自己的 PIN。</div>
+        <div class="note" id="assignIdentityNote">未登入：請先選擇員工，第一次刷單會要求自己的 PIN；登入後可連續刷單。</div>
         <div class="space"></div>
         <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
         <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入密碼授權一次即可收銀。</div></div>
-        <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" placeholder="掃描條碼或輸入 OBA-20260513-001" />
+        <div class="label">掃描 / 輸入單號</div><input id="assignOrderNo" class="input" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="掃描條碼或輸入 OBA-20260513-001" />
         <div class="space"></div>
         <div class="row"><button class="btn btn-primary" id="btnAssignOrder">確認入業績</button><button class="btn btn-soft" id="btnUnassignOrder" type="button">取消掛業績</button><button class="btn btn-danger" id="btnAssignRefund">退票</button></div>
         <div class="space"></div>
@@ -814,6 +814,7 @@ function refreshAllScreens(){
   updateCashierDisplay();
   renderCashier();
   renderAssign();
+  initAssignScannerFocusGuard();
   renderReport();
   renderExpenses();
   renderManage();
@@ -956,7 +957,15 @@ function ensureOrderPerformance(order){
 function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new Date(joinDate), now=new Date();const months=(now.getFullYear()-start.getFullYear())*12+(now.getMonth()-start.getMonth());return `${Math.floor(months/12)}年${months%12}個月`}
 function updateCashierDisplay(){ if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && !isBossMode()){ $('#cashierDisplay').textContent='未授權設備｜只能刷單入業績'; return; } $('#cashierDisplay').textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 本單經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 尚未登入'}
 function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
-function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
+function focusAssignScanInput(delay=80){
+  const input=$('#assignOrderNo');
+  const assignPanel=$('#tab-assign');
+  if(!input || !assignPanel || assignPanel.classList.contains('hidden')) return;
+  setTimeout(()=>{
+    try{ input.focus({preventScroll:true}); }catch(e){ input.focus(); }
+  },delay);
+}
+function focusScanIfNeeded(name){if(name==='assign')focusAssignScanInput(80)}
 
 // V11.0.40：檢視模式＋分店欄位預留＋歸零退票帳務（只可看報表，不可操作收款/退票/管理）
 const BOSS_PASSWORD = '269527';
@@ -1436,7 +1445,7 @@ async function unassignOrderPerformance(){
   if(guardBossAction()) return;
   const code=$('#assignOrderNo').value.trim();
   const order=findOrderByCode(code);
-  if(!order){alert('找不到單號：'+code+'。請先掃描或輸入要取消掛業績的單號。');setTimeout(()=>$('#assignOrderNo').focus(),80);return;}
+  if(!order){alert('找不到單號：'+code+'。請先掃描或輸入要取消掛業績的單號。');focusAssignScanInput(80);return;}
   if(order.refunded){alert('這張單已退票，不需要取消掛業績。');clearAssignScanField();return;}
   if(!order.assignedDesignerId){alert('這張單目前沒有掛業績，不需要取消。');clearAssignScanField();return;}
   const oldName=order.assignedDesignerName || order.assignedDesignerId;
@@ -1535,7 +1544,7 @@ function needAssignPinFirst(){
   if(loginStaff?.id) return false;
   return true;
 }
-function promptAssignPinOnce(message='第一次刷單請輸入自己的 6 位數 PIN'){
+function promptAssignPinOnce(message='請輸入自己的 6 位數 PIN（登入後可連續刷單）'){
   const pin = prompt(message);
   if(pin === null) return null;
   const p = String(pin || '').trim();
@@ -1564,20 +1573,24 @@ function resetAssignPanelAfterLogout(){
   const list=$('#myTodayOrderList'); if(list) list.innerHTML='請先登入員工';
 }
 function switchAssignStaffIdentity(){
+  // V11.1.12：刷單頁改為「登入一次 PIN 後可連續刷單」。
+  // 這顆按鈕現在只做登出，不再立刻要求下一位輸入 PIN。
   clearAssignPinStaffId();
   CURRENT_LOGIN_LEVEL='staff';
   CURRENT_CASHIER=null;
+  LAST_ASSIGNED_ORDER_NO='';
+  const input=$('#assignOrderNo');
+  if(input) input.value='';
   updateCashierDisplay();
-  resetAssignPanelAfterLogout();
   renderAssign();
-  setTimeout(()=>$('#assignOrderNo')?.focus(),80);
-  alert('已登出刷單身份，下一位員工刷單時請輸入自己的 PIN。');
+  setTimeout(()=>{ const el=$('#assignOrderNo'); if(el) el.focus(); },80);
+  alert('已登出刷單身份。下一位員工刷單時，系統會要求輸入自己的 PIN。');
 }
 function renderAssignIdentityNote(){
   const note=$('#assignIdentityNote');
   if(!note) return;
   const staff=getAssignLoginStaff();
-  note.textContent = staff?.name ? `目前刷單身份：${staff.name}。刷完請按「登出」，避免下一位看到個人業績。` : '未登入：請先選擇員工，刷單時會要求輸入自己的 PIN。';
+  note.textContent = staff?.name ? `目前刷單身份：${staff.name}（已登入）。可連續刷單；換人請按「登出」。` : '未登入：請先選擇員工，第一次刷單會要求自己的 PIN；登入後可連續刷單。';
 }
 
 function canLoginUserAssignForOthers(){
@@ -1654,7 +1667,52 @@ function clearAssignScanField(){
   LAST_ASSIGNED_ORDER_NO='';
   renderAssignPreview();
   renderMyStats();
-  setTimeout(()=>input.focus(),80);
+  focusAssignScanInput(80);
+}
+function isAssignTabActiveForScanner(){
+  const panel=$('#tab-assign');
+  return !!panel && !panel.classList.contains('hidden');
+}
+function shouldRouteScannerKey(e){
+  if(!isAssignTabActiveForScanner()) return false;
+  if(document.querySelector('dialog[open]')) return false;
+  const t=e.target;
+  const tag=(t && t.tagName || '').toLowerCase();
+  if(t && t.id==='assignOrderNo') return false;
+  if(['input','textarea','select','button'].includes(tag)) return false;
+  return true;
+}
+function initAssignScannerFocusGuard(){
+  if(window.__OBA_ASSIGN_SCANNER_GUARD__) return;
+  window.__OBA_ASSIGN_SCANNER_GUARD__=true;
+  let buffer='';
+  let timer=null;
+  const flush=()=>{
+    const code=buffer.trim();
+    buffer='';
+    if(!code) return;
+    const input=$('#assignOrderNo');
+    if(!input) return;
+    input.value=code;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    focusAssignScanInput(20);
+  };
+  document.addEventListener('keydown',function(e){
+    if(!shouldRouteScannerKey(e)) return;
+    if(e.key==='Enter'){
+      e.preventDefault();
+      flush();
+      return;
+    }
+    if(e.key && e.key.length===1){
+      buffer += e.key;
+      clearTimeout(timer);
+      timer=setTimeout(flush,120);
+    }
+  },true);
+  document.addEventListener('click',function(){
+    if(isAssignTabActiveForScanner()) focusAssignScanInput(60);
+  },true);
 }
 $('#btnSwitchAssignStaff').onclick=()=>{switchAssignStaffIdentity()};
 $('#btnUnassignOrder').onclick=()=>{unassignOrderPerformance()};
@@ -1668,7 +1726,7 @@ $('#btnAssignOrder').onclick=()=>{
   const code=$('#assignOrderNo').value.trim();
   const staffId=$('#assignDesigner').value||getAssignLoginStaff()?.id||'';
   const order=findOrderByCode(code);
-  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
+  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');focusAssignScanInput(80);return}
   // V11.1.10：已封帳月份不可再刷入業績，避免薪資結算後被補刷改動。
   if(isOrderMonthClosedForAssign(order)){
     const m=orderMonthKey(order);
@@ -2704,7 +2762,7 @@ function fillScannedCode(raw){
   const finalCode = normalizeOrderNoText(code);
   $('#assignOrderNo').value = finalCode;
   $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
-  setTimeout(()=>$('#assignOrderNo').focus(),80);
+  focusAssignScanInput(80);
   return true;
 }
 async function startCameraScan(){
