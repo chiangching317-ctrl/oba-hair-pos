@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.09 登出連續掃碼正式版</title>
+<title>OBA Hair V11.1.08 取消掛業績正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -243,9 +243,9 @@ const DEFAULT_BRANCH_NAME = "總店";
         <div class="label">目前刷單員工</div>
         <div class="row">
           <select id="assignDesigner" class="select" style="flex:1;min-width:220px"></select>
-          <button class="btn btn-soft" id="btnSwitchAssignStaff" type="button">登出</button>
+          <button class="btn btn-soft" id="btnSwitchAssignStaff" type="button">切換刷單身份</button>
         </div>
-        <div class="note" id="assignIdentityNote">未登入：請先選擇員工，刷單時會要求輸入自己的 PIN。</div>
+        <div class="note" id="assignIdentityNote">第一次刷單會要求輸入自己的 PIN。</div>
         <div class="space"></div>
         <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
         <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入密碼授權一次即可收銀。</div></div>
@@ -1537,34 +1537,20 @@ function promptAssignPinOnce(message='第一次刷單請輸入自己的 6 位數
   updateCashierDisplay();
   return staff;
 }
-function resetAssignPanelAfterLogout(){
-  const input=$('#assignOrderNo');
-  if(input) input.value='';
-  LAST_ASSIGNED_ORDER_NO='';
-  const preview=$('#assignPreview'); if(preview) preview.innerHTML='請先掃描或輸入單號';
-  const showNo=$('#assignShowNo'); if(showNo) showNo.textContent='--';
-  const showTotal=$('#assignShowTotal'); if(showTotal) showTotal.textContent='$0';
-  const showCommission=$('#assignShowCommission'); if(showCommission) showCommission.textContent='$0';
-  const myThis=$('#myThisOrder'); if(myThis) myThis.textContent='$0 / $0';
-  const today=$('#myTodayStats'); if(today) today.textContent='$0 / $0 / 0';
-  const month=$('#myMonthStats'); if(month) month.textContent='$0 / $0 / 0';
-  const list=$('#myTodayOrderList'); if(list) list.innerHTML='請先登入員工';
-}
 function switchAssignStaffIdentity(){
   clearAssignPinStaffId();
   CURRENT_LOGIN_LEVEL='staff';
   CURRENT_CASHIER=null;
-  updateCashierDisplay();
-  resetAssignPanelAfterLogout();
+  const staff = promptAssignPinOnce('請輸入要切換的員工 PIN');
+  if(!staff) return;
   renderAssign();
-  setTimeout(()=>$('#assignOrderNo')?.focus(),80);
-  alert('已登出刷單身份，下一位員工刷單時請輸入自己的 PIN。');
+  alert('已切換刷單身份：'+staff.name);
 }
 function renderAssignIdentityNote(){
   const note=$('#assignIdentityNote');
   if(!note) return;
   const staff=getAssignLoginStaff();
-  note.textContent = staff?.name ? `目前刷單身份：${staff.name}。刷完請按「登出」，避免下一位看到個人業績。` : '未登入：請先選擇員工，刷單時會要求輸入自己的 PIN。';
+  note.textContent = staff?.name ? `目前刷單身份：${staff.name}。如需換人，請按「切換刷單身份」。` : '第一次刷單會要求輸入自己的 PIN。';
 }
 
 function canLoginUserAssignForOthers(){
@@ -1638,7 +1624,6 @@ function clearAssignScanField(){
   const input=$('#assignOrderNo');
   if(!input) return;
   input.value='';
-  LAST_ASSIGNED_ORDER_NO='';
   renderAssignPreview();
   renderMyStats();
   setTimeout(()=>input.focus(),80);
@@ -1676,21 +1661,13 @@ $('#btnAssignOrder').onclick=()=>{
   saveState(true);
   renderAssign();
   renderReport();
-  alert('已成功掛入業績，報表已更新到 '+staff.name);
   clearAssignScanField();
+  alert('已成功掛入業績，報表已更新到 '+staff.name);
 }
 function renderMyStats(){
   state.orders.forEach(ensureOrderPerformance);
   enforceAssignDesignerPermission();
-  const loginStaff=getAssignLoginStaff();
-  if(!loginStaff?.id){
-    $('#myTodayStats').textContent='$0 / $0 / 0';
-    $('#myMonthStats').textContent='$0 / $0 / 0';
-    $('#myThisOrder').textContent='$0 / $0';
-    $('#myTodayOrderList').innerHTML='請先登入員工';
-    return;
-  }
-  const id=$('#assignDesigner').value||loginStaff.id, today=todayStr(), month=monthStr();
+  const id=$('#assignDesigner').value||getAssignLoginStaff()?.id||'JEAN', today=todayStr(), month=monthStr();
   const visibleOrders=activeReportOrders();
   const salaryOrders=salaryBaseOrders();
   const todayOrders=visibleOrders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded);
