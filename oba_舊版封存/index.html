@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.12 刷單PIN登入保持正式版</title>
+<title>OBA Hair V11.1.13 收據列印後自動關閉正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -1244,12 +1244,42 @@ function renderReceiptQr(orderId){
     alert('QR Code 產生失敗');
   }
 }
+let RECEIPT_AUTO_CLOSE_TIMER=null; // V11.1.13：列印後自動關閉收據視窗，避免單號/QR 長時間停留在畫面
+function clearReceiptAutoCloseTimer(){
+  if(RECEIPT_AUTO_CLOSE_TIMER){
+    clearTimeout(RECEIPT_AUTO_CLOSE_TIMER);
+    RECEIPT_AUTO_CLOSE_TIMER=null;
+  }
+}
+function closeReceiptAndReturnCashier(){
+  clearReceiptAutoCloseTimer();
+  CURRENT_CASHIER=null;
+  updateCashierDisplay();
+  const dialog=$('#receiptDialog');
+  if(dialog && dialog.open) dialog.close();
+  showTab('cashier');
+}
+function scheduleReceiptAutoClose(){
+  clearReceiptAutoCloseTimer();
+  RECEIPT_AUTO_CLOSE_TIMER=setTimeout(()=>{
+    closeReceiptAndReturnCashier();
+  },3000);
+}
 function openReceipt(order){
+  clearReceiptAutoCloseTimer();
   const redeemInfo = order.paymentMethod==='集點卡兌換' && order.redeemMeta
     ? `<div class="r"><span>客人</span><span>${order.redeemMeta.customer||'-'} / ${order.redeemMeta.uid4||'-'}</span></div>`
     : '';
   const typeText = order.paymentMethod==='集點卡兌換' ? '集點卡0元票' : order.paymentMethod;
-  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">${order.id}</div><div class="center">${order.date} ${order.time}｜${typeText}</div><div class="center">${order.branchName||DEFAULT_BRANCH_NAME}｜經手 ${order.cashierName||'-'}</div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:2px">謝謝光臨</div>`;$('#receiptImageActions')?.classList.add('hidden'); $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。'); const printBtn=$('#btnPrint'); if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';} LAST_RECEIPT_IMAGE_FILE=null; $('#receiptDialog').showModal();setTimeout(()=>renderReceiptQr(order.id),250)}
+  $('#printArea').innerHTML=`<h3>OBA HAIR</h3><div class="center">${order.id}</div><div class="center">${order.date} ${order.time}｜${typeText}</div><div class="center">${order.branchName||DEFAULT_BRANCH_NAME}｜經手 ${order.cashierName||'-'}</div>${redeemInfo}<div class="line"></div>${order.items.map(i=>`<div class="r"><span>${i.name}</span><span>${money(i.price)}</span></div>`).join('')}<div class="line"></div><div class="r"><strong>總金額</strong><strong>${money(order.total)}</strong></div><div id="receiptQr" class="qr-box"></div><div class="barcode-note">${order.id}</div><div class="center" style="margin-top:2px">謝謝光臨</div>`;
+  $('#receiptImageActions')?.classList.add('hidden');
+  $('#receiptImageHint') && ($('#receiptImageHint').textContent='按「一鍵列印 RawBT」會直接叫出 RawBT 送印；列印送出後，畫面會自動關閉回到收款頁。');
+  const printBtn=$('#btnPrint');
+  if(printBtn){printBtn.disabled=false; printBtn.textContent='一鍵列印 RawBT';}
+  LAST_RECEIPT_IMAGE_FILE=null;
+  $('#receiptDialog').showModal();
+  setTimeout(()=>renderReceiptQr(order.id),250);
+}
 let LAST_RECEIPT_IMAGE_FILE=null;
 async function makeReceiptImage(){
   try{
@@ -1343,9 +1373,10 @@ async function printReceiptByRawBT(){
     const canvas=await html2canvas($('#printArea'),{backgroundColor:'#ffffff',scale:3,useCORS:true,logging:false});
     const bytes=canvasToEscPosRaster(canvas);
     const b64=bytesToBase64(bytes);
-    $('#receiptImageHint').textContent='已送到 RawBT。若 RawBT 跳出確認畫面，直接按 PRINT。';
+    $('#receiptImageHint').textContent='已送到 RawBT。若 RawBT 跳出確認畫面，直接按 PRINT；本畫面 3 秒後自動關閉。';
     window.location.href='rawbt:base64,'+b64;
     setTimeout(()=>{btn.disabled=false;btn.textContent='一鍵列印 RawBT';},1200);
+    scheduleReceiptAutoClose();
   }catch(e){
     console.log(e);
     alert('RawBT 一鍵列印失敗，請確認 RawBT 已安裝並已連上印表機');
@@ -1365,7 +1396,7 @@ $('#btnShareReceiptImage').onclick=async()=>{
     }
   }catch(e){console.log(e);}
 };
-$('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay(); $('#receiptDialog').close();};
+$('#btnCloseReceipt').onclick=()=>closeReceiptAndReturnCashier();
 
 
 function ensureAssignLogs(){
