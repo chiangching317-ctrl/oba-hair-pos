@@ -2934,8 +2934,10 @@ init();
 <script>
 // V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
 
-// V11.0.41 防F12正式版：阻擋一般右鍵 / F12 / 檢視原始碼 / 儲存 / 列印快捷鍵（保留輸入框可選字）
+// V11.0.41 防F12正式版：本機(file://)允許F12，線上網址鎖定
 (function(){
+  const isLocalFile = location.protocol === 'file:' || /localhost|127\.0\.0\.1/i.test(location.hostname);
+  if(isLocalFile) return;
   if(window.__OBA_F12_PROTECT__) return;
   window.__OBA_F12_PROTECT__ = true;
   const blockMsg = 'OBA Hair 店內系統：此操作已鎖定';

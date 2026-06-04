@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.13 收據列印後自動關閉正式版</title>
+<title>OBA Hair V11.1.14 打卡功能正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -163,6 +163,11 @@ body.boss-mode .panel-readonly a{opacity:.55;pointer-events:none}
 .scan-status{font-weight:800;color:var(--muted);font-size:14px}
 
 
+/* V11.1.14：打卡頁面 */
+.timeclock-table .tr{grid-template-columns:.9fr .9fr .9fr .9fr 1fr}
+.timeclock-status{font-size:18px;font-weight:900;line-height:1.5}
+@media (max-width:900px){.timeclock-table .tr{grid-template-columns:1fr}}
+
 /* V11.1.04a DEV 損益報表顯示修正版：損益區塊固定放在支出頁。 */
 .expense-table .tr{grid-template-columns:.9fr .9fr 1fr 1.5fr 1.4fr}
 .expense-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
@@ -201,6 +206,7 @@ const DEFAULT_BRANCH_NAME = "總店";
   <div class="tabs">
     <button class="tab active" data-tab="cashier">收款出單</button>
     <button class="tab" data-tab="assign">刷單入業績</button>
+    <button class="tab" data-tab="timeclock">打卡</button>
     <button class="tab locked" data-tab="report">報表</button>
     <button class="tab locked" data-tab="expense">支出</button>
     <button class="tab locked" data-tab="manage">員工 / 品項 / 密碼</button>
@@ -277,6 +283,46 @@ const DEFAULT_BRANCH_NAME = "總店";
           <div class="stat"><div class="k">抽成</div><div class="v" id="assignShowCommission">$0</div></div>
         </div>
       </div>
+    </div>
+  </div>
+
+
+  <div class="panel hidden" id="tab-timeclock">
+    <div class="shell">
+      <div class="card">
+        <div class="section-title">員工打卡</div>
+        <div class="note">V11.1.14：打卡資料會跟系統資料一起同步；不會動到員工、品項、密碼、訂單資料。</div>
+        <div class="space"></div>
+        <div class="label">員工</div>
+        <select id="timeclockStaff" class="select"></select>
+        <div class="space"></div>
+        <div class="label">員工 PIN</div>
+        <input id="timeclockPin" class="input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="請輸入自己的 PIN" />
+        <div class="space"></div>
+        <div class="row">
+          <button class="btn btn-primary" id="btnClockIn" type="button">上班打卡</button>
+          <button class="btn btn-ok" id="btnClockOut" type="button">下班打卡</button>
+        </div>
+        <div class="note">同一位員工同一天只能上一筆上班與一筆下班；打錯先保留紀錄，之後再加主管修正功能。</div>
+      </div>
+      <div class="card">
+        <div class="section-title">今日狀態</div>
+        <div class="bill timeclock-status" id="timeclockStatus">請先選擇員工</div>
+        <div class="space"></div>
+        <div class="stats">
+          <div class="stat"><div class="k">今日上班</div><div class="v" id="timeclockTodayIn">--</div></div>
+          <div class="stat"><div class="k">今日下班</div><div class="v" id="timeclockTodayOut">--</div></div>
+          <div class="stat"><div class="k">今日工時</div><div class="v" id="timeclockTodayHours">--</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="space"></div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="section-title">今日打卡紀錄</div>
+        <button class="btn btn-soft" id="btnTimeclockRefresh" type="button">重新整理</button>
+      </div>
+      <div class="table timeclock-table" id="timeclockTable"></div>
     </div>
   </div>
 
@@ -485,7 +531,7 @@ const defaultState={
   {id:'care_struct',category:'護理',name:'結構式頭皮護理',price:600,active:true},
   {id:'scalp_basic',category:'護理',name:'頭皮護理',price:300,active:true}
  ],
- orders:[],refunds:[],assignLogs:[]
+ orders:[],refunds:[],assignLogs:[],timeClockLogs:[]
 };
 const MASTER_PIN_6='123456'; // V11.0.70：提前宣告，避免 JS 啟動時中斷
 let state=loadState(), pendingLockedTab='', pwdMode='enter', CURRENT_CASHIER=null, CURRENT_LOGIN_LEVEL='staff';
@@ -816,6 +862,7 @@ function refreshAllScreens(){
   renderAssign();
   initAssignScannerFocusGuard();
   renderReport();
+  renderTimeclock();
   renderExpenses();
   renderManage();
   applyBossMode();
@@ -957,6 +1004,7 @@ function ensureOrderPerformance(order){
 function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new Date(joinDate), now=new Date();const months=(now.getFullYear()-start.getFullYear())*12+(now.getMonth()-start.getMonth());return `${Math.floor(months/12)}年${months%12}個月`}
 function updateCashierDisplay(){ if(typeof isAssignOnlyDevice==='function' && isAssignOnlyDevice() && !isBossMode()){ $('#cashierDisplay').textContent='未授權設備｜只能刷單入業績'; return; } $('#cashierDisplay').textContent = CURRENT_CASHIER ? `現金 / 轉帳 / LINE Pay ｜ 本單經手人：${CURRENT_CASHIER.name}` : '現金 / 轉帳 / LINE Pay ｜ 尚未登入'}
 function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));document.querySelectorAll('.panel').forEach(p=>p.classList.add('hidden'));$('#tab-'+name).classList.remove('hidden')}
+function showTab(name){setActiveTab(name)}
 function focusAssignScanInput(delay=80){
   const input=$('#assignOrderNo');
   const assignPanel=$('#tab-assign');
@@ -1881,6 +1929,134 @@ $('#btnDoRefund').onclick=()=>{
   renderReport();
   $('#refundDialog').close();
   alert('已完成退票，業績與抽成已從報表扣回');
+}
+
+
+// ===== V11.1.14 正式版：員工打卡 =====
+function ensureTimeClockLogs(){
+  if(!Array.isArray(state.timeClockLogs)) state.timeClockLogs=[];
+  return state.timeClockLogs;
+}
+function timeclockStaffList(){
+  return activeStaff().filter(s=>s && s.active);
+}
+function timeclockRecordFor(staffId,date=todayStr()){
+  return ensureTimeClockLogs().find(r=>String(r.staffId)===String(staffId) && String(r.date)===String(date));
+}
+function timeDiffText(start,end){
+  if(!start || !end) return '--';
+  const [sh,sm]=String(start).split(':').map(Number);
+  const [eh,em]=String(end).split(':').map(Number);
+  if(!Number.isFinite(sh)||!Number.isFinite(sm)||!Number.isFinite(eh)||!Number.isFinite(em)) return '--';
+  let mins=(eh*60+em)-(sh*60+sm);
+  if(mins<0) mins+=24*60;
+  const h=Math.floor(mins/60), m=mins%60;
+  return `${h}小時${String(m).padStart(2,'0')}分`;
+}
+function verifyTimeclockPin(staffId){
+  const staff=staffById(staffId);
+  const pin=String($('#timeclockPin')?.value||'').trim();
+  if(!staff){ alert('請選擇員工'); return null; }
+  if(!pin){ alert('請輸入員工 PIN'); $('#timeclockPin')?.focus(); return null; }
+  const ok = String(staff.pin||'').trim()===pin || String(state.managementPassword||'').trim()===pin;
+  if(!ok){ alert('PIN 錯誤'); $('#timeclockPin').value=''; $('#timeclockPin')?.focus(); return null; }
+  return staff;
+}
+function renderTimeclock(){
+  bindTimeclockEvents();
+  ensureTimeClockLogs();
+  const staffSel=$('#timeclockStaff');
+  const staffList=timeclockStaffList();
+  if(staffSel){
+    const old=staffSel.value;
+    staffSel.innerHTML=staffList.map(s=>`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name||s.id)}</option>`).join('');
+    if(old && staffList.some(s=>String(s.id)===String(old))) staffSel.value=old;
+  }
+  updateTimeclockStatus();
+  renderTimeclockTable();
+}
+function updateTimeclockStatus(){
+  const staffId=$('#timeclockStaff')?.value || '';
+  const staff=staffById(staffId);
+  const rec=staffId ? timeclockRecordFor(staffId) : null;
+  const status=$('#timeclockStatus');
+  const inEl=$('#timeclockTodayIn'), outEl=$('#timeclockTodayOut'), hoursEl=$('#timeclockTodayHours');
+  if(!staff){
+    if(status) status.textContent='請先選擇員工';
+    if(inEl) inEl.textContent='--';
+    if(outEl) outEl.textContent='--';
+    if(hoursEl) hoursEl.textContent='--';
+    return;
+  }
+  const inTime=rec?.clockIn || '--';
+  const outTime=rec?.clockOut || '--';
+  if(inEl) inEl.textContent=inTime;
+  if(outEl) outEl.textContent=outTime;
+  if(hoursEl) hoursEl.textContent=rec?.clockIn && rec?.clockOut ? timeDiffText(rec.clockIn,rec.clockOut) : '--';
+  if(status){
+    if(!rec || !rec.clockIn) status.textContent=`${staff.name} 今天尚未上班打卡`;
+    else if(!rec.clockOut) status.textContent=`${staff.name} 已上班：${rec.clockIn}，尚未下班打卡`;
+    else status.textContent=`${staff.name} 今日已完成：${rec.clockIn} ～ ${rec.clockOut}`;
+  }
+}
+function renderTimeclockTable(){
+  const table=$('#timeclockTable');
+  if(!table) return;
+  const today=todayStr();
+  const logs=ensureTimeClockLogs().filter(r=>String(r.date)===today).sort((a,b)=>String(a.staffName||'').localeCompare(String(b.staffName||''),'zh-Hant'));
+  if(!logs.length){
+    table.innerHTML='<div class="tr"><div>今天還沒有打卡紀錄</div></div>';
+    return;
+  }
+  table.innerHTML='<div class="tr header"><div>員工</div><div>上班</div><div>下班</div><div>工時</div><div>狀態</div></div>'+logs.map(r=>{
+    const done=!!(r.clockIn && r.clockOut);
+    return `<div class="tr"><div>${escapeHtml(r.staffName||r.staffId)}</div><div>${escapeHtml(r.clockIn||'--')}</div><div>${escapeHtml(r.clockOut||'--')}</div><div>${r.clockIn&&r.clockOut?timeDiffText(r.clockIn,r.clockOut):'--'}</div><div>${done?'已完成':'上班中'}</div></div>`;
+  }).join('');
+}
+function clockIn(){
+  if(guardBossAction()) return;
+  const staffId=$('#timeclockStaff')?.value || '';
+  const staff=verifyTimeclockPin(staffId);
+  if(!staff) return;
+  const today=todayStr();
+  const logs=ensureTimeClockLogs();
+  let rec=timeclockRecordFor(staff.id,today);
+  if(rec && rec.clockIn){ alert(`${staff.name} 今天已經上班打卡：${rec.clockIn}`); return; }
+  if(!rec){
+    rec={id:'TC-'+Date.now(),staffId:staff.id,staffName:staff.name,date:today,clockIn:'',clockOut:'',createdAt:new Date().toISOString()};
+    logs.unshift(rec);
+  }
+  rec.clockIn=nowTime();
+  rec.inAt=new Date().toISOString();
+  rec.updatedAt=new Date().toISOString();
+  $('#timeclockPin').value='';
+  saveState(true);
+  renderTimeclock();
+  alert(`${staff.name} 上班打卡完成：${rec.clockIn}`);
+}
+function clockOut(){
+  if(guardBossAction()) return;
+  const staffId=$('#timeclockStaff')?.value || '';
+  const staff=verifyTimeclockPin(staffId);
+  if(!staff) return;
+  const rec=timeclockRecordFor(staff.id,todayStr());
+  if(!rec || !rec.clockIn){ alert(`${staff.name} 今天還沒有上班打卡`); return; }
+  if(rec.clockOut){ alert(`${staff.name} 今天已經下班打卡：${rec.clockOut}`); return; }
+  rec.clockOut=nowTime();
+  rec.outAt=new Date().toISOString();
+  rec.updatedAt=new Date().toISOString();
+  $('#timeclockPin').value='';
+  saveState(true);
+  renderTimeclock();
+  alert(`${staff.name} 下班打卡完成：${rec.clockOut}`);
+}
+function bindTimeclockEvents(){
+  const inBtn=$('#btnClockIn'), outBtn=$('#btnClockOut'), refreshBtn=$('#btnTimeclockRefresh'), staffSel=$('#timeclockStaff'), pinEl=$('#timeclockPin');
+  if(inBtn && !inBtn.dataset.bound){ inBtn.dataset.bound='yes'; inBtn.onclick=clockIn; }
+  if(outBtn && !outBtn.dataset.bound){ outBtn.dataset.bound='yes'; outBtn.onclick=clockOut; }
+  if(refreshBtn && !refreshBtn.dataset.bound){ refreshBtn.dataset.bound='yes'; refreshBtn.onclick=renderTimeclock; }
+  if(staffSel && !staffSel.dataset.bound){ staffSel.dataset.bound='yes'; staffSel.onchange=updateTimeclockStatus; }
+  if(pinEl && !pinEl.dataset.bound){ pinEl.dataset.bound='yes'; pinEl.addEventListener('keydown',e=>{ if(e.key==='Enter') clockIn(); }); }
 }
 
 
@@ -2917,6 +3093,7 @@ async function init(){
   renderCashier();
   renderAssign();
   renderReport();
+  renderTimeclock();
   renderExpenses();
   renderManage();
   if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes' || isBossMode()){
@@ -2934,10 +3111,8 @@ init();
 <script>
 // V11.0.26 基礎保護：降低一般使用者查看/複製程式碼機率（非絕對防高手）
 
-// V11.0.41 防F12正式版：本機(file://)允許F12，線上網址鎖定
+// V11.0.41 防F12正式版：阻擋一般右鍵 / F12 / 檢視原始碼 / 儲存 / 列印快捷鍵（保留輸入框可選字）
 (function(){
-  const isLocalFile = location.protocol === 'file:' || /localhost|127\.0\.0\.1/i.test(location.hostname);
-  if(isLocalFile) return;
   if(window.__OBA_F12_PROTECT__) return;
   window.__OBA_F12_PROTECT__ = true;
   const blockMsg = 'OBA Hair 店內系統：此操作已鎖定';
