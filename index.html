@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.15 以63營運版補回打卡功能版</title>
+<title>OBA Hair V11.1.16 列印後回首頁修正版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -1354,6 +1354,19 @@ function canvasToEscPosRaster(canvas){
   data.push(0x0A,0x0A,0x0A,0x1D,0x56,0x42,0x00);
   return new Uint8Array(data);
 }
+function finishReceiptAfterPrint(){
+  try{
+    const receiptDialog = $('#receiptDialog');
+    if(receiptDialog && receiptDialog.open) receiptDialog.close();
+    CURRENT_CASHIER=null;
+    updateCashierDisplay();
+    setActiveTab('cashier');
+    renderCashier();
+  }catch(e){
+    console.log('列印後回首頁失敗', e);
+  }
+}
+
 async function printReceiptByRawBT(){
   try{
     const id=$('#printArea .barcode-note')?.textContent?.trim();
@@ -1370,7 +1383,7 @@ async function printReceiptByRawBT(){
     const b64=bytesToBase64(bytes);
     $('#receiptImageHint').textContent='已送到 RawBT。若 RawBT 跳出確認畫面，直接按 PRINT。';
     window.location.href='rawbt:base64,'+b64;
-    setTimeout(()=>{btn.disabled=false;btn.textContent='一鍵列印 RawBT';},1200);
+    setTimeout(()=>{btn.disabled=false;btn.textContent='一鍵列印 RawBT';finishReceiptAfterPrint();},1200);
   }catch(e){
     console.log(e);
     alert('RawBT 一鍵列印失敗，請確認 RawBT 已安裝並已連上印表機');
@@ -1390,7 +1403,7 @@ $('#btnShareReceiptImage').onclick=async()=>{
     }
   }catch(e){console.log(e);}
 };
-$('#btnCloseReceipt').onclick=()=>{CURRENT_CASHIER=null; updateCashierDisplay(); $('#receiptDialog').close();};
+$('#btnCloseReceipt').onclick=()=>{finishReceiptAfterPrint();};
 
 
 function ensureAssignLogs(){
