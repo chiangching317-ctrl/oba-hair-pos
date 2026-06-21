@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OBA Hair V11.1.20 刷單頁個人當日業績 total</title>
+<title>OBA Hair V11.1.17 安全</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -202,7 +202,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="wrap">
   <div class="hero">
-    <div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.20 刷單頁個人當日業績 total｜由 V11.1.17 安全版修改</div></div>
+    <div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.17 安全止血 DEV｜正式版未更動</div></div>
     <div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div>
   </div>
   <div class="tabs">
@@ -265,7 +265,6 @@ const DEFAULT_BRANCH_NAME = "總店";
         <div class="stats">
           <div class="stat"><div class="k">今日業績 / 抽成 / 筆數</div><div class="v" id="myTodayStats">$0 / $0 / 0</div></div>
           <div class="stat"><div class="k">本月業績 / 抽成 / 筆數</div><div class="v" id="myMonthStats">$0 / $0 / 0</div></div>
-          <div class="stat"><div class="k">單據日期業績 total</div><div class="v" id="myOrderDateStats">-- / $0 / 0</div></div>
           <div class="stat"><div class="k">本張單金額 / 抽成</div><div class="v" id="myThisOrder">$0 / $0</div></div>
         </div>
         <div class="space"></div><div class="section-title" style="font-size:18px">我的今日單號列表</div><div class="small-list" id="myTodayOrderList">今天還沒有單</div>
@@ -1659,21 +1658,8 @@ function renderMyStats(){
   const salaryOrders=salaryBaseOrders();
   const todayOrders=visibleOrders.filter(o=>o.assignedDesignerId===id&&o.date===today&&!o.refunded);
   const monthOrders=salaryOrders.filter(o=>o.assignedDesignerId===id&&o.date.startsWith(month)&&!o.refunded);
-
-  // V11.1.20：刷單頁顯示「單據日期」個人業績 total。
-  // 只讀取 orders 重新加總，不修改任何單據/員工/品項/密碼資料。
-  const code=$('#assignOrderNo')?.value?.trim() || '';
-  let previewOrder=findOrderByCode(code);
-  if(!previewOrder && !code && LAST_ASSIGNED_ORDER_NO) previewOrder=findOrderByCode(LAST_ASSIGNED_ORDER_NO);
-  const targetDate=previewOrder?.date || today;
-  const orderDateOrders=visibleOrders.filter(o=>o.assignedDesignerId===id&&o.date===targetDate&&!o.refunded);
-  const orderDateTotal=orderDateOrders.reduce((s,o)=>s+Number(o.total||0),0);
-  const orderDateCommission=orderDateOrders.reduce((s,o)=>s+Number(o.commission||0),0);
-
   $('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(todayOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${todayOrders.length}`;
   $('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(monthOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${monthOrders.length}`;
-  const orderDateBox=$('#myOrderDateStats');
-  if(orderDateBox) orderDateBox.textContent=`${targetDate}｜${money(orderDateTotal)} / ${money(orderDateCommission)} / ${orderDateOrders.length}`;
   $('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單';
   renderTodayAssignLogs();
 }
@@ -2222,11 +2208,7 @@ function renderReport(){
           const list=monthOrders.filter(o=>o.assignedDesignerId===s.id);
           const sales=list.reduce((sum,o)=>sum+Number(o.total||0),0);
           const commission=list.reduce((sum,o)=>sum+Number(o.commission||0),0);
-          // V11.1.20：報表個人業績同步顯示開始日期當日 total，方便每日對紙本。
-          const dayList=salaryBaseOrders().filter(o=>o.assignedDesignerId===s.id && o.date===f.startDate && !o.refunded);
-          const daySales=dayList.reduce((sum,o)=>sum+Number(o.total||0),0);
-          const dayCommission=dayList.reduce((sum,o)=>sum+Number(o.commission||0),0);
-          return `<div class="stat"><div class="k">${s.name} 本日 total｜${f.startDate}</div><div class="v">${money(daySales)} / ${money(dayCommission)} / ${dayList.length}</div><div class="space"></div><div class="k">本月業績 / 抽成 / 筆數</div><div class="v">${money(sales)} / ${money(commission)} / ${list.length}</div><div class="space"></div><button class="btn btn-soft" type="button" onclick="showStaffSalesDetail('${String(s.id).replace(/'/g,'\'')}', '${month}')">查看明細</button></div>`;
+          return `<div class="stat"><div class="k">${s.name} 業績 / 抽成 / 筆數</div><div class="v">${money(sales)} / ${money(commission)} / ${list.length}</div><div class="space"></div><button class="btn btn-soft" type="button" onclick="showStaffSalesDetail('${String(s.id).replace(/'/g,'\\\'')}', '${month}')">查看明細</button></div>`;
         }).join('')
       : '<div class="stat"><div class="k">員工本月業績 / 抽成</div><div class="v">$0 / $0 / 0</div></div>';
   }
