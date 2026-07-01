@@ -153,6 +153,76 @@ async function saveState(forceCloud=false){
     cloudSaving=false;
   }
 }
+
+
+// V11.1.29 P0：管理頁局部存檔保護。
+// 員工/品項儲存不可用本機舊 state 整包覆蓋雲端 orders/refunds/counters。
+// 流程：先讀雲端最新 main → 只套用指定欄位 → 再寫回雲端與本機。
+async function saveStatePatch(patchFields){
+  localStorage.setItem(KEY, JSON.stringify(state));
+  const client=getCloudClient();
+  if(!client){
+    console.log('無雲端 client，局部存檔只寫本機', Object.keys(patchFields||{}));
+    return false;
+  }
+  if(cloudSaving) return false;
+  cloudSaving=true;
+  try{
+    const { data, error } = await client
+      .from(CLOUD_TABLE)
+      .select('id,data,updated_at')
+      .eq('id', CLOUD_ROW_ID)
+      .order('updated_at', { ascending:false })
+      .limit(1);
+
+    if(error){
+      console.log('局部存檔讀取雲端失敗，已停止，避免覆蓋正式訂單', error);
+      alert('雲端讀取失敗，為避免覆蓋訂單，這次沒有儲存。請稍後再試。');
+      return false;
+    }
+
+    const cloudData = (data && data[0] && data[0].data) ? data[0].data : {};
+    const merged = normalizeCloudState(Object.assign(clone(defaultState), cloudData));
+
+    Object.keys(patchFields||{}).forEach(key=>{
+      merged[key] = clone(patchFields[key]);
+    });
+
+    // 保險：局部存檔時，正式訂單一定以雲端最新資料為主，不吃本機舊 orders。
+    merged.orders = Array.isArray(cloudData.orders) ? clone(cloudData.orders) : [];
+    merged.refunds = Array.isArray(cloudData.refunds) ? clone(cloudData.refunds) : [];
+    if(cloudData.nextNo !== undefined) merged.nextNo = cloudData.nextNo;
+    if(cloudData.counters !== undefined) merged.counters = clone(cloudData.counters);
+    if(cloudData.lastResetAt !== undefined) merged.lastResetAt = cloudData.lastResetAt;
+    if(cloudData.salaryResetAt !== undefined) merged.salaryResetAt = cloudData.salaryResetAt;
+
+    const payload = { data: merged, updated_at: new Date().toISOString() };
+    const updateResult = await client
+      .from(CLOUD_TABLE)
+      .update(payload)
+      .eq('id', CLOUD_ROW_ID)
+      .select('id,data,updated_at');
+
+    if(updateResult.error){
+      console.log('局部存檔 update 失敗', updateResult.error);
+      alert('雲端儲存失敗，這次沒有覆蓋訂單。請稍後再試。');
+      return false;
+    }
+
+    state = normalizeCloudState(merged);
+    localStorage.setItem(KEY, JSON.stringify(state));
+    cloudReady=true;
+    console.log('局部存檔成功，已保留雲端 orders/refunds', {orders: state.orders?.length||0, refunds: state.refunds?.length||0, fields:Object.keys(patchFields||{})});
+    return true;
+  }catch(err){
+    console.log('局部存檔錯誤，已停止，避免覆蓋正式訂單', err);
+    alert('局部儲存發生錯誤，為避免覆蓋訂單，這次沒有儲存。');
+    return false;
+  }finally{
+    cloudSaving=false;
+  }
+}
+
 async function replaceCloudMainRowForReset(resetState){
   const client=getCloudClient();
   if(!client) return false;

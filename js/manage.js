@@ -93,8 +93,8 @@ if(staffCardsEl){
 }
 
 window.updateStaffRule=(staffId,name,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId); if(!s)return; if(!s.rules)s.rules={default:0.5}; const n=Number(value||0); s.rules[name]=Math.max(0,Math.min(100,n))/100; markStaffDirty(); renderAssign(); renderReport();}
-window.saveStaffChanges=()=>{if(guardBossAction()) return; STAFF_DIRTY=false; saveState(true); renderAssign(); renderReport(); renderManageKeepScroll(); alert('員工資料已儲存')}
-window.saveItemsChanges=()=>{if(guardBossAction()) return; saveState(); ITEM_DIRTY=false; renderCashier(); renderAssign(); renderReport(); renderManageKeepScroll(); alert('品項資料已儲存')}
+window.saveStaffChanges=async ()=>{if(guardBossAction()) return; const ok=await saveStatePatch({staff:state.staff}); if(!ok) return; STAFF_DIRTY=false; renderAssign(); renderReport(); renderManageKeepScroll(); alert('員工資料已儲存，訂單資料已保護')}
+window.saveItemsChanges=async ()=>{if(guardBossAction()) return; const ok=await saveStatePatch({items:state.items}); if(!ok) return; ITEM_DIRTY=false; renderCashier(); renderAssign(); renderReport(); renderManageKeepScroll(); alert('品項資料已儲存，訂單資料已保護')}
 window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(field==='pin'){ const v=String(value||'').trim(); if(!v) return; if(!/^\d{4,8}$/.test(v)){ alert('PIN 請輸入 4 到 8 位數字'); return; } s.pin=v; } else { s[field]=value; } markStaffDirty(); renderAssign(); updateCashierDisplay()}
 window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; markStaffDirty(); renderAssign();}
 window.updateSystemRole=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; s.systemRole=value; markStaffDirty();}
@@ -106,24 +106,26 @@ window.updateItemField=(id,field,val)=>{if(guardBossAction()) return; const i=st
 document.getElementById('btnAddItem').onclick=()=>{if(guardBossAction()) return; const category=$('#newItemCategory').value.trim(), name=$('#newItemName').value.trim(), price=Number($('#newItemPrice').value||0); if(!category||!name||!price){alert('請輸入分類、品項名稱與價格');return} const newItem={id:'item'+Date.now(),category,name,price,active:true,quick:false}; state.items.unshift(newItem); $('#newItemCategory').value=''; $('#newItemName').value=''; $('#newItemPrice').value=''; ITEM_DIRTY=true; renderCashier(); renderManage(); setActiveTab('manage'); const list=$('#itemManageList'); if(list) list.scrollIntoView({behavior:'smooth',block:'start'}); alert('已新增品項，會歸在「'+category+'」分類；請按儲存品項資料')}
 window.deleteItem=(id)=>{if(guardBossAction()) return; const item=state.items.find(x=>x.id===id);if(!item)return;if(!confirm('確定刪除「'+item.name+'」嗎？'))return;state.items=state.items.filter(x=>x.id!==id);ITEM_DIRTY=true;renderCashier();renderManageKeepScroll();alert('已刪除，請按儲存品項資料')}
 
-document.addEventListener('click', function(e){
+document.addEventListener('click', async function(e){
   if(e.target && e.target.id==='btnSaveStaff'){
     if(guardBossAction()) return;
+    const ok=await saveStatePatch({staff:state.staff});
+    if(!ok) return;
     STAFF_DIRTY=false;
-    saveState(true);
     renderAssign();
     renderReport();
     renderManageKeepScroll();
-    alert('員工資料已儲存');
+    alert('員工資料已儲存，訂單資料已保護');
   }
   if(e.target && e.target.id==='btnSaveItems'){
     if(guardBossAction()) return;
-    saveState();
+    const ok=await saveStatePatch({items:state.items});
+    if(!ok) return;
     ITEM_DIRTY=false;
     renderCashier();
     renderAssign();
     renderReport();
     renderManageKeepScroll();
-    alert('品項資料已儲存');
+    alert('品項資料已儲存，訂單資料已保護');
   }
 });
