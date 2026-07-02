@@ -3,7 +3,7 @@ function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.class
 function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
 
 // V11.0.40：檢視模式＋分店欄位預留＋歸零退票帳務（只可看報表，不可操作收款/退票/管理）
-const BOSS_PASSWORD = ''; // V11.1.17：移除前端明碼 BOSS 密碼；BOSS 之後改由 Supabase Auth / 權限控管
+const BOSS_PASSWORD = '269527'; // V11.1.17：移除前端明碼 BOSS 密碼；BOSS 之後改由 Supabase Auth / 權限控管
 const BOSS_SESSION_KEY = 'oba_boss_mode_v38';
 window.USER_ROLE = sessionStorage.getItem(BOSS_SESSION_KEY)==='yes' ? 'boss' : (window.USER_ROLE || 'staff');
 function isBossMode(){return window.USER_ROLE === 'boss'}
