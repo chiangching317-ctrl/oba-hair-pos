@@ -10,7 +10,7 @@ function addAssignLog(order, staff, status='正常'){
   const now=new Date();
   const existed=logs.find(l=>String(l.orderNo||'')===String(order.id||'') && String(l.staffId||'')===String(staff.id||'') && l.status!=='已退票' && l.status!=='作廢');
   if(existed){
-    existed.amount=Number(order.total||0);
+    existed.amount=assignPerformanceTotal(order);
     existed.commission=Number(order.commission||0);
     existed.status=status;
     existed.updatedAt=now.toISOString();
@@ -21,7 +21,7 @@ function addAssignLog(order, staff, status='正常'){
     orderNo:order.id,
     staffId:staff.id,
     staffName:staff.name,
-    amount:Number(order.total||0),
+    amount:assignPerformanceTotal(order),
     commission:Number(order.commission||0),
     sourceType:'刷單入業績',
     createdBy:getAssignLoginStaff()?.name || '刷單頁',
@@ -191,6 +191,32 @@ function renderAssign(){
   renderAssignIdentityNote();
 }
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
+
+// V11.1.29：集點卡 0 元票修正。營業額維持 0，但業績/抽成使用原服務金額。
+function assignPerformanceTotal(order){
+  if(!order) return 0;
+  const redeemPrice = Number(order?.redeemMeta?.sourcePrice || 0);
+  if(order.paymentMethod === '集點卡兌換' && redeemPrice > 0) return redeemPrice;
+  const perf = Number(order?.performanceTotal || 0);
+  if(perf > 0) return perf;
+  const itemSourceTotal = Array.isArray(order.items)
+    ? order.items.reduce((sum,i)=>sum + Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || 0),0)
+    : 0;
+  if(order.paymentMethod === '集點卡兌換' && itemSourceTotal > 0) return itemSourceTotal;
+  return Number(order.total || 0);
+}
+function orderForCommission(order){
+  const performanceTotal = assignPerformanceTotal(order);
+  if(!order || performanceTotal === Number(order.total || 0)) return order;
+  return {
+    ...order,
+    total: performanceTotal,
+    items: Array.isArray(order.items) ? order.items.map(i=>({
+      ...i,
+      price: Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || i?.price || 0)
+    })) : []
+  };
+}
 function renderAssignPreview(){
   const code=$('#assignOrderNo').value.trim();
   let order=findOrderByCode(code);
@@ -204,12 +230,12 @@ function renderAssignPreview(){
     $('#myThisOrder').textContent='$0 / $0';
     return;
   }
-  const commission=order.refunded ? 0 : calcCommission(order,selectedId);
+  const commission=order.refunded ? 0 : calcCommission(orderForCommission(order),selectedId);
   $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;
   $('#assignShowNo').textContent=order.id;
   $('#assignShowTotal').textContent=order.refunded ? '$0' : money(order.total);
   $('#assignShowCommission').textContent=money(commission);
-  $('#myThisOrder').textContent=order.refunded ? '$0 / $0' : `${money(order.total)} / ${money(commission)}`;
+  $('#myThisOrder').textContent=order.refunded ? '$0 / $0' : `${money(assignPerformanceTotal(order))} / ${money(commission)}`;
 }
 function clearAssignScanField(){
   const input=$('#assignOrderNo');
@@ -242,7 +268,8 @@ $('#btnAssignOrder').onclick=()=>{
   if(!staff){alert('找不到員工資料，請先到員工資料確認此員工仍在職');return}
   order.assignedDesignerId=staff.id;
   order.assignedDesignerName=staff.name;
-  order.commission=calcCommission(order,staff.id);
+  order.performanceTotal=assignPerformanceTotal(order);
+  order.commission=calcCommission(orderForCommission(order),staff.id);
   order.assignedAt=new Date().toISOString();
   addAssignLog(order,staff,'正常');
   LAST_ASSIGNED_ORDER_NO=order.id;
@@ -270,14 +297,14 @@ function renderMyStats(){
   if(!previewOrder && !code && LAST_ASSIGNED_ORDER_NO) previewOrder=findOrderByCode(LAST_ASSIGNED_ORDER_NO);
   const targetDate=previewOrder?.date || today;
   const orderDateOrders=visibleOrders.filter(o=>o.assignedDesignerId===id&&o.date===targetDate&&!o.refunded);
-  const orderDateTotal=orderDateOrders.reduce((s,o)=>s+Number(o.total||0),0);
+  const orderDateTotal=orderDateOrders.reduce((s,o)=>s+assignPerformanceTotal(o),0);
   const orderDateCommission=orderDateOrders.reduce((s,o)=>s+Number(o.commission||0),0);
 
-  $('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(todayOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${todayOrders.length}`;
-  $('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+Number(o.total||0),0))} / ${money(monthOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${monthOrders.length}`;
+  $('#myTodayStats').textContent=`${money(todayOrders.reduce((s,o)=>s+assignPerformanceTotal(o),0))} / ${money(todayOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${todayOrders.length}`;
+  $('#myMonthStats').textContent=`${money(monthOrders.reduce((s,o)=>s+assignPerformanceTotal(o),0))} / ${money(monthOrders.reduce((s,o)=>s+Number(o.commission||0),0))} / ${monthOrders.length}`;
   const orderDateBox=$('#myOrderDateStats');
   if(orderDateBox) orderDateBox.textContent=`${targetDate}｜${money(orderDateTotal)} / ${money(orderDateCommission)} / ${orderDateOrders.length}`;
-  $('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(o.total)}｜${o.time}</div>`).join(''):'今天還沒有單';
+  $('#myTodayOrderList').innerHTML=todayOrders.length?todayOrders.map(o=>`<div class="small-item">${o.id}｜${money(assignPerformanceTotal(o))}｜${o.time}</div>`).join(''):'今天還沒有單';
   renderTodayAssignLogs();
 }
 

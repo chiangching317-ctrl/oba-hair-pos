@@ -50,6 +50,20 @@ function safeSetText(id, value){
   const el=document.getElementById(id);
   if(el) el.textContent=value;
 }
+
+// V11.1.29：集點卡 0 元票修正。營業額維持 order.total=0；個人業績/抽成改用 performanceTotal/sourcePrice。
+function reportPerformanceTotal(order){
+  if(!order) return 0;
+  const redeemPrice = Number(order?.redeemMeta?.sourcePrice || 0);
+  if(order.paymentMethod === '集點卡兌換' && redeemPrice > 0) return redeemPrice;
+  const perf = Number(order?.performanceTotal || 0);
+  if(perf > 0) return perf;
+  const itemSourceTotal = Array.isArray(order.items)
+    ? order.items.reduce((sum,i)=>sum + Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || 0),0)
+    : 0;
+  if(order.paymentMethod === '集點卡兌換' && itemSourceTotal > 0) return itemSourceTotal;
+  return Number(order.total || 0);
+}
 function getExpenseListForProfit(){
   return loadExpenses().filter(e=>e && e.date);
 }
@@ -93,7 +107,7 @@ function showStaffSalesDetail(staffId, month){
   const staff=staffById(staffId);
   const list=salaryBaseOrders().filter(o=>o.assignedDesignerId===staffId && o.date.startsWith(month) && !o.refunded);
   if(!list.length){ alert((staff?.name||staffId)+' 這個月份沒有業績明細'); return; }
-  const lines=list.map(o=>`${o.id}｜${o.date} ${o.time||''}｜${money(o.total||0)}｜抽成 ${money(o.commission||0)}`);
+  const lines=list.map(o=>`${o.id}｜${o.date} ${o.time||''}｜${money(reportPerformanceTotal(o))}｜抽成 ${money(o.commission||0)}`);
   alert(`${staff?.name||staffId} 業績明細\n\n`+lines.join('\n'));
 }
 
@@ -124,11 +138,11 @@ function renderReport(){
     monthlyBox.innerHTML=payrollStaff.length
       ? payrollStaff.map(s=>{
           const list=monthOrders.filter(o=>o.assignedDesignerId===s.id);
-          const sales=list.reduce((sum,o)=>sum+Number(o.total||0),0);
+          const sales=list.reduce((sum,o)=>sum+reportPerformanceTotal(o),0);
           const commission=list.reduce((sum,o)=>sum+Number(o.commission||0),0);
           // V11.1.20：報表個人業績同步顯示開始日期當日 total，方便每日對紙本。
           const dayList=salaryBaseOrders().filter(o=>o.assignedDesignerId===s.id && o.date===f.startDate && !o.refunded);
-          const daySales=dayList.reduce((sum,o)=>sum+Number(o.total||0),0);
+          const daySales=dayList.reduce((sum,o)=>sum+reportPerformanceTotal(o),0);
           const dayCommission=dayList.reduce((sum,o)=>sum+Number(o.commission||0),0);
           return `<div class="stat"><div class="k">${s.name} 本日 total｜${f.startDate}</div><div class="v">${money(daySales)} / ${money(dayCommission)} / ${dayList.length}</div><div class="space"></div><div class="k">本月業績 / 抽成 / 筆數</div><div class="v">${money(sales)} / ${money(commission)} / ${list.length}</div><div class="space"></div><button class="btn btn-soft" type="button" onclick="showStaffSalesDetail('${String(s.id).replace(/'/g,'\'')}', '${month}')">查看明細</button></div>`;
         }).join('')

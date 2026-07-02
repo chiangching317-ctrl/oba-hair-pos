@@ -1,18 +1,69 @@
 // V11.1.27 第14刀：訂單工具模組拆分
 // 由 index.html 搬出；只搬程式，不改邏輯。
+// V11.1.29：單號防重用。
+// 已經開過的單號，即使單據刪除、作廢或被同步回捲，也不可再次使用。
+function ensureUsedOrderNos(){
+  if(!Array.isArray(state.usedOrderNos)) state.usedOrderNos=[];
+  if(Array.isArray(state.orders)){
+    state.orders.forEach(o=>{
+      orderIdentityValues(o).forEach(v=>{
+        const no=normalizeOrderNoText(v);
+        if(no && no.startsWith('OBA-') && !state.usedOrderNos.includes(no)){
+          state.usedOrderNos.push(no);
+        }
+      });
+    });
+  }
+}
+function maxUsedSeqForMonth(monthKey){
+  ensureUsedOrderNos();
+  let max=0;
+  const orders = Array.isArray(state.orders) ? state.orders : [];
+  orders.forEach(o=>{
+    orderIdentityValues(o).forEach(v=>{
+      const no=normalizeOrderNoText(v);
+      const m=no.match(/^OBA-(\d{8})-(\d{3,})$/);
+      if(m && m[1].slice(0,6)===monthKey){
+        max=Math.max(max, parseInt(m[2],10)||0);
+      }
+    });
+  });
+  state.usedOrderNos.forEach(v=>{
+    const no=normalizeOrderNoText(v);
+    const m=no.match(/^OBA-(\d{8})-(\d{3,})$/);
+    if(m && m[1].slice(0,6)===monthKey){
+      max=Math.max(max, parseInt(m[2],10)||0);
+    }
+  });
+  return max;
+}
 function getNextMonthlyOrderNo(){
   const monthKey=currentMonthKey();
   const dateKey=currentDateKey();
   if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
-  if(!state.monthlyOrderCounter[monthKey]) state.monthlyOrderCounter[monthKey]=1;
-  const no=state.monthlyOrderCounter[monthKey];
-  return `OBA-${dateKey}-${String(no).padStart(3,'0')}`;
+  const minNext = maxUsedSeqForMonth(monthKey) + 1;
+  if(!state.monthlyOrderCounter[monthKey] || state.monthlyOrderCounter[monthKey] < minNext){
+    state.monthlyOrderCounter[monthKey]=minNext;
+  }
+  let no=state.monthlyOrderCounter[monthKey];
+  let orderNo=`OBA-${dateKey}-${String(no).padStart(3,'0')}`;
+  ensureUsedOrderNos();
+  while(state.usedOrderNos.includes(orderNo) || findOrderByCode(orderNo)){
+    no+=1;
+    orderNo=`OBA-${dateKey}-${String(no).padStart(3,'0')}`;
+  }
+  state.monthlyOrderCounter[monthKey]=no;
+  return orderNo;
 }
-function consumeMonthlyOrderNo(){
+function consumeMonthlyOrderNo(orderNo){
   const monthKey=currentMonthKey();
   if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
-  if(!state.monthlyOrderCounter[monthKey]) state.monthlyOrderCounter[monthKey]=1;
-  state.monthlyOrderCounter[monthKey]+=1;
+  ensureUsedOrderNos();
+  const usedNo=normalizeOrderNoText(orderNo || getNextMonthlyOrderNo());
+  if(usedNo && !state.usedOrderNos.includes(usedNo)) state.usedOrderNos.push(usedNo);
+  const m=usedNo.match(/^OBA-(\d{8})-(\d{3,})$/);
+  const usedSeq=m ? (parseInt(m[2],10)||0) : (state.monthlyOrderCounter[monthKey]||0);
+  state.monthlyOrderCounter[monthKey]=Math.max(state.monthlyOrderCounter[monthKey]||1, usedSeq+1);
 }
 function currentOrderNo(){return getNextMonthlyOrderNo()}
 function normalizeOrderNoText(value){
