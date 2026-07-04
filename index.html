@@ -201,7 +201,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 </div>
 <div class="card">
-<div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button><button class="btn btn-ok" id="btnSalaryClose">薪資結算歸零</button><button class="btn btn-danger" id="btnResetAll">清空測試資料</button></div></div>
+<div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button></div></div>
 <div class="table" id="reportTable"></div>
 </div>
 </div>
@@ -231,6 +231,12 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="card">
 <div class="section-title">損益報表 初版（支出頁）</div>
 <div class="note">V11.1.04a：固定顯示在支出頁；只讀取收銀、退票、支出資料，不反寫收銀、不寫 Supabase。</div>
+<div class="space"></div>
+<div class="row">
+<button class="btn btn-ok" id="btnSalaryClose" type="button">薪資結算歸零</button>
+<button class="btn btn-danger" id="btnResetAll" type="button">清空測試資料</button>
+</div>
+<div class="note">管理維護按鈕已從報表移到損益頁，避免開放報表給員工時誤觸。</div>
 <div class="space"></div>
 <div class="stats">
 <div class="stat"><div class="k">今日營業額</div><div class="v" id="profitTodaySales">$0</div></div>

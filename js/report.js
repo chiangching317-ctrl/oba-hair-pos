@@ -51,6 +51,41 @@ function safeSetText(id, value){
   if(el) el.textContent=value;
 }
 
+function canUseReprint(){
+  if(window.USER_ROLE === 'boss') return false;
+
+  // JEAN 用管理密碼進入報表時，ui.js 會標記 USER_ROLE='owner'，保留最高權限。
+  if(window.USER_ROLE === 'owner') return true;
+
+  // 員工 PIN 進入報表時，一律只看「可補印單據」勾選。
+  // 不再用 systemRole / 管理者 身份自動放行，避免 Milin 這類帳號沒勾仍可補印。
+  const allowByStaff = (staff)=>{
+    if(!staff) return false;
+    return Array.isArray(staff.permissions) && staff.permissions.includes('reprint');
+  };
+
+  // 不使用登入當下的快取權限，每次重新讀最新員工資料
+  const loginId = window.CURRENT_LOGIN_STAFF?.id;
+  const freshStaff = (state.staff || []).find(s=>s.id===loginId);
+
+  if(allowByStaff(freshStaff)) return true;
+
+  return false;
+}
+function updateReprintButtonPermission(){
+  const ok=canUseReprint();
+  document.querySelectorAll('#btnReprintOpen').forEach(btn=>{
+    btn.classList.toggle('hidden', !ok);
+    btn.disabled=!ok;
+    btn.title=ok ? '' : '此帳號沒有補印權限';
+  });
+}
+function guardReprintPermission(){
+  if(canUseReprint()) return true;
+  alert('此帳號沒有補印單據權限');
+  return false;
+}
+
 // V11.1.29：集點卡 0 元票修正。營業額維持 order.total=0；個人業績/抽成改用 performanceTotal/sourcePrice。
 function reportPerformanceTotal(order){
   if(!order) return 0;
@@ -117,6 +152,7 @@ function renderReport(){
   renderReportStaffOptions();
   const f=reportFilterValues(), month=f.startDate.slice(0,7);
   renderProfitSummary();
+  updateReprintButtonPermission();
   const rangeText=`${f.startDate}～${f.endDate}${f.start||f.end?' '+(f.start||'00:00')+'～'+(f.end||'23:59'):' 全日'}`;
   const reportOrders=activeReportOrders();
   const reportRefunds=activeReportRefunds();
@@ -155,3 +191,14 @@ function renderReport(){
 document.addEventListener('change',function(e){
   if(e.target && ['reportStartDate','reportEndDate','reportStartTime','reportEndTime','reportStaff'].includes(e.target.id)) renderReport();
 });
+
+// 補印權限最後防線：所有補印入口都必須通過 canUseReprint()
+document.addEventListener('click', function(e){
+  const btn = e.target && e.target.closest ? e.target.closest('#btnReprintOpen') : null;
+  if(btn && !guardReprintPermission()){
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
+  }
+}, true);
+

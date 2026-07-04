@@ -127,5 +127,10 @@ $('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
 $('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('目前模式不可修改密碼');return} if(!isValidManagerPin(oldPwd)){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
  if(BOSS_PASSWORD && pwdMode==='report' && oldPwd===BOSS_PASSWORD){$('#passwordDialog').close();pendingLockedTab='';enterBossMode();return;}
  if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(!isValidPinForTab(oldPwd, pwdMode)){ alert('密碼錯誤或沒有此頁權限'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
- window.USER_ROLE='owner';$('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
+ const loginPin=String(oldPwd||'').trim();
+ const loginStaff=Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===loginPin) : null;
+ window.CURRENT_LOGIN_STAFF = loginStaff || null;
+ // 管理密碼登入才是 owner；員工 PIN 進報表仍維持 staff，讓補印等細項權限能正確判斷。
+ window.USER_ROLE = (String(state.managementPassword||'').trim()===loginPin && !loginStaff) ? 'owner' : 'staff';
+ $('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
