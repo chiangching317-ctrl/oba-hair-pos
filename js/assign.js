@@ -192,30 +192,9 @@ function renderAssign(){
 }
 $('#assignDesigner').onchange=()=>{renderAssignPreview();renderMyStats()}; $('#assignOrderNo').addEventListener('input',()=>{renderAssignPreview();renderMyStats()});
 
-// V11.1.29：集點卡 0 元票修正。營業額維持 0，但業績/抽成使用原服務金額。
+// V11.1.30：集點卡免費剪不算業績，但抽成用原服務金額。
 function assignPerformanceTotal(order){
-  if(!order) return 0;
-  const redeemPrice = Number(order?.redeemMeta?.sourcePrice || 0);
-  if(order.paymentMethod === '集點卡兌換' && redeemPrice > 0) return redeemPrice;
-  const perf = Number(order?.performanceTotal || 0);
-  if(perf > 0) return perf;
-  const itemSourceTotal = Array.isArray(order.items)
-    ? order.items.reduce((sum,i)=>sum + Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || 0),0)
-    : 0;
-  if(order.paymentMethod === '集點卡兌換' && itemSourceTotal > 0) return itemSourceTotal;
-  return Number(order.total || 0);
-}
-function orderForCommission(order){
-  const performanceTotal = assignPerformanceTotal(order);
-  if(!order || performanceTotal === Number(order.total || 0)) return order;
-  return {
-    ...order,
-    total: performanceTotal,
-    items: Array.isArray(order.items) ? order.items.map(i=>({
-      ...i,
-      price: Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || i?.price || 0)
-    })) : []
-  };
+  return orderPerformanceTotal(order);
 }
 function renderAssignPreview(){
   const code=$('#assignOrderNo').value.trim();
@@ -230,7 +209,7 @@ function renderAssignPreview(){
     $('#myThisOrder').textContent='$0 / $0';
     return;
   }
-  const commission=order.refunded ? 0 : calcCommission(orderForCommission(order),selectedId);
+  const commission=order.refunded ? 0 : calcCommission(order,selectedId);
   $('#assignPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>經手人</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':(order.assignedDesignerId?'已掛業績':'未掛業績')}</div></div>`;
   $('#assignShowNo').textContent=order.id;
   $('#assignShowTotal').textContent=order.refunded ? '$0' : money(order.total);
@@ -269,7 +248,7 @@ $('#btnAssignOrder').onclick=()=>{
   order.assignedDesignerId=staff.id;
   order.assignedDesignerName=staff.name;
   order.performanceTotal=assignPerformanceTotal(order);
-  order.commission=calcCommission(orderForCommission(order),staff.id);
+  order.commission=calcCommission(order,staff.id);
   order.assignedAt=new Date().toISOString();
   addAssignLog(order,staff,'正常');
   LAST_ASSIGNED_ORDER_NO=order.id;

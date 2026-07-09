@@ -86,18 +86,9 @@ function guardReprintPermission(){
   return false;
 }
 
-// V11.1.29：集點卡 0 元票修正。營業額維持 order.total=0；個人業績/抽成改用 performanceTotal/sourcePrice。
+// V11.1.30：報表個人業績使用真正業績；集點卡免費剪業績固定 0。
 function reportPerformanceTotal(order){
-  if(!order) return 0;
-  const redeemPrice = Number(order?.redeemMeta?.sourcePrice || 0);
-  if(order.paymentMethod === '集點卡兌換' && redeemPrice > 0) return redeemPrice;
-  const perf = Number(order?.performanceTotal || 0);
-  if(perf > 0) return perf;
-  const itemSourceTotal = Array.isArray(order.items)
-    ? order.items.reduce((sum,i)=>sum + Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || 0),0)
-    : 0;
-  if(order.paymentMethod === '集點卡兌換' && itemSourceTotal > 0) return itemSourceTotal;
-  return Number(order.total || 0);
+  return orderPerformanceTotal(order);
 }
 function getExpenseListForProfit(){
   return loadExpenses().filter(e=>e && e.date);

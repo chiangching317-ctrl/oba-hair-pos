@@ -148,13 +148,55 @@ function purgeInvalidEmptyOrders(){
 function activeItems(){return state.items.filter(i=>i.active)}
 function activeStaff(){return state.staff.filter(s=>s.active)}
 function staffById(id){return state.staff.find(s=>s.id===id)}
-function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;return order.items.reduce((sum,item)=>{const rate=staff.rules?.[item.name] ?? staff.rules?.[item.category] ?? staff.rules?.default ?? 0.5;return sum+Math.round(Number(item.price||0)*Number(rate||0));},0)}
+
+// V11.1.30：集點卡規則拆開「業績」與「抽成基準」。
+// 集點卡免費剪：營業額=0、業績=0、抽成照原服務金額計算。
+function isRedeemOrder(order){
+  return !!order && (order.paymentMethod === '集點卡兌換' || order.redeemMeta?.redeemType === true);
+}
+function orderSourcePriceTotal(order){
+  if(!order) return 0;
+  const redeemPrice = Number(order?.redeemMeta?.sourcePrice || 0);
+  if(redeemPrice > 0) return redeemPrice;
+  return Array.isArray(order.items)
+    ? order.items.reduce((sum,i)=>sum + Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || 0),0)
+    : 0;
+}
+function orderPerformanceTotal(order){
+  if(!order) return 0;
+  if(isRedeemOrder(order)) return 0;
+  const perf = Number(order?.performanceTotal || 0);
+  if(perf > 0) return perf;
+  return Number(order.total || 0);
+}
+function orderCommissionBaseTotal(order){
+  if(!order) return 0;
+  if(isRedeemOrder(order)){
+    const src = orderSourcePriceTotal(order);
+    return src > 0 ? src : Number(order.total || 0);
+  }
+  return orderPerformanceTotal(order);
+}
+function orderForCommission(order){
+  if(!order) return order;
+  if(!isRedeemOrder(order)) return order;
+  return {
+    ...order,
+    total: orderCommissionBaseTotal(order),
+    items: Array.isArray(order.items) ? order.items.map(i=>({
+      ...i,
+      price: Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || i?.price || 0)
+    })) : []
+  };
+}
+function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;const commissionOrder=orderForCommission(order)||order;return (commissionOrder.items||[]).reduce((sum,item)=>{const rate=staff.rules?.[item.name] ?? staff.rules?.[item.category] ?? staff.rules?.default ?? 0.5;return sum+Math.round(Number(item.price||0)*Number(rate||0));},0)}
 function ensureOrderPerformance(order){
   if(!order || !order.assignedDesignerId) return order;
   const staff=staffById(order.assignedDesignerId);
   if(staff && !order.assignedDesignerName) order.assignedDesignerName=staff.name;
+  order.performanceTotal = orderPerformanceTotal(order);
   const commission=calcCommission(order,order.assignedDesignerId);
-  if(!Number.isFinite(Number(order.commission)) || Number(order.commission)===0) order.commission=commission;
+  if(!Number.isFinite(Number(order.commission)) || Number(order.commission)===0 || isRedeemOrder(order)) order.commission=commission;
   return order;
 }
 function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new Date(joinDate), now=new Date();const months=(now.getFullYear()-start.getFullYear())*12+(now.getMonth()-start.getMonth());return `${Math.floor(months/12)}年${months%12}個月`}
