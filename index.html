@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>OBA Hair V11.1.28 第15刀：介面權限模組拆分</title>
+<title>OBA Hair V11.1.35 刷單併發保護版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -37,7 +37,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="wrap">
 <div class="hero">
-<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.28 第15刀：介面權限模組拆分｜由 V11.1.27 修改</div></div>
+<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.35 刷單併發保護版｜由 V11.1.28 修改</div></div>
 <div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div>
 </div>
 <div class="tabs">
@@ -88,7 +88,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="note" id="assignIdentityNote">第一次刷單會要求輸入自己的 PIN。</div>
 <div class="space"></div>
-<div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機可直接用相機掃收據條碼；掃到後會自動帶入單號。</div></div>
+<div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機相機掃到有效單號後，會自動掛入業績；雲端確認成功後才會顯示完成。</div></div>
 <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入密碼授權一次即可收銀。</div></div>
 <div class="label">掃描 / 輸入單號</div><input class="input" id="assignOrderNo" placeholder="掃描條碼或輸入 OBA-20260513-001"/>
 <div class="space"></div>

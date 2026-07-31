@@ -154,6 +154,119 @@ async function saveState(forceCloud=false){
   }
 }
 
+// V11.1.35：刷單入業績專用安全存檔（併發保護版）。
+// 1) 使用與 pullCloudState 相同的主資料選擇規則。
+// 2) 寫入時帶入讀取到的 updated_at 作為條件；若期間被其他裝置更新，
+//    本次寫入會失敗並重新讀取重試，避免整包蓋掉別台剛完成的資料。
+// 3) 寫入後再次用相同規則讀取並驗證指定單據，確認成功才回報完成。
+function chooseAuthoritativeCloudRow(inputRows){
+  const rows=(inputRows||[]).filter(r=>r&&r.data);
+  rows.sort((a,b)=>{
+    const ar=String(a.data?.lastResetAt||'');
+    const br=String(b.data?.lastResetAt||'');
+    if(ar||br) return br.localeCompare(ar);
+    return String(b.updated_at||'').localeCompare(String(a.updated_at||''));
+  });
+  return rows[0]||null;
+}
+
+async function saveAssignedOrderVerified(orderId, assignment, assignLog){
+  const id=String(orderId||'').trim();
+  if(!id) return {ok:false, message:'缺少單號'};
+
+  const localOrder=(state.orders||[]).find(o=>String(o.id||o.orderNo||'')===id);
+  if(!localOrder) return {ok:false, message:'本機找不到這張單'};
+
+  const client=getCloudClient();
+  if(!client){
+    return {ok:false, message:'目前未連上雲端，為避免假成功，這次不掛入業績'};
+  }
+  if(cloudSaving) return {ok:false, message:'系統正在同步，請稍候再試'};
+
+  cloudSaving=true;
+  try{
+    const maxAttempts=3;
+    for(let attempt=1;attempt<=maxAttempts;attempt++){
+      const latest=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(latest.error) return {ok:false, message:'讀取雲端失敗：'+latest.error.message};
+
+      const chosen=chooseAuthoritativeCloudRow(latest.data||[]);
+      if(!chosen) return {ok:false, message:'雲端找不到正式資料'};
+
+      const merged=normalizeCloudState(clone(chosen.data));
+      const cloudOrder=(merged.orders||[]).find(o=>String(o.id||o.orderNo||'')===id);
+      if(!cloudOrder) return {ok:false, message:'雲端找不到這張單，請先同步後再刷'};
+      if(cloudOrder.refunded) return {ok:false, message:'這張單已退票，不能入業績'};
+      if(cloudOrder.assignedDesignerId){
+        const sameStaff=String(cloudOrder.assignedDesignerId||'')===String(assignment?.assignedDesignerId||'');
+        if(sameStaff){
+          state=merged;
+          localStorage.setItem(KEY,JSON.stringify(state));
+          cloudReady=true;
+          return {ok:true, alreadyVerified:true};
+        }
+        return {ok:false, message:'這張單已經刷過業績：'+(cloudOrder.assignedDesignerName||cloudOrder.assignedDesignerId)};
+      }
+
+      Object.assign(cloudOrder, assignment||{});
+      if(!Array.isArray(merged.assignLogs)) merged.assignLogs=[];
+      if(assignLog){
+        const existed=merged.assignLogs.find(l=>String(l.orderNo||'')===id && l.status!=='已退票' && l.status!=='作廢');
+        if(!existed) merged.assignLogs.unshift(clone(assignLog));
+      }
+
+      const stamp=new Date().toISOString();
+      // 樂觀鎖：只有 chosen.updated_at 尚未被其他裝置改動時才更新該 row。
+      const updateResult=await client
+        .from(CLOUD_TABLE)
+        .update({data:merged,updated_at:stamp})
+        .eq('id',CLOUD_ROW_ID)
+        .eq('updated_at',chosen.updated_at)
+        .select('id,updated_at');
+      if(updateResult.error) return {ok:false, message:'雲端寫入失敗：'+updateResult.error.message};
+
+      if(!updateResult.data||!updateResult.data.length){
+        if(attempt<maxAttempts){
+          await new Promise(resolve=>setTimeout(resolve,180*attempt));
+          continue;
+        }
+        return {ok:false, message:'資料剛被其他裝置更新，為避免覆蓋，這次沒有掛入。請再掃一次'};
+      }
+
+      const verify=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(verify.error) return {ok:false, message:'寫入後驗證失敗：'+verify.error.message};
+
+      const verifiedRow=chooseAuthoritativeCloudRow(verify.data||[]);
+      const verifiedState=verifiedRow?.data ? normalizeCloudState(verifiedRow.data) : null;
+      const verifiedOrder=verifiedState?.orders?.find(o=>String(o.id||o.orderNo||'')===id);
+      if(!verifiedOrder || String(verifiedOrder.assignedDesignerId||'')!==String(assignment?.assignedDesignerId||'')){
+        return {ok:false, message:'雲端驗證未通過，系統沒有把這張單當成完成，請重新刷一次'};
+      }
+
+      state=verifiedState;
+      localStorage.setItem(KEY,JSON.stringify(state));
+      cloudReady=true;
+      return {ok:true};
+    }
+    return {ok:false, message:'雲端忙碌，這次沒有掛入，請稍後再試'};
+  }catch(err){
+    console.log('刷單安全存檔錯誤',err);
+    return {ok:false, message:'刷單存檔發生錯誤：'+(err?.message||err)};
+  }finally{
+    cloudSaving=false;
+  }
+}
+
 
 // V11.1.29 P0：管理頁局部存檔保護。
 // 員工/品項儲存不可用本機舊 state 整包覆蓋雲端 orders/refunds/counters。

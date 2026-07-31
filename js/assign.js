@@ -225,41 +225,75 @@ function clearAssignScanField(){
   setTimeout(()=>input.focus(),80);
 }
 $('#btnSwitchAssignStaff').onclick=()=>{switchAssignStaffIdentity()};
-$('#btnAssignOrder').onclick=()=>{
+async function assignCurrentOrder(source='manual'){
   if(needAssignPinFirst()){
     const staff = promptAssignPinOnce();
-    if(!staff) return;
+    if(!staff) return false;
     renderAssign();
   }
   enforceAssignDesignerPermission();
   const code=$('#assignOrderNo').value.trim();
   const staffId=$('#assignDesigner').value||getAssignLoginStaff()?.id||'';
   const order=findOrderByCode(code);
-  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return}
-  if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return}
-  // V11.0.82：薪水標準保護。同一張單已掛業績後，不可重複刷入，避免薪資/抽成被覆蓋。
+  if(!order){alert('找不到單號：'+code+'。如果這張單是在另一台平板/電腦開的，手機目前還沒有同步資料。');setTimeout(()=>$('#assignOrderNo').focus(),80);return false}
+  if(order.refunded){alert('這張單已退票，不能入業績');clearAssignScanField();return false}
   if(order.assignedDesignerId){
     alert('這張單已經刷過業績：'+(order.assignedDesignerName||order.assignedDesignerId)+'，不能重複刷。');
     clearAssignScanField();
-    return;
+    return false;
   }
   const staff=staffById(staffId);
-  if(!staff){alert('找不到員工資料，請先到員工資料確認此員工仍在職');return}
-  order.assignedDesignerId=staff.id;
-  order.assignedDesignerName=staff.name;
-  order.performanceTotal=assignPerformanceTotal(order);
-  order.commission=calcCommission(order,staff.id);
-  order.assignedAt=new Date().toISOString();
-  addAssignLog(order,staff,'正常');
+  if(!staff){alert('找不到員工資料，請先到員工資料確認此員工仍在職');return false}
+
+  const assignedAt=new Date().toISOString();
+  const assignment={
+    assignedDesignerId:staff.id,
+    assignedDesignerName:staff.name,
+    performanceTotal:assignPerformanceTotal(order),
+    commission:calcCommission(order,staff.id),
+    assignedAt,
+    assignedSource:source
+  };
+  const now=new Date();
+  const log={
+    id:'ASSIGN-'+Date.now()+'-'+Math.random().toString(16).slice(2),
+    orderNo:order.id,
+    staffId:staff.id,
+    staffName:staff.name,
+    amount:assignment.performanceTotal,
+    commission:Number(assignment.commission||0),
+    sourceType:source==='camera'?'相機刷單入業績':'刷單入業績',
+    createdBy:getAssignLoginStaff()?.name || '刷單頁',
+    date:todayStr(),
+    time:nowTime(),
+    createdAt:now.toISOString(),
+    status:'正常',
+    remark:''
+  };
+
+  const btn=$('#btnAssignOrder');
+  if(btn){btn.disabled=true;btn.textContent='雲端確認中…'}
+  const result=await saveAssignedOrderVerified(order.id,assignment,log);
+  if(btn){btn.disabled=false;btn.textContent='掛入業績'}
+  if(!result?.ok){
+    alert('❌ 掛入失敗\n'+(result?.message||'雲端未確認成功')+'\n\n系統沒有顯示成功，也不會把這張單當成已完成。');
+    await pullCloudState();
+    renderAssign();
+    renderReport();
+    return false;
+  }
+
   LAST_ASSIGNED_ORDER_NO=order.id;
   const reportStaff=$('#reportStaff');
   if(reportStaff) reportStaff.value=staff.id;
-  saveState(true);
   renderAssign();
   renderReport();
   clearAssignScanField();
-  alert('已成功掛入業績，報表已更新到 '+staff.name);
+  alert('✅ 已確認掛入業績，雲端資料已驗證：'+staff.name);
+  return true;
 }
+$('#btnAssignOrder').onclick=()=>assignCurrentOrder('manual');
+
 function renderMyStats(){
   state.orders.forEach(ensureOrderPerformance);
   enforceAssignDesignerPermission();
@@ -361,13 +395,23 @@ $('#btnDoRefund').onclick=()=>{
 }
 
 let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null, zxingControls=null;
+let cameraAssignInProgress=false;
 function fillScannedCode(raw){
   const code = String(raw||'').trim();
-  if(!code) return false;
+  if(!code || cameraAssignInProgress) return false;
   const finalCode = normalizeOrderNoText(code);
+  const order=findOrderByCode(finalCode);
+  if(!order) return false;
+  cameraAssignInProgress=true;
   $('#assignOrderNo').value = finalCode;
   $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
-  setTimeout(()=>$('#assignOrderNo').focus(),80);
+  setTimeout(async()=>{
+    try{
+      await assignCurrentOrder('camera');
+    }finally{
+      cameraAssignInProgress=false;
+    }
+  },180);
   return true;
 }
 async function startCameraScan(){
