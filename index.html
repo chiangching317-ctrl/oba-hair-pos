@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>OBA Hair V11.1.35 刷單併發保護版</title>
+<title>OBA Hair V11.1.47  正式版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -27,17 +27,18 @@ const DEFAULT_BRANCH_NAME = "總店";
 <h2 class="access-title">OBA Hair 系統登入</h2>
 <div class="access-sub">此系統僅供公司內部使用。請先輸入自己的密碼。</div>
 <div class="label">密碼 / 密碼 / 進入系統</div>
-<input class="input" id="accessPassword" placeholder="請輸入自己的密碼" type="password"/>
+<input class="input" disabled id="accessPassword" placeholder="DEV 資料載入中…" type="password"/>
 <div class="space"></div>
 <div class="row">
-<button class="btn btn-primary" id="btnAccessEnter">進入系統</button>
+<button class="btn btn-primary" disabled id="btnAccessEnter">載入中…</button>
 </div>
-<div class="note">進入系統IN 進入後，收款時仍需再次輸入本單密碼。</div>
+<div class="note" id="accessLoadStatus">正在載入 DEV 雲端設定與員工 PIN，完成前不允許登入或寫入。</div>
+<div class="note">進入系統後，收款時仍需再次輸入本單密碼。</div>
 </div>
 </div>
 <div class="wrap">
 <div class="hero">
-<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.35 刷單併發保護版｜由 V11.1.28 修改</div></div>
+<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.47 DEV 對帳權限版｜含 V11.1.35 刷單修正＋報表功能</div></div>
 <div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div>
 </div>
 <div class="tabs">
@@ -187,8 +188,21 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="space"></div>
 <div class="stats">
-<div class="stat"><div class="k">集點卡兌換合計</div><div class="v" id="payRedeem">$0</div></div>
+<div class="stat"><div class="k">集點卡兌換</div><div class="v" id="payRedeem">0 筆 / 原服務價值 $0</div></div>
 </div>
+</div>
+<div class="card" id="reconcileBox">
+<div class="section-title">差額查帳／對帳檢查</div>
+<div class="note">依目前報表篩選區間，重新計算「區間營業額」與有效員工的區間個人業績；退票／作廢單不列入差額。</div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k">區間營業額</div><div class="v" id="reconcileSales">$0</div></div>
+<div class="stat"><div class="k">個人業績加總</div><div class="v" id="reconcilePersonal">$0</div></div>
+<div class="stat"><div class="k">差額</div><div class="v" id="reconcileDiff">$0</div></div>
+<div class="stat"><div class="k">待查筆數</div><div class="v" id="reconcileCount">0</div></div>
+</div>
+<div class="space"></div>
+<div id="reconcileDetail"></div>
 </div>
 <div class="card">
 <div class="section-title">個人業績</div>
@@ -229,8 +243,8 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 </div>
 <div class="card">
-<div class="section-title">損益報表 初版（支出頁）</div>
-<div class="note">V11.1.04a：固定顯示在支出頁；只讀取收銀、退票、支出資料，不反寫收銀、不寫 Supabase。</div>
+<div class="section-title">薪資損益（支出頁）</div>
+<div class="note">V11.1.36c DEV：營業額已排除退票，不重複扣退票；薪資成本以已掛業績訂單的抽成計算。支出仍只存在本機。</div>
 <div class="space"></div>
 <div class="row">
 <button class="btn btn-ok" id="btnSalaryClose" type="button">薪資結算歸零</button>
@@ -245,15 +259,25 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="space"></div>
 <div class="stats">
-<div class="stat"><div class="k">今日淨利</div><div class="v" id="profitTodayNet">$0</div></div>
+<div class="stat"><div class="k">今日損益（未扣薪資）</div><div class="v" id="profitTodayNet">$0</div></div>
 <div class="stat"><div class="k">本月營業額</div><div class="v" id="profitMonthSales">$0</div></div>
 <div class="stat"><div class="k">本月支出</div><div class="v" id="profitMonthExpense">$0</div></div>
 </div>
 <div class="space"></div>
 <div class="stats">
 <div class="stat"><div class="k">本月退票</div><div class="v" id="profitMonthRefund">$0</div></div>
-<div class="stat"><div class="k">本月淨利</div><div class="v" id="profitMonthNet">$0</div></div>
-<div class="stat"><div class="k">計算公式</div><div class="v" style="font-size:14px">營業額－退票－支出</div></div>
+<div class="stat"><div class="k">本月損益（未扣薪資）</div><div class="v" id="profitMonthNet">$0</div></div>
+</div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k">今日抽成薪資</div><div class="v" id="profitTodaySalary">$0</div></div>
+<div class="stat"><div class="k">今日薪資後損益</div><div class="v" id="profitTodayAfterSalary">$0</div></div>
+<div class="stat"><div class="k">本月抽成薪資</div><div class="v" id="profitMonthSalary">$0</div></div>
+</div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k">本月薪資後損益</div><div class="v" id="profitMonthAfterSalary">$0</div></div>
+<div class="stat"><div class="k">計算公式</div><div class="v" style="font-size:14px">未扣薪資＝營業額－支出<br>薪資後＝營業額－支出－抽成薪資<br>（營業額已排除退票）</div></div>
 </div>
 </div>
 <div class="card">

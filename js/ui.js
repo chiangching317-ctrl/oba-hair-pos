@@ -3,7 +3,28 @@ function setActiveTab(name){document.querySelectorAll('.tab').forEach(t=>t.class
 function focusScanIfNeeded(name){if(name==='assign')setTimeout(()=>$('#assignOrderNo').focus(),50)}
 
 // V11.0.40：檢視模式＋分店欄位預留＋歸零退票帳務（只可看報表，不可操作收款/退票/管理）
-const BOSS_PASSWORD = '269527'; // V11.1.17：移除前端明碼 BOSS 密碼；BOSS 之後改由 Supabase Auth / 權限控管
+// V11.1.46：BOSS PIN 不再以前端明碼保存，只保存 PBKDF2 驗證值。
+const BOSS_PIN_SALT = 'OBA_HAIR_BOSS_PIN_V1';
+const BOSS_PIN_ITERATIONS = 120000;
+const BOSS_PIN_HASH = 'c3c68a100bff86e1745e0bf2fbd236ab0da3b9c984da6398d171fcd98136fcd3';
+async function verifyBossPin(pin){
+  const p=String(pin||'').trim();
+  if(!/^\d{6}$/.test(p) || !window.crypto?.subtle) return false;
+  try{
+    const enc=new TextEncoder();
+    const key=await crypto.subtle.importKey('raw',enc.encode(p),'PBKDF2',false,['deriveBits']);
+    const bits=await crypto.subtle.deriveBits(
+      {name:'PBKDF2',salt:enc.encode(BOSS_PIN_SALT),iterations:BOSS_PIN_ITERATIONS,hash:'SHA-256'},
+      key,
+      256
+    );
+    const hex=Array.from(new Uint8Array(bits)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    return hex===BOSS_PIN_HASH;
+  }catch(e){
+    console.error('BOSS PIN 驗證失敗',e);
+    return false;
+  }
+}
 const BOSS_SESSION_KEY = 'oba_boss_mode_v38';
 window.USER_ROLE = sessionStorage.getItem(BOSS_SESSION_KEY)==='yes' ? 'boss' : (window.USER_ROLE || 'staff');
 function isBossMode(){return window.USER_ROLE === 'boss'}
@@ -124,13 +145,43 @@ document.querySelectorAll('.tab').forEach(tab=>tab.onclick=()=>{
 });
 function openPassword(targetTab){pwdMode=targetTab;$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.add('hidden');$('#pwdTitle').textContent=state.managementPassword?'輸入密碼':'第一次設定密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}
 $('#btnPwdCancel').onclick=()=>$('#passwordDialog').close();
-$('#btnPwdOk').onclick=()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('目前模式不可修改密碼');return} if(!isValidManagerPin(oldPwd)){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
- if(BOSS_PASSWORD && pwdMode==='report' && oldPwd===BOSS_PASSWORD){$('#passwordDialog').close();pendingLockedTab='';enterBossMode();return;}
- if(!state.managementPassword){ if(!oldPwd){alert('請先設定密碼');return} state.managementPassword=oldPwd; saveState(); } else if(!isValidPinForTab(oldPwd, pwdMode)){ alert('密碼錯誤或沒有此頁權限'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
- const loginPin=String(oldPwd||'').trim();
- const loginStaff=Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===loginPin) : null;
- window.CURRENT_LOGIN_STAFF = loginStaff || null;
- // 管理密碼登入才是 owner；員工 PIN 進報表仍維持 staff，讓補印等細項權限能正確判斷。
- window.USER_ROLE = (String(state.managementPassword||'').trim()===loginPin && !loginStaff) ? 'owner' : 'staff';
- $('#passwordDialog').close(); if(pendingLockedTab){ setActiveTab(pendingLockedTab); focusScanIfNeeded(pendingLockedTab); pendingLockedTab=''; }};
+$('#btnPwdOk').onclick=async()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=$('#pwdNew').value.trim(); if(pwdMode==='change'){if(isBossMode()){alert('目前模式不可修改密碼');return} if(!isValidManagerPin(oldPwd)){alert('舊密碼錯誤');return} if(!newPwd){alert('請輸入新密碼');return} state.managementPassword=newPwd; saveState(); $('#passwordDialog').close(); alert('密碼已修改'); return;}
+ if(pwdMode==='report' && await verifyBossPin(oldPwd)){
+   $('#passwordDialog').close();
+   pendingLockedTab='';
+   enterBossMode();
+   return;
+ }
+ if(!state.managementPassword){
+   if(!oldPwd){alert('請先設定密碼');return}
+   state.managementPassword=oldPwd; saveState();
+   window.USER_ROLE='owner'; CURRENT_LOGIN_LEVEL='owner'; CURRENT_CASHIER=null;
+ } else {
+   if(!isValidPinForTab(oldPwd, pwdMode)){ alert('密碼錯誤或沒有此頁權限'); $('#pwdOld').value=''; $('#pwdOld').focus(); return; }
+   const isManagementPassword=String(state.managementPassword||'').trim()===String(oldPwd||'').trim();
+   const loginStaff=Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===String(oldPwd||'').trim()) : null;
+   if(isManagementPassword){
+     window.USER_ROLE='owner';
+     CURRENT_LOGIN_LEVEL='owner';
+     CURRENT_CASHIER=null;
+   }else if(loginStaff){
+     window.USER_ROLE='staff';
+     CURRENT_LOGIN_LEVEL='staff';
+     CURRENT_CASHIER={id:loginStaff.id,name:loginStaff.name,permissions:loginStaff.permissions||[]};
+   }
+ }
+ updateCashierDisplay();
+ $('#passwordDialog').close();
+
+ // V11.1.42：先用剛驗證完成的登入身份把目標頁完整重算，再顯示頁籤。
+ // 避免報表先短暫顯示上一位員工（例如 Milin），數秒後才跳成目前登入的 JEAN。
+ if(pendingLockedTab){
+   const targetTab=pendingLockedTab;
+   if(targetTab==='report' && typeof renderReport==='function') renderReport();
+   if(targetTab==='manage' && typeof renderManage==='function') renderManage();
+   if(targetTab==='expense' && typeof renderExpenses==='function') renderExpenses();
+   pendingLockedTab='';
+   setActiveTab(targetTab);
+   focusScanIfNeeded(targetTab);
+ }};
 $('#btnChangePwd').onclick=()=>{pwdMode='change';$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='修改密碼';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdOld').focus(),60)}

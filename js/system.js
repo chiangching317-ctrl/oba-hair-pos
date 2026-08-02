@@ -1,4 +1,14 @@
-$('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
+$('#btnExport').onclick=()=>{
+  const canExport=!!(
+    (typeof isBossMode==='function' && isBossMode()) ||
+    CURRENT_LOGIN_LEVEL==='owner' ||
+    window.USER_ROLE==='owner' ||
+    (Array.isArray(CURRENT_CASHIER?.permissions) && CURRENT_CASHIER.permissions.includes('view_all'))
+  );
+  if(!canExport){ alert('沒有匯出全店資料的權限'); return; }
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)
+}
 function buildGoLiveResetState(){
   const clean = normalizeCloudState(clone(state));
   // V11.0.48 測試期清空：真的清掉假訂單/假退票/假業績；員工、品項、PIN、權限、抽成、密碼全部保留。
@@ -85,8 +95,14 @@ function isPhoneDevice(){
   const sizeLooksPhone = sw <= 600 && lw <= 1100;
   return isiPhone || isAndroidPhone || sizeLooksPhone;
 }
+function hasMasterControlSession(){
+  return CURRENT_LOGIN_LEVEL==='owner' || window.USER_ROLE==='owner';
+}
 function applyDeviceMode(){
-  const phoneOnly = isPhoneDevice();
+  // V11.1.47：手機預設仍維持刷單模式；總控管理密碼登入後，
+  // 若設備已授權收銀，解除 phone-mode，讓總控可使用完整功能。
+  // BOSS 仍由 applyBossMode() 處理，維持報表唯讀。
+  const phoneOnly = isPhoneDevice() && !hasMasterControlSession();
   document.body.classList.toggle('phone-mode', phoneOnly);
   if(phoneOnly){
     setActiveTab('assign');
@@ -163,7 +179,7 @@ async function authorizeCashierDevice(){
   const pwd = await askMaskedPassword('請輸入密碼，授權這台設備可以收銀', '密碼');
   if(pwd===null) return;
   const val=String(pwd||'').trim();
-  if(BOSS_PASSWORD && val===BOSS_PASSWORD){ enterBossMode(); return; }
+  if(await verifyBossPin(val)){ enterBossMode(); return; }
   if(!state.managementPassword){ alert('尚未設定密碼，請先用已授權設備進入管理設定。'); return; }
   if(val!==String(state.managementPassword||'').trim()){
     alert('密碼錯誤，這台設備仍只能刷單');
@@ -226,10 +242,8 @@ function submitRedeem(){
     time: nowTime(),
     branchId: state.branchId || DEFAULT_BRANCH_ID,
     branchName: state.branchName || DEFAULT_BRANCH_NAME,
-    items: [{id:item.id,name:item.name,price:0,sourcePrice:Number(item.price||0),category:item.category||''}],
+    items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
     total: 0,
-    performanceTotal: Number(item.price || 0),
-    performanceSource: '集點卡兌換',
     paymentMethod: '集點卡兌換',
     cashierId: '',
     cashierName: '集點卡兌換',
@@ -294,11 +308,11 @@ function openAccessGate(){
     if(el){ el.focus(); try{el.click();}catch(e){} }
   },80);
 }
-function verifyAccessPassword(){
+async function verifyAccessPassword(){
   const input=$('#accessPassword');
   const val=(input?.value||'').trim();
   if(!val){ alert('請輸入密碼'); return; }
-  if(BOSS_PASSWORD && val===BOSS_PASSWORD){
+  if(await verifyBossPin(val)){
     enterBossMode();
     return;
   }
@@ -329,11 +343,11 @@ function verifyAccessPassword(){
   applyDeviceAuthorizationMode();
 }
 document.addEventListener('click',function(e){
-  if(e.target && e.target.id==='btnAccessEnter') verifyAccessPassword();
+  if(e.target && e.target.id==='btnAccessEnter') void verifyAccessPassword();
 });
 document.addEventListener('keydown',function(e){
   if(e.key==='Enter' && document.activeElement && document.activeElement.id==='accessPassword'){
-    verifyAccessPassword();
+    void verifyAccessPassword();
   }
 });
 
@@ -364,9 +378,40 @@ async function hardClearTestDataOnBoot(){
   console.log('V11.0.58 測試資料根本清除完成', {cloudOk, orders:state.orders.length, refunds:state.refunds.length, cart:state.cart.length, monthlyOrderCounter:state.monthlyOrderCounter});
   return cloudOk;
 }
+function setDevAccessReady(ready, message){
+  const input=$('#accessPassword');
+  const button=$('#btnAccessEnter');
+  const status=$('#accessLoadStatus');
+  if(input){
+    input.disabled=!ready;
+    input.placeholder=ready ? '請輸入自己的密碼' : 'DEV 資料載入中…';
+    if(!ready) input.value='';
+  }
+  if(button){
+    button.disabled=!ready;
+    button.textContent=ready ? '進入系統' : '載入中…';
+  }
+  if(status) status.textContent=message||'';
+}
+function hasUsableLoginCredential(){
+  const managementOk=!!String(state?.managementPassword||'').trim();
+  const staffPinOk=Array.isArray(state?.staff) && state.staff.some(s=>s && s.active && String(s.pin||'').trim());
+  return managementOk || staffPinOk;
+}
 async function init(){
   ensureBranchFields(state);
-  // V11.0.75：保留既有測試資料，開機不再執行 hardClearTestDataOnBoot()，不清 orders/refunds/cart/monthlyOrderCounter，也不重建雲端 main row。
+  openAccessGate();
+  setDevAccessReady(false, '正在讀取 DEV 雲端資料與 PIN，請稍候…');
+
+  // V11.1.38：登入前一定先完成 DEV 雲端載入。避免新的 DEV localStorage 為空時，
+  // 使用空白 defaultState 驗證 PIN，造成「正確 PIN 也進不去」的假故障。
+  const bootstrapOk = await bootstrapDevCloudState();
+  if(!bootstrapOk || !hasUsableLoginCredential()){
+    setDevAccessReady(false, 'DEV 雲端資料或 PIN 載入失敗。已停止登入與寫入，請檢查網路/DEV 資料庫後重新整理。');
+    console.error('DEV 啟動封鎖：無法取得可用的 DEV 登入資料');
+    return;
+  }
+
   updateCashierDisplay();
   renderCashier();
   renderAssign();
@@ -374,6 +419,8 @@ async function init(){
   renderTimeclock();
   renderExpenses();
   renderManage();
+  setDevAccessReady(true, 'DEV 資料已載入，可使用原本的 DEV PIN / 管理密碼登入。');
+
   if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes' || isBossMode()){
     closeAccessGate();
     applyDeviceAuthorizationMode();
@@ -381,6 +428,6 @@ async function init(){
     openAccessGate();
   }
   window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceAuthorizationMode(); });
-  startCloudSync();
+  startCloudSync(true);
 }
 init();
