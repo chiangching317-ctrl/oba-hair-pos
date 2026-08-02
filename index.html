@@ -5,7 +5,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>OBA Hair V11.1.35 刷單併發保護版</title>
+<title>OBA Hair V11.1.54 RC3 正式候選版</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
@@ -37,7 +37,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="wrap">
 <div class="hero">
-<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.35 刷單併發保護版｜由 V11.1.28 修改</div></div>
+<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.54 RC3 正式候選版</div></div>
 <div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div>
 </div>
 <div class="tabs">
@@ -189,6 +189,19 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="stats">
 <div class="stat"><div class="k">集點卡兌換合計</div><div class="v" id="payRedeem">$0</div></div>
 </div>
+</div>
+<div class="card" id="reconcileBox">
+<div class="section-title">差額查帳／對帳檢查</div>
+<div class="note">依目前報表篩選區間，重新計算「區間營業額」與有效員工的區間個人業績；退票／作廢單不列入差額。</div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k">區間營業額</div><div class="v" id="reconcileSales">$0</div></div>
+<div class="stat"><div class="k">個人業績加總</div><div class="v" id="reconcilePersonal">$0</div></div>
+<div class="stat"><div class="k">差額</div><div class="v" id="reconcileDiff">$0</div></div>
+<div class="stat"><div class="k">待查筆數</div><div class="v" id="reconcileCount">0</div></div>
+</div>
+<div class="space"></div>
+<div id="reconcileDetail"></div>
 </div>
 <div class="card">
 <div class="section-title">個人業績</div>
@@ -347,7 +360,7 @@ function escapeHtml(value){
 <script>
 </script>
 <script src="js/expense.js"></script>
-<script src="js/manage.js"></script>
+<script src="js/manage.js?v=11.1.54-rc3"></script>
 <script src="js/system.js"></script>
 <script src="js/security.js"></script>
 </body>

@@ -3,6 +3,7 @@ let cloudClient=null;
 let cloudReady=false;
 let cloudSaving=false;
 let cloudResetting=false; // V11.0.45：清空歸零時暫停 pull，避免雲端舊資料蓋回 nextNo
+let cloudStateVerified=false; // 僅在成功讀到完整 main row 後，才允許整包回寫雲端。
 function getCloudClient(){
   if(cloudClient) return cloudClient;
   if(!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
@@ -28,10 +29,11 @@ function normalizeCloudState(data){
 async function pullCloudState(){
   if(cloudResetting){
     console.log('正在執行清空歸零，暫停雲端 pull，避免舊資料蓋回業績');
+    cloudStateVerified=false;
     return false;
   }
   const client=getCloudClient();
-  if(!client) return false;
+  if(!client){ cloudStateVerified=false; return false; }
   try{
     // V11.0.47：抓多筆 main row，避免 Supabase 曾經有 duplicated main row 時拉到舊 orders。
     const { data, error } = await client
@@ -41,7 +43,7 @@ async function pullCloudState(){
       .order('updated_at', { ascending:false })
       .limit(20);
 
-    if(error){ console.log('雲端讀取失敗', error); return false; }
+    if(error){ cloudStateVerified=false; console.log('雲端讀取失敗，已停止雲端回寫', error); return false; }
 
     if(data && data.length>0){
       const rows = data.filter(r=>r && r.data);
@@ -55,11 +57,11 @@ async function pullCloudState(){
         });
         const chosen = rows[0];
 
-        // V11.0.69：線上測試保護。雲端若是空資料，不准覆蓋畫面，改成用目前本機/預設資料補回雲端。
+        // Fail-safe：雲端 main row 不完整時絕不以本機 state 回寫，避免新裝置覆蓋正式資料。
         if(isEmptyOrBrokenCloudData(chosen.data)){
-          console.log('雲端資料是空的或不完整，已阻止覆蓋本機資料，改上傳目前資料到雲端');
-          await saveState(true);
-          return true;
+          cloudStateVerified=false;
+          console.log('雲端資料是空的或不完整，已停止雲端回寫，保留目前本機資料');
+          return false;
         }
 
         const localResetAt = newestStamp(state?.lastResetAt, getLocalResetMarker());
@@ -67,6 +69,7 @@ async function pullCloudState(){
         const localIsClean = Array.isArray(state.orders) && state.orders.length===0 && Array.isArray(state.refunds) && state.refunds.length===0;
         const cloudHasOldOrders = Array.isArray(chosen.data?.orders) && chosen.data.orders.length>0;
         if(localResetAt && localIsClean && cloudHasOldOrders && cloudResetAt < localResetAt){
+          cloudStateVerified=false;
           console.log('已擋下舊雲端 orders：本機已歸零，雲端 row 較舊，不覆蓋', {localResetAt, cloudResetAt, cloudOrders:chosen.data.orders.length});
           return false;
         }
@@ -92,15 +95,18 @@ async function pullCloudState(){
           state.pendingPay = '';
         }
         localStorage.setItem(KEY, JSON.stringify(state));
+        cloudStateVerified=true;
         console.log('雲端資料已載入（已避開舊 main row）', chosen.updated_at, 'rows=', rows.length);
         return true;
       }
     }
 
-    await saveState(true);
-    return true;
+    cloudStateVerified=false;
+    console.log('雲端找不到有效 main row，已停止雲端回寫，保留目前本機資料');
+    return false;
   }catch(err){
-    console.log('雲端讀取錯誤', err);
+    cloudStateVerified=false;
+    console.log('雲端讀取錯誤，已停止雲端回寫', err);
     return false;
   }
 }
@@ -110,6 +116,10 @@ async function saveState(forceCloud=false){
 
   const client=getCloudClient();
   if(!client) return;
+  if(!cloudStateVerified){
+    console.log('尚未驗證雲端 main row，已停止整包雲端回寫');
+    return false;
+  }
   if(cloudSaving && !forceCloud) return;
   cloudSaving=true;
   try{
@@ -295,6 +305,11 @@ async function saveStatePatch(patchFields){
     }
 
     const cloudData = (data && data[0] && data[0].data) ? data[0].data : {};
+    if(isEmptyOrBrokenCloudData(cloudData)){
+      console.log('局部存檔讀到空白或不完整 main row，已停止，避免覆蓋正式資料');
+      alert('雲端資料不完整，為避免覆蓋正式資料，這次沒有儲存。請稍後再試。');
+      return false;
+    }
     const merged = normalizeCloudState(Object.assign(clone(defaultState), cloudData));
 
     Object.keys(patchFields||{}).forEach(key=>{
@@ -325,6 +340,7 @@ async function saveStatePatch(patchFields){
     state = normalizeCloudState(merged);
     localStorage.setItem(KEY, JSON.stringify(state));
     cloudReady=true;
+    cloudStateVerified=true;
     console.log('局部存檔成功，已保留雲端 orders/refunds', {orders: state.orders?.length||0, refunds: state.refunds?.length||0, fields:Object.keys(patchFields||{})});
     return true;
   }catch(err){
@@ -453,8 +469,7 @@ async function startCloudSync(){
     if(purgeInvalidEmptyOrders()) saveState(true);
     refreshAllScreens();
   }else{
-    console.log('目前使用本機資料，並嘗試補上雲端，避免線上空白');
-    await saveState(true);
+    console.log('雲端資料尚未驗證，保留目前本機資料且不回寫雲端');
     refreshAllScreens();
   }
   setInterval(async()=>{
