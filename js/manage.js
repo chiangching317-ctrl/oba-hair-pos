@@ -18,7 +18,7 @@ function markItemsDirty(){
   ITEM_DIRTY=true;
   updateItemSaveStatus();
 }
-function applyPresetPermissions(s){if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','reprint','manage','item','password','view_all']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
+function applyPresetPermissions(s){if(s.systemRole==='管理者'){s.permissions=['checkout','assign','refund','report','reprint','manage','item','password','view_all','reconcile_view']} else if(s.systemRole==='一般員工'){s.permissions=['checkout','assign','refund']} else if(s.systemRole==='僅查看者'){s.permissions=['report','view_all']}}
 function rulePercent(s,name){
   if(!s.rules) s.rules={default:0.5};
   const v = s.rules[name] ?? s.rules.default ?? 0.5;
@@ -75,7 +75,7 @@ function renderManage(){
       </div>
       ${renderCommissionInputs(s,names)}
       <div class="space"></div>
-      <div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','reprint|可補印單據','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div>
+      <div><div class="label">權限勾選</div><div class="permission-grid">${['checkout|可收款出單','assign|可刷單入業績','refund|可退票','report|可看報表','reprint|可補印單據','manage|可進員工資料','item|可改品項','password|可改密碼','view_all|可看全部營業額','reconcile_view|可看差額查帳／對帳檢查'].map(p=>{const[k,l]=p.split('|');return `<label><input type="checkbox" ${s.permissions.includes(k)?'checked':''} onchange="togglePermission('${s.id}','${k}',this.checked)"> ${l}</label>`}).join('')}</div></div>
       <div class="space"></div>
       <div class="row"><button class="btn btn-soft" onclick="updateSystemRoleByRole('${s.id}')">依身份自動套權限</button><button class="btn btn-ok" onclick="saveStaffChanges()">儲存修改</button><button class="btn btn-danger" onclick="deleteStaff('${s.id}')" ${s.owner?'disabled':''}>刪除此員工</button></div>
     </div>`;
@@ -93,7 +93,23 @@ if(staffCardsEl){
 }
 
 window.updateStaffRule=(staffId,name,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId); if(!s)return; if(!s.rules)s.rules={default:0.5}; const n=Number(value||0); s.rules[name]=Math.max(0,Math.min(100,n))/100; markStaffDirty(); renderAssign(); renderReport();}
-window.saveStaffChanges=async ()=>{if(guardBossAction()) return; const ok=await saveStatePatch({staff:state.staff}); if(!ok) return; STAFF_DIRTY=false; renderAssign(); renderReport(); renderManageKeepScroll(); alert('員工資料已儲存，訂單資料已保護')}
+function showStaffSaveSuccess(){
+  let notice=document.getElementById('staffSaveSuccessNotice');
+  if(!notice){
+    notice=document.createElement('div');
+    notice.id='staffSaveSuccessNotice';
+    notice.textContent='✓ 員工資料已儲存成功';
+    notice.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:2147483647;background:#166534;color:#fff;padding:14px 22px;border-radius:12px;font-size:18px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.28);pointer-events:none;';
+    document.body.appendChild(notice);
+  }
+  notice.style.display='block';
+  clearTimeout(window.__staffSaveNoticeTimer);
+  window.__staffSaveNoticeTimer=setTimeout(()=>{
+    const n=document.getElementById('staffSaveSuccessNotice');
+    if(n) n.style.display='none';
+  },2600);
+}
+window.saveStaffChanges=async ()=>{if(guardBossAction()) return; const ok=await saveStatePatch({staff:state.staff}); if(!ok) return; STAFF_DIRTY=false; showStaffSaveSuccess(); renderAssign(); renderReport(); renderManageKeepScroll();}
 window.saveItemsChanges=async ()=>{if(guardBossAction()) return; const ok=await saveStatePatch({items:state.items}); if(!ok) return; ITEM_DIRTY=false; renderCashier(); renderAssign(); renderReport(); renderManageKeepScroll(); alert('品項資料已儲存，訂單資料已保護')}
 window.updateStaffField=(staffId,field,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(field==='pin'){ const v=String(value||'').trim(); if(!v) return; if(!/^\d{4,8}$/.test(v)){ alert('PIN 請輸入 4 到 8 位數字'); return; } s.pin=v; } else { s[field]=value; } markStaffDirty(); renderAssign(); updateCashierDisplay()}
 window.updateStaffActive=(staffId,value)=>{if(guardBossAction()) return; const s=state.staff.find(x=>x.id===staffId);if(!s)return; if(s.owner&&value==='false'){alert('此資料不可停用');return} s.active=value==='true'; markStaffDirty(); renderAssign();}
@@ -112,10 +128,10 @@ document.addEventListener('click', async function(e){
     const ok=await saveStatePatch({staff:state.staff});
     if(!ok) return;
     STAFF_DIRTY=false;
+    showStaffSaveSuccess();
     renderAssign();
     renderReport();
     renderManageKeepScroll();
-    alert('員工資料已儲存，訂單資料已保護');
   }
   if(e.target && e.target.id==='btnSaveItems'){
     if(guardBossAction()) return;
