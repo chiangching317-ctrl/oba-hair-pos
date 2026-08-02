@@ -162,6 +162,3 @@ body.boss-mode .panel-readonly a{opacity:.55;pointer-events:none}
 .expense-table .tr{grid-template-columns:.9fr .9fr 1fr 1.5fr 1.4fr}
 .expense-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 @media (max-width:900px){.expense-table .tr{grid-template-columns:1fr}.expense-summary{grid-template-columns:1fr}}
-
-/* V11.1.36b: reconciliation warning */
-.reconcile-warn{outline:2px solid currentColor;}

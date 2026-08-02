@@ -326,16 +326,6 @@ $('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=(
 
 function openReprintDialog(){
   if(guardBossAction()) return;
-  if(typeof isBossMode==='function' && isBossMode()){
-    alert('BOSS 模式為報表唯讀，不能補印單據');
-    return;
-  }
-  const canReprint=!!(
-    CURRENT_LOGIN_LEVEL==='owner' ||
-    window.USER_ROLE==='owner' ||
-    (Array.isArray(CURRENT_CASHIER?.permissions) && CURRENT_CASHIER.permissions.includes('reprint'))
-  );
-  if(!canReprint){ alert('沒有補印單據的權限'); return; }
   const d=$('#reprintDate');
   const no=$('#reprintOrderNo');
   if(d && !d.value) d.value=todayStr();
