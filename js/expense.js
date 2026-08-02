@@ -47,7 +47,6 @@ function expenseMonthOf(date){
 }
 function renderExpenses(){
   bindExpenseEvents();
-  updateExpenseAdminButtons();
   const dateEl=$('#expenseDate');
   if(dateEl && !dateEl.value) dateEl.value=todayStr();
   const list=loadExpenses().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
@@ -208,29 +207,3 @@ function bindExpenseEvents(){
   });
   setExpenseEditingMode(expenseEditingId);
 }
-
-
-function canUseExpenseAdminActions(){
-  if(window.USER_ROLE === 'boss') return false;
-  const staff = typeof getAssignLoginStaff === 'function' ? getAssignLoginStaff() : null;
-  if(staff?.owner) return true;
-  if(Array.isArray(staff?.permissions) && (staff.permissions.includes('manage') || staff.permissions.includes('view_all'))) return true;
-  const current = typeof CURRENT_CASHIER !== 'undefined' ? CURRENT_CASHIER : null;
-  if(current?.owner) return true;
-  if(Array.isArray(current?.permissions) && (current.permissions.includes('manage') || current.permissions.includes('view_all'))) return true;
-  const loginId = sessionStorage.getItem('oba_access_staff_id') || localStorage.getItem('oba_access_staff_id') || '';
-  const loginStaff = Array.isArray(state?.staff) ? state.staff.find(s=>s.id===loginId) : null;
-  if(loginStaff?.owner) return true;
-  if(Array.isArray(loginStaff?.permissions) && (loginStaff.permissions.includes('manage') || loginStaff.permissions.includes('view_all'))) return true;
-  return false;
-}
-function updateExpenseAdminButtons(){
-  const ok=canUseExpenseAdminActions();
-  ['btnSalaryClose','btnResetAll'].forEach(id=>{
-    const btn=$('#'+id);
-    if(!btn) return;
-    btn.classList.toggle('hidden', !ok);
-    btn.disabled=!ok;
-  });
-}
-

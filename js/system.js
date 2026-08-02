@@ -1,4 +1,14 @@
-$('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
+$('#btnExport').onclick=()=>{
+  const canExport=!!(
+    (typeof isBossMode==='function' && isBossMode()) ||
+    CURRENT_LOGIN_LEVEL==='owner' ||
+    window.USER_ROLE==='owner' ||
+    (Array.isArray(CURRENT_CASHIER?.permissions) && CURRENT_CASHIER.permissions.includes('view_all'))
+  );
+  if(!canExport){ alert('沒有匯出全店資料的權限'); return; }
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)
+}
 function buildGoLiveResetState(){
   const clean = normalizeCloudState(clone(state));
   // V11.0.48 測試期清空：真的清掉假訂單/假退票/假業績；員工、品項、PIN、權限、抽成、密碼全部保留。
@@ -85,8 +95,12 @@ function isPhoneDevice(){
   const sizeLooksPhone = sw <= 600 && lw <= 1100;
   return isiPhone || isAndroidPhone || sizeLooksPhone;
 }
+function isOwnerControlMode(){
+  return CURRENT_LOGIN_LEVEL==='owner' || window.USER_ROLE==='owner';
+}
 function applyDeviceMode(){
-  const phoneOnly = isPhoneDevice();
+  // V11.1.48：總控管理密碼在手機上也保留完整系統；一般員工手機仍只顯示刷單。
+  const phoneOnly = isPhoneDevice() && !isOwnerControlMode();
   document.body.classList.toggle('phone-mode', phoneOnly);
   if(phoneOnly){
     setActiveTab('assign');
@@ -119,6 +133,9 @@ function isCashierDevice(){
 }
 function isAssignOnlyDevice(){
   if(isLocalUnrestrictedDevice()) return false;
+  // V11.1.48：總控管理密碼登入後不受「未授權設備只能刷單」限制，
+  // 但不會自動把該手機永久標記成收銀設備。
+  if(isOwnerControlMode()) return false;
   return !isBossMode() && isOnlineUrl() && !isCashierDevice();
 }
 function restoreDeviceTabsForLocal(){
@@ -133,6 +150,12 @@ function applyDeviceAuthorizationMode(){
   if(isBossMode()){
     document.body.classList.remove('assign-only');
     applyBossMode();
+    return;
+  }
+  if(isOwnerControlMode()){
+    document.body.classList.remove('assign-only','phone-mode');
+    restoreDeviceTabsForLocal();
+    updateCashierDisplay();
     return;
   }
   if(isLocalUnrestrictedDevice()){
@@ -163,7 +186,7 @@ async function authorizeCashierDevice(){
   const pwd = await askMaskedPassword('請輸入密碼，授權這台設備可以收銀', '密碼');
   if(pwd===null) return;
   const val=String(pwd||'').trim();
-  if(BOSS_PASSWORD && val===BOSS_PASSWORD){ enterBossMode(); return; }
+  if(await verifyBossPin(val)){ enterBossMode(); return; }
   if(!state.managementPassword){ alert('尚未設定密碼，請先用已授權設備進入管理設定。'); return; }
   if(val!==String(state.managementPassword||'').trim()){
     alert('密碼錯誤，這台設備仍只能刷單');
@@ -226,10 +249,8 @@ function submitRedeem(){
     time: nowTime(),
     branchId: state.branchId || DEFAULT_BRANCH_ID,
     branchName: state.branchName || DEFAULT_BRANCH_NAME,
-    items: [{id:item.id,name:item.name,price:0,sourcePrice:Number(item.price||0),category:item.category||''}],
+    items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
     total: 0,
-    performanceTotal: Number(item.price || 0),
-    performanceSource: '集點卡兌換',
     paymentMethod: '集點卡兌換',
     cashierId: '',
     cashierName: '集點卡兌換',
@@ -294,11 +315,11 @@ function openAccessGate(){
     if(el){ el.focus(); try{el.click();}catch(e){} }
   },80);
 }
-function verifyAccessPassword(){
+async function verifyAccessPassword(){
   const input=$('#accessPassword');
   const val=(input?.value||'').trim();
   if(!val){ alert('請輸入密碼'); return; }
-  if(BOSS_PASSWORD && val===BOSS_PASSWORD){
+  if(await verifyBossPin(val)){
     enterBossMode();
     return;
   }
@@ -329,11 +350,11 @@ function verifyAccessPassword(){
   applyDeviceAuthorizationMode();
 }
 document.addEventListener('click',function(e){
-  if(e.target && e.target.id==='btnAccessEnter') verifyAccessPassword();
+  if(e.target && e.target.id==='btnAccessEnter') void verifyAccessPassword();
 });
 document.addEventListener('keydown',function(e){
   if(e.key==='Enter' && document.activeElement && document.activeElement.id==='accessPassword'){
-    verifyAccessPassword();
+    void verifyAccessPassword();
   }
 });
 

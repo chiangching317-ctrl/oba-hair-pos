@@ -118,9 +118,9 @@ $('#btnConfirmPay').onclick=()=>{
     renderCashier();
     return;
   }
-  const order={id:snap.orderNo||currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:checkoutItems,total:checkoutTotal,paymentMethod:snap.paymentMethod||state.pendingPay,cashierId:snap.cashierId||CURRENT_CASHIER?.id||'',cashierName:snap.cashierName||CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:taipeiNowIso()};
+  const order={id:snap.orderNo||currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:checkoutItems,total:checkoutTotal,paymentMethod:snap.paymentMethod||state.pendingPay,cashierId:snap.cashierId||CURRENT_CASHIER?.id||'',cashierName:snap.cashierName||CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};
   state.orders.unshift(order);
-  consumeMonthlyOrderNo(order.id);
+  consumeMonthlyOrderNo();
   state.cart=[];
   state.pendingPay='';
   state.pendingCheckoutCart=null;

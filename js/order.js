@@ -1,69 +1,18 @@
 // V11.1.27 第14刀：訂單工具模組拆分
 // 由 index.html 搬出；只搬程式，不改邏輯。
-// V11.1.29：單號防重用。
-// 已經開過的單號，即使單據刪除、作廢或被同步回捲，也不可再次使用。
-function ensureUsedOrderNos(){
-  if(!Array.isArray(state.usedOrderNos)) state.usedOrderNos=[];
-  if(Array.isArray(state.orders)){
-    state.orders.forEach(o=>{
-      orderIdentityValues(o).forEach(v=>{
-        const no=normalizeOrderNoText(v);
-        if(no && no.startsWith('OBA-') && !state.usedOrderNos.includes(no)){
-          state.usedOrderNos.push(no);
-        }
-      });
-    });
-  }
-}
-function maxUsedSeqForMonth(monthKey){
-  ensureUsedOrderNos();
-  let max=0;
-  const orders = Array.isArray(state.orders) ? state.orders : [];
-  orders.forEach(o=>{
-    orderIdentityValues(o).forEach(v=>{
-      const no=normalizeOrderNoText(v);
-      const m=no.match(/^OBA-(\d{8})-(\d{3,})$/);
-      if(m && m[1].slice(0,6)===monthKey){
-        max=Math.max(max, parseInt(m[2],10)||0);
-      }
-    });
-  });
-  state.usedOrderNos.forEach(v=>{
-    const no=normalizeOrderNoText(v);
-    const m=no.match(/^OBA-(\d{8})-(\d{3,})$/);
-    if(m && m[1].slice(0,6)===monthKey){
-      max=Math.max(max, parseInt(m[2],10)||0);
-    }
-  });
-  return max;
-}
 function getNextMonthlyOrderNo(){
   const monthKey=currentMonthKey();
   const dateKey=currentDateKey();
   if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
-  const minNext = maxUsedSeqForMonth(monthKey) + 1;
-  if(!state.monthlyOrderCounter[monthKey] || state.monthlyOrderCounter[monthKey] < minNext){
-    state.monthlyOrderCounter[monthKey]=minNext;
-  }
-  let no=state.monthlyOrderCounter[monthKey];
-  let orderNo=`OBA-${dateKey}-${String(no).padStart(3,'0')}`;
-  ensureUsedOrderNos();
-  while(state.usedOrderNos.includes(orderNo) || findOrderByCode(orderNo)){
-    no+=1;
-    orderNo=`OBA-${dateKey}-${String(no).padStart(3,'0')}`;
-  }
-  state.monthlyOrderCounter[monthKey]=no;
-  return orderNo;
+  if(!state.monthlyOrderCounter[monthKey]) state.monthlyOrderCounter[monthKey]=1;
+  const no=state.monthlyOrderCounter[monthKey];
+  return `OBA-${dateKey}-${String(no).padStart(3,'0')}`;
 }
-function consumeMonthlyOrderNo(orderNo){
+function consumeMonthlyOrderNo(){
   const monthKey=currentMonthKey();
   if(!state.monthlyOrderCounter) state.monthlyOrderCounter={};
-  ensureUsedOrderNos();
-  const usedNo=normalizeOrderNoText(orderNo || getNextMonthlyOrderNo());
-  if(usedNo && !state.usedOrderNos.includes(usedNo)) state.usedOrderNos.push(usedNo);
-  const m=usedNo.match(/^OBA-(\d{8})-(\d{3,})$/);
-  const usedSeq=m ? (parseInt(m[2],10)||0) : (state.monthlyOrderCounter[monthKey]||0);
-  state.monthlyOrderCounter[monthKey]=Math.max(state.monthlyOrderCounter[monthKey]||1, usedSeq+1);
+  if(!state.monthlyOrderCounter[monthKey]) state.monthlyOrderCounter[monthKey]=1;
+  state.monthlyOrderCounter[monthKey]+=1;
 }
 function currentOrderNo(){return getNextMonthlyOrderNo()}
 function normalizeOrderNoText(value){
@@ -148,55 +97,13 @@ function purgeInvalidEmptyOrders(){
 function activeItems(){return state.items.filter(i=>i.active)}
 function activeStaff(){return state.staff.filter(s=>s.active)}
 function staffById(id){return state.staff.find(s=>s.id===id)}
-
-// V11.1.30：集點卡規則拆開「業績」與「抽成基準」。
-// 集點卡免費剪：營業額=0、業績=0、抽成照原服務金額計算。
-function isRedeemOrder(order){
-  return !!order && (order.paymentMethod === '集點卡兌換' || order.redeemMeta?.redeemType === true);
-}
-function orderSourcePriceTotal(order){
-  if(!order) return 0;
-  const redeemPrice = Number(order?.redeemMeta?.sourcePrice || 0);
-  if(redeemPrice > 0) return redeemPrice;
-  return Array.isArray(order.items)
-    ? order.items.reduce((sum,i)=>sum + Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || 0),0)
-    : 0;
-}
-function orderPerformanceTotal(order){
-  if(!order) return 0;
-  if(isRedeemOrder(order)) return 0;
-  const perf = Number(order?.performanceTotal || 0);
-  if(perf > 0) return perf;
-  return Number(order.total || 0);
-}
-function orderCommissionBaseTotal(order){
-  if(!order) return 0;
-  if(isRedeemOrder(order)){
-    const src = orderSourcePriceTotal(order);
-    return src > 0 ? src : Number(order.total || 0);
-  }
-  return orderPerformanceTotal(order);
-}
-function orderForCommission(order){
-  if(!order) return order;
-  if(!isRedeemOrder(order)) return order;
-  return {
-    ...order,
-    total: orderCommissionBaseTotal(order),
-    items: Array.isArray(order.items) ? order.items.map(i=>({
-      ...i,
-      price: Number(i?.sourcePrice || i?.originalPrice || i?.performancePrice || i?.price || 0)
-    })) : []
-  };
-}
-function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;const commissionOrder=orderForCommission(order)||order;return (commissionOrder.items||[]).reduce((sum,item)=>{const rate=staff.rules?.[item.name] ?? staff.rules?.[item.category] ?? staff.rules?.default ?? 0.5;return sum+Math.round(Number(item.price||0)*Number(rate||0));},0)}
+function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;return order.items.reduce((sum,item)=>{const rate=staff.rules?.[item.name] ?? staff.rules?.[item.category] ?? staff.rules?.default ?? 0.5;return sum+Math.round(Number(item.price||0)*Number(rate||0));},0)}
 function ensureOrderPerformance(order){
   if(!order || !order.assignedDesignerId) return order;
   const staff=staffById(order.assignedDesignerId);
   if(staff && !order.assignedDesignerName) order.assignedDesignerName=staff.name;
-  order.performanceTotal = orderPerformanceTotal(order);
   const commission=calcCommission(order,order.assignedDesignerId);
-  if(!Number.isFinite(Number(order.commission)) || Number(order.commission)===0 || isRedeemOrder(order)) order.commission=commission;
+  if(!Number.isFinite(Number(order.commission)) || Number(order.commission)===0) order.commission=commission;
   return order;
 }
 function getYearsText(joinDate){if(!joinDate)return '未設定';const start=new Date(joinDate), now=new Date();const months=(now.getFullYear()-start.getFullYear())*12+(now.getMonth()-start.getMonth());return `${Math.floor(months/12)}年${months%12}個月`}
