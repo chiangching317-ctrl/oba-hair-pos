@@ -5,18 +5,44 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>OBA Hair V11.1.35 刷單併發保護版</title>
+<meta content="no-store, no-cache, must-revalidate" http-equiv="Cache-Control"/>
+<meta content="no-cache" http-equiv="Pragma"/>
+<meta content="0" http-equiv="Expires"/>
+<title>OBA Hair V11.1.79 Production Candidate</title>
+<style>
+#runtimeVersionGate{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:#111;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+#runtimeVersionGate[hidden]{display:none}
+.runtime-version-card{width:min(560px,100%);padding:28px;border:1px solid #6b7280;border-radius:20px;background:#202020;box-shadow:0 24px 70px rgba(0,0,0,.55);text-align:center}
+.runtime-version-card h2{margin:0 0 14px}.runtime-version-card p{line-height:1.7}.runtime-version-card button{margin-top:12px;padding:12px 22px;border:0;border-radius:12px;background:#8be0eb;color:#111;font-weight:800;cursor:pointer}
+.runtime-version-locked body{overflow:hidden}
+</style>
+<script src="runtime-config.js?v=11.1.79"></script>
+<script>
+const OBA_RUNTIME_CONFIG=Object.freeze(window.OBA_RUNTIME_CONFIG||{});
+window.OBA_RUNTIME_CONFIG_VALID=!!(
+  OBA_RUNTIME_CONFIG.version&&OBA_RUNTIME_CONFIG.projectRef&&OBA_RUNTIME_CONFIG.supabaseUrl&&OBA_RUNTIME_CONFIG.supabaseKey&&
+  OBA_RUNTIME_CONFIG.storageKeys?.state&&OBA_RUNTIME_CONFIG.storageKeys?.resetMarker&&
+  OBA_RUNTIME_CONFIG.storageKeys?.pinMigration&&OBA_RUNTIME_CONFIG.storageKeys?.cashierDevice
+);
+window.OBA_RUNTIME_VERSION=String(OBA_RUNTIME_CONFIG.version);
+window.OBA_RUNTIME_PROJECT_REF=String(OBA_RUNTIME_CONFIG.projectRef);
+window.OBA_RUNTIME_CHANNEL=String(OBA_RUNTIME_CONFIG.channel||'');
+window.OBA_RUNTIME_MODE=String(OBA_RUNTIME_CONFIG.mode||'NORMAL');
+</script>
+<script src="js/runtime-version.js?v=11.1.79"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<link href="css/style.css" rel="stylesheet"/>
+<link href="css/style.css?v=11.1.79" rel="stylesheet"/>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
-const SUPABASE_URL = "https://cvehdsmeaggqmdsafalw.supabase.co";
-const SUPABASE_KEY = "sb_publishable_BxcVgGxDTlUwpEL0URXmGA_Ebod3ulA";
+const SUPABASE_URL = String(OBA_RUNTIME_CONFIG.supabaseUrl);
+const SUPABASE_KEY = String(OBA_RUNTIME_CONFIG.supabaseKey);
 const CLOUD_TABLE = "oba_pos_state";
 const CLOUD_ROW_ID = "main";
+const DEV_EXPECTED_PROJECT_REF = String(OBA_RUNTIME_CONFIG.projectRef);
+const DEV_ENVIRONMENT = String(OBA_RUNTIME_CONFIG.channel)==='DEV';
 const DEFAULT_BRANCH_ID = "main";
 const DEFAULT_BRANCH_NAME = "總店";
 </script>
@@ -24,28 +50,24 @@ const DEFAULT_BRANCH_NAME = "總店";
 <body>
 <div class="access-gate" id="accessGate">
 <div class="access-card">
-<h2 class="access-title">OBA Hair 系統登入</h2>
-<div class="access-sub">此系統僅供公司內部使用。請先輸入自己的密碼。</div>
-<div class="label">密碼 / 密碼 / 進入系統</div>
-<input class="input" id="accessPassword" placeholder="請輸入自己的密碼" type="password"/>
-<div class="space"></div>
-<div class="row">
-<button class="btn btn-primary" id="btnAccessEnter">進入系統</button>
-</div>
-<div class="note">進入系統IN 進入後，收款時仍需再次輸入本單密碼。</div>
+<h2 class="access-title">OBA Hair 安全入口</h2>
+<div class="access-sub">未驗證前不載入營業資料。請輸入自己的 6 位員工 PIN、總控 PIN 或 BOSS PIN。</div>
+<div class="access-login"><input autocomplete="off" class="input" id="accessPin" inputmode="numeric" maxlength="6" pattern="[0-9]*" type="password"/><button class="btn btn-primary" id="btnAccessLogin" type="button">安全登入</button></div>
+<div class="note" id="accessLoadStatus">請先完成身分驗證。</div>
+<pre class="access-error hidden" id="accessErrorDetails" aria-live="polite"></pre>
 </div>
 </div>
 <div class="wrap">
 <div class="hero">
-<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.35 刷單併發保護版｜由 V11.1.28 修改</div></div>
-<div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div>
+<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.79 Production Deployment Candidate</div></div>
+<div class="row"><div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div><button class="btn btn-soft" id="btnPosLogout" type="button">登出</button></div>
 </div>
 <div class="tabs">
 <button class="tab active" data-tab="cashier">收款出單</button>
 <button class="tab" data-tab="assign">刷單入業績</button>
 <button class="tab" data-tab="timeclock">打卡</button>
 <button class="tab locked" data-tab="report">報表</button>
-<button class="tab locked" data-tab="expense">支出</button>
+<button class="tab locked" data-tab="expense">損益</button>
 <button class="tab locked" data-tab="manage">員工 / 品項 / 密碼</button>
 </div>
 <div class="panel" id="tab-cashier">
@@ -87,6 +109,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 <button class="btn btn-soft" id="btnSwitchAssignStaff" type="button">切換刷單身份</button>
 </div>
 <div class="note" id="assignIdentityNote">第一次刷單會要求輸入自己的 PIN。</div>
+<div class="note" id="assignDevTrace" style="margin-top:10px;border:1px solid #b7d7bf;background:#f0fff4;color:#245f38;font-weight:800">BOOT：等待 V11.1.54 assign.js 載入…</div>
 <div class="space"></div>
 <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機相機掃到有效單號後，會自動掛入業績；雲端確認成功後才會顯示完成。</div></div>
 <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入密碼授權一次即可收銀。</div></div>
@@ -187,8 +210,21 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="space"></div>
 <div class="stats">
-<div class="stat"><div class="k">集點卡兌換合計</div><div class="v" id="payRedeem">$0</div></div>
+<div class="stat"><div class="k">集點卡兌換</div><div class="v" id="payRedeem">0 筆 / 原服務價值 $0</div></div>
 </div>
+</div>
+<div class="card" id="reconcileBox">
+<div class="section-title">差額查帳／對帳檢查</div>
+<div class="note">依目前報表篩選區間，重新計算「區間營業額」與有效員工的區間個人業績；退票／作廢單不列入差額。</div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k">區間營業額</div><div class="v" id="reconcileSales">$0</div></div>
+<div class="stat"><div class="k">個人業績加總</div><div class="v" id="reconcilePersonal">$0</div></div>
+<div class="stat"><div class="k">差額</div><div class="v" id="reconcileDiff">$0</div></div>
+<div class="stat"><div class="k">待查筆數</div><div class="v" id="reconcileCount">0</div></div>
+</div>
+<div class="space"></div>
+<div id="reconcileDetail"></div>
 </div>
 <div class="card">
 <div class="section-title">個人業績</div>
@@ -208,19 +244,27 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="panel hidden" id="tab-expense">
 <div class="stack">
-<div class="card">
+<div class="card hidden" id="payrollAuthorityWorkspace">
+<div class="section-title">雲端權威薪資損益</div>
+<div class="note" id="payrollAuthorityRoleNote">BOSS 與總控使用同一份雲端權威資料及同一套畫面；角色差異只影響下方操作權限。</div>
+<div class="space"></div><div class="save-status" id="payrollAuthorityStatus">等待查詢</div>
+</div>
+<div class="card" id="expenseWriteWorkspace">
 <div class="section-title">支出登記</div>
 <div class="grid4">
 <div><div class="label">日期</div><input class="input" id="expenseDate" type="date"/></div>
-<div><div class="label">分類</div><select class="select" id="expenseCategory"><option value="材料">材料</option><option value="進貨">進貨</option><option value="租金">租金</option><option value="水電">水電</option><option value="廣告">廣告</option><option value="雜支">雜支</option></select></div>
+<div><div class="label">分類</div><select class="select" id="expenseCategory"><option value="材料">材料</option><option value="進貨">進貨</option><option value="租金">租金</option><option value="水電">水電</option><option value="廣告">廣告</option><option value="雜支">雜支</option><option value="公司負擔保險">公司負擔保險</option><option value="其他公司成本">其他公司成本</option></select></div>
 <div><div class="label">金額</div><input class="input" id="expenseAmount" min="0" placeholder="例如 1200" type="number"/></div>
 <div><div class="label">備註</div><input class="input" id="expenseNote" placeholder="例如 染膏 / 電費 / 房租"/></div>
 </div>
 <div class="space"></div>
+<div class="row"><input class="input" id="customExpenseCategory" maxlength="20" placeholder="新增自訂支出分類"/><button class="btn btn-soft" id="btnAddExpenseCategory" type="button">新增分類</button></div>
+<div class="note">自訂分類會保存在本機並列入公司一般支出；薪資、年終、借支、材料代墊及員工保險自付額不得建立為一般支出。</div>
+<div class="space"></div>
 <div class="row"><button class="btn btn-primary" id="btnSaveExpense" type="button">儲存支出</button><button class="btn btn-soft hidden" id="btnCancelExpenseEdit" type="button">取消編輯</button><button class="btn btn-soft" id="btnClearExpenseForm" type="button">清空欄位</button><span class="save-status saved" id="expenseSaveStatus">等待輸入</span></div>
 <div class="note">V11.1.04a：支出可新增、編輯、取消編輯；損益報表固定顯示在本頁下方，不寫進正式 Supabase。</div>
 </div>
-<div class="card">
+<div class="card" id="expenseSummaryWorkspace">
 <div class="section-title">支出統計</div>
 <div class="expense-summary">
 <div class="stat"><div class="k">今日支出</div><div class="v" id="expenseTodayTotal">$0</div></div>
@@ -228,13 +272,42 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="stat"><div class="k">本月筆數</div><div class="v" id="expenseMonthCount">0</div></div>
 </div>
 </div>
-<div class="card">
-<div class="section-title">損益報表 初版（支出頁）</div>
-<div class="note">V11.1.04a：固定顯示在支出頁；只讀取收銀、退票、支出資料，不反寫收銀、不寫 Supabase。</div>
+<div class="card" id="payrollLocalDraftWorkspace">
+<div class="section-title">薪資損益共同介面</div>
+<div class="note" id="payrollCommonSourceNote">畫面載入時以雲端權威資料顯示；總控修改人工項目後屬本機草稿，完成「儲存薪資試算」後才成為雲端正式資料。BOSS 僅能查看。</div>
+<div class="space"></div>
+<div class="grid4">
+<div><div class="label">試算月份</div><input class="input" id="payrollTrialMonth" type="month"/></div>
+<div><div class="label">JEAN 管理分潤％</div><input class="input" id="jeanManagementShareRate" type="number" min="0" max="100" step="0.1" value="10"/></div>
+<div class="stat"><div class="k">計薪員工</div><div class="v" id="payrollTrialEmployeeCount">0</div></div>
+<div class="stat"><div class="k">commission 合計</div><div class="v" id="payrollTrialCommissionTotal">$0</div></div>
+<div class="stat"><div class="k">試算實發合計</div><div class="v" id="payrollTrialSalaryTotal">$0</div></div>
+</div>
+<div class="space"></div>
+<div class="row"><button class="btn btn-soft" id="btnPayrollAuthorityRefresh" type="button">查詢雲端權威資料</button><button class="btn btn-soft" id="btnPayrollAuthorityHistory" type="button">查看月結紀錄</button></div>
+<div class="space"></div>
+<div class="stack" id="payrollTrialStaffList"></div>
+<div class="space"></div>
+<div class="note">借支、材料代墊、保險自付額只從該員工薪資扣回，不會再次當成公司支出；年終獎金已計入實發。JEAN 管理分潤比例依月份保存，並以扣除成本後正利潤獨立計算。</div>
+<div class="space"></div>
+<div class="card" id="payrollSettlementActionWorkspace">
+<div class="section-title">正式薪資月結（Phase 1D）</div>
+<div class="note">完成月結時會使用雲端重新計算，並保存不可覆蓋的月結版本。本機支出、人工薪資項目及分潤比例必須先完成「儲存薪資試算」；重新開放修改後再次月結會建立新版本，舊月結紀錄永久保留。</div>
+<div class="space"></div>
+<div class="row"><input class="input" id="payrollSettlementReason" maxlength="100" placeholder="月結／重新開放原因（重新開放至少 3 字）"/><button class="btn btn-soft" id="btnPayrollCloudSync" type="button">儲存薪資試算</button><button class="btn btn-primary" id="btnPayrollFormalPreview" type="button">月結前確認</button><button class="btn btn-ok" id="btnPayrollFormalClose" type="button">完成本月月結</button><button class="btn btn-danger" id="btnPayrollFormalReopen" type="button">重新開放修改</button><button class="btn btn-soft" id="btnPayrollHistory" type="button">查看月結紀錄</button></div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k">月份狀態</div><div class="v" id="payrollPeriodState">not_created</div></div>
+<div class="stat"><div class="k">目前月結版本</div><div class="v" id="payrollCurrentRevision">0</div></div>
+<div class="stat"><div class="k">操作授權</div><div class="v" id="payrollActionState">未授權</div></div>
+</div>
+<div class="space"></div><div class="save-status" id="payrollFormalStatus">尚未進行正式月結操作</div>
+<div class="space"></div><div id="payrollFormalPreview"><div class="note">尚未進行月結前確認。</div></div>
+</div>
+<div class="space"></div><div class="section-title">月結紀錄</div>
+<div class="stack" id="payrollFormalHistory"><div class="note">尚未查詢月結紀錄。</div></div>
 <div class="space"></div>
 <div class="row">
-<button class="btn btn-ok" id="btnSalaryClose" type="button">薪資結算歸零</button>
-<button class="btn btn-danger" id="btnResetAll" type="button">清空測試資料</button>
 </div>
 <div class="note">管理維護按鈕已從報表移到損益頁，避免開放報表給員工時誤觸。</div>
 <div class="space"></div>
@@ -245,18 +318,29 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="space"></div>
 <div class="stats">
-<div class="stat"><div class="k">今日淨利</div><div class="v" id="profitTodayNet">$0</div></div>
+<div class="stat"><div class="k">今日損益（未扣薪資）</div><div class="v" id="profitTodayNet">$0</div></div>
 <div class="stat"><div class="k">本月營業額</div><div class="v" id="profitMonthSales">$0</div></div>
-<div class="stat"><div class="k">本月支出</div><div class="v" id="profitMonthExpense">$0</div></div>
+<div class="stat"><div class="k">本月一般支出</div><div class="v" id="profitMonthExpense">$0</div></div>
 </div>
 <div class="space"></div>
 <div class="stats">
 <div class="stat"><div class="k">本月退票</div><div class="v" id="profitMonthRefund">$0</div></div>
-<div class="stat"><div class="k">本月淨利</div><div class="v" id="profitMonthNet">$0</div></div>
-<div class="stat"><div class="k">計算公式</div><div class="v" style="font-size:14px">營業額－退票－支出</div></div>
+<div class="stat"><div class="k">本月公司負擔保險</div><div class="v" id="profitMonthCompanyInsurance">$0</div></div>
+</div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k">今日抽成薪資</div><div class="v" id="profitTodaySalary">$0</div></div>
+<div class="stat"><div class="k">今日薪資後損益</div><div class="v" id="profitTodayAfterSalary">$0</div></div>
+<div class="stat"><div class="k">本月員工實發薪資總額</div><div class="v" id="profitMonthSalary">$0</div></div>
+</div>
+<div class="space"></div>
+<div class="stats">
+<div class="stat"><div class="k" id="profitMonthManagementBonusLabel">JEAN 管理分潤</div><div class="v" id="profitMonthManagementBonus">$0</div></div>
+<div class="stat"><div class="k">本月淨損益</div><div class="v" id="profitMonthAfterSalary">$0</div></div>
+<div class="stat"><div class="k">計算公式</div><div class="v" style="font-size:14px">營業額－退款－一般支出－員工實發薪資－公司負擔保險－JEAN 管理分潤</div></div>
 </div>
 </div>
-<div class="card">
+<div class="card" id="expenseRecordsWorkspace">
 <div class="row" style="justify-content:space-between"><div class="section-title">支出紀錄</div><button class="btn btn-soft" id="btnExpenseRefresh" type="button">重新整理</button></div>
 <div class="table expense-table" id="expenseTable"></div>
 </div>
@@ -325,14 +409,16 @@ const DEFAULT_BRANCH_NAME = "總店";
 <input accept="image/*" capture="environment" class="hidden" id="cameraScanFile" type="file"/>
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入密碼</h3><div class="space"></div><div class="pwd-wrap"><input class="input" id="pwdOld" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" type="password"/><button class="pwd-eye" id="togglePwdOld" type="button">👁</button></div><div class="space"></div><div class="hidden" id="pwdNewWrap"><div class="pwd-wrap"><input class="input" id="pwdNew" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" type="password"/><button class="pwd-eye" id="togglePwdNew" type="button">👁</button></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 <dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input autocomplete="off" class="input" id="maskedPasswordInput" inputmode="numeric" maxlength="6" pattern="[0-9]*" placeholder="輸入後會以 ●●●● 顯示" type="password"/><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
-<script src="js/utils.js"></script>
-<script src="js/core.js"></script>
-<script src="js/storage.js"></script>
-<script src="js/report.js"></script>
-<script src="js/order.js"></script><script src="js/ui.js"></script>
-<script src="js/cashier.js"></script>
-<script src="js/print.js"></script>
-<script src="js/assign.js"></script>
+<script src="js/utils.js?v=11.1.79"></script>
+<script src="js/core.js?v=11.1.79"></script>
+<script src="js/storage.js?v=11.1.79"></script>
+<script src="js/pin-security.js?v=11.1.79"></script>
+<script src="js/access-security.js?v=11.1.79"></script>
+<script src="js/report.js?v=11.1.79"></script>
+<script src="js/order.js?v=11.1.79"></script><script src="js/ui.js?v=11.1.79"></script>
+<script src="js/cashier.js?v=11.1.79"></script>
+<script src="js/print.js?v=11.1.79"></script>
+<script src="js/assign.js?v=11.1.79"></script>
 <script>
 
 
@@ -343,12 +429,13 @@ function escapeHtml(value){
   return String(value ?? '').replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
 }
 </script>
-<script src="js/timeclock.js"></script>
+<script src="js/timeclock.js?v=11.1.79"></script>
 <script>
 </script>
-<script src="js/expense.js"></script>
-<script src="js/manage.js"></script>
-<script src="js/system.js"></script>
-<script src="js/security.js"></script>
+<script src="js/expense.js?v=11.1.79"></script>
+<script src="js/payroll.js?v=11.1.79"></script>
+<script src="js/manage.js?v=11.1.79"></script>
+<script src="js/system.js?v=11.1.79"></script>
+<script src="js/security.js?v=11.1.79"></script>
 </body>
 </html>

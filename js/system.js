@@ -1,70 +1,17 @@
-$('#btnExport').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)}
-function buildGoLiveResetState(){
-  const clean = normalizeCloudState(clone(state));
-  // V11.0.48 測試期清空：真的清掉假訂單/假退票/假業績；員工、品項、PIN、權限、抽成、密碼全部保留。
-  clean.orders=[];
-  clean.refunds=[];
-  clean.cart=[];
-  clean.pendingPay='';
-  clean.pendingCheckoutCart=null;
-  clean.lastResetAt=new Date().toISOString();
-  clean.lastTestResetAt=clean.lastResetAt;
-  setLocalResetMarker(clean.lastResetAt);
-  // V11.0.56：清空測試資料時，測試流水號也要歸零；下一張單必須回到 OBA-YYYYMMDD-001。
-  clean.monthlyOrderCounter={};
-  clean.branchId=clean.branchId||DEFAULT_BRANCH_ID;
-  clean.branchName=clean.branchName||DEFAULT_BRANCH_NAME;
-  return clean;
+$('#btnExport').onclick=()=>{
+  const canExport=!!(
+    (typeof isBossMode==='function' && isBossMode()) ||
+    CURRENT_LOGIN_LEVEL==='owner' ||
+    window.USER_ROLE==='owner' ||
+    (Array.isArray(CURRENT_CASHIER?.permissions) && CURRENT_CASHIER.permissions.includes('view_all'))
+  );
+  if(!canExport){ alert('沒有匯出全店資料的權限'); return; }
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='oba_hair_v2_backup.json'; a.click(); URL.revokeObjectURL(a.href)
 }
-async function resetAllDataForGoLive(){
-  cloudResetting=true;
-  const cleanState = buildGoLiveResetState();
-  state=cleanState;
-  setLocalResetMarker(state.lastResetAt);
-  CURRENT_CASHIER=null;
-  LAST_ASSIGNED_ORDER_NO='';
-  ITEM_DIRTY=false;
-  STAFF_DIRTY=false;
-  ['assignOrderNo','refundOrderNo','reportStartTime','reportEndTime'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
-  const startDateEl=$('#reportStartDate'); if(startDateEl) startDateEl.value=todayStr();
-  const endDateEl=$('#reportEndDate'); if(endDateEl) endDateEl.value=todayStr();
-
-  // 先把本機固定成乾淨狀態，再重建/覆蓋雲端 main row。
-  localStorage.setItem(KEY, JSON.stringify(state));
-  refreshAllScreens();
-  setActiveTab('cashier');
-
-  const cloudOk = await replaceCloudMainRowForReset(state);
-  localStorage.setItem(KEY, JSON.stringify(state));
-  refreshAllScreens();
-  setActiveTab('cashier');
-  return cloudOk;
-}
-$('#btnResetAll').onclick=async()=>{
-  if(guardBossAction()) return;
-  if(!confirm('確定要清空測試資料嗎？（會清掉測試訂單/退票/業績/刷單暫存，保留員工、品項、PIN、權限、抽成、密碼）'))return;
-  if(!confirm('再次確認：這會清掉測試訂單、退票紀錄、今日/本月業績與今日單號列表。'))return;
-  const cloudOk = await resetAllDataForGoLive();
-  if(cloudOk){
-    alert('已完整歸零：雲端 main row 已清乾淨，單號已回到 001，業績/抽成/今日列表已清空，員工與品項設定已保留');
-  }else{
-    alert('本機測試資料已清空，但雲端重建沒有成功。請不要先 F5，先看 Console 的雲端 reset 訊息。');
-  }
-}
-
 async function closeSalaryPeriod(){
-  if(guardBossAction()) return false;
-  state.salaryResetAt=new Date().toISOString();
-  state.cart=[];
-  state.pendingPay='';
-  state.pendingCheckoutCart=null;
-  CURRENT_CASHIER=null;
-  LAST_ASSIGNED_ORDER_NO='';
-  ['assignOrderNo','refundOrderNo'].forEach(id=>{const el=$('#'+id); if(el) el.value='';});
-  localStorage.setItem(KEY, JSON.stringify(state));
-  await saveState(true);
-  refreshAllScreens();
-  return true;
+  alert('舊版「薪資結算歸零」已停用；請使用損益頁的正式月結／revision 功能。');
+  return false;
 }
 const salaryBtn=$('#btnSalaryClose');
 if(salaryBtn){
@@ -89,15 +36,14 @@ function applyDeviceMode(){
   const phoneOnly = isPhoneDevice();
   document.body.classList.toggle('phone-mode', phoneOnly);
   if(phoneOnly){
-    setActiveTab('assign');
-  }else{
-    const active = document.querySelector('.tab.active')?.dataset?.tab || 'cashier';
-    setActiveTab(active);
+    const active = document.querySelector('.tab.active')?.dataset?.tab || '';
+    if(active!=='assign') setActiveTab('assign');
   }
 }
 
 // V11.0.61：裝置授權收銀。不是入口 PIN；本機下載檔 file:// 一律完整放行，只有線上網址才需要授權。
-const CASHIER_DEVICE_KEY='oba_hair_cashier_device_v58';
+const CASHIER_DEVICE_KEY=String(window.OBA_RUNTIME_CONFIG?.storageKeys?.cashierDevice||'');
+if(!CASHIER_DEVICE_KEY)throw new Error('OBA_RUNTIME_STORAGE_CONFIG_INVALID');
 function isLocalUnrestrictedDevice(){
   try{
     const protocol = String(location.protocol || '').toLowerCase();
@@ -163,9 +109,9 @@ async function authorizeCashierDevice(){
   const pwd = await askMaskedPassword('請輸入密碼，授權這台設備可以收銀', '密碼');
   if(pwd===null) return;
   const val=String(pwd||'').trim();
-  if(BOSS_PASSWORD && val===BOSS_PASSWORD){ enterBossMode(); return; }
-  if(!state.managementPassword){ alert('尚未設定密碼，請先用已授權設備進入管理設定。'); return; }
-  if(val!==String(state.managementPassword||'').trim()){
+  if(await verifyBossPin(val)){ enterBossMode(); return; }
+  const verified=await verifyPinSecure(val,'device-authorize');
+  if(!verified.ok||verified.kind!=='owner-control'){
     alert('密碼錯誤，這台設備仍只能刷單');
     applyDeviceAuthorizationMode();
     return;
@@ -220,16 +166,16 @@ function submitRedeem(){
   }
   const item = activeItems().find(i => i.id===itemId);
   if(!item){ alert('資料讀取失敗'); return; }
+  const orderDate=todayStr();
+  const orderNo=reserveNextMonthlyOrderNo(orderDate);
   const order = {
-    id: currentOrderNo(),
-    date: todayStr(),
+    id: orderNo,
+    date: orderDate,
     time: nowTime(),
     branchId: state.branchId || DEFAULT_BRANCH_ID,
     branchName: state.branchName || DEFAULT_BRANCH_NAME,
-    items: [{id:item.id,name:item.name,price:0,sourcePrice:Number(item.price||0),category:item.category||''}],
+    items: [{id:item.id,name:item.name,price:0,category:item.category||''}],
     total: 0,
-    performanceTotal: Number(item.price || 0),
-    performanceSource: '集點卡兌換',
     paymentMethod: '集點卡兌換',
     cashierId: '',
     cashierName: '集點卡兌換',
@@ -247,7 +193,6 @@ function submitRedeem(){
     }
   };
   state.orders.unshift(order);
-  state.nextNo += 1;
   saveState();
   renderCashier();
   renderAssign();
@@ -273,15 +218,6 @@ document.addEventListener('change', function(e){
 });
 
 
-const ACCESS_KEY='oba_hair_access_password_v27';
-const ACCESS_SESSION_KEY='oba_hair_access_granted_v27';
-function getAccessPassword(){
-  // V11.1.17 安全止血：不再自動建立固定入口密碼 oba2026。
-  // 若舊設備 localStorage 已有入口密碼，仍暫時相容；之後改 Supabase Auth。
-  const saved=localStorage.getItem(ACCESS_KEY);
-  if(saved!==null) return saved;
-  return null;
-}
 function closeAccessGate(){
   const gate=$('#accessGate');
   if(gate) gate.classList.add('hidden-gate');
@@ -289,84 +225,46 @@ function closeAccessGate(){
 function openAccessGate(){
   const gate=$('#accessGate');
   if(gate) gate.classList.remove('hidden-gate');
-  setTimeout(function(){
-    const el=$('#accessPassword');
-    if(el){ el.focus(); try{el.click();}catch(e){} }
-  },80);
 }
-function verifyAccessPassword(){
-  const input=$('#accessPassword');
-  const val=(input?.value||'').trim();
-  if(!val){ alert('請輸入密碼'); return; }
-  if(BOSS_PASSWORD && val===BOSS_PASSWORD){
-    enterBossMode();
-    return;
-  }
-  // V11.0.88：入口登入修正。總控管理密碼也可以進入系統；員工 PIN 維持原本可進。
-  const isManagementPassword = String(state.managementPassword||'').trim() === val;
-  const loginStaff = Array.isArray(state.staff) ? state.staff.find(s=>s && s.active && String(s.pin||'').trim()===val) : null;
-  if(isManagementPassword || loginStaff){
-    window.USER_ROLE = isManagementPassword ? 'owner' : 'staff';
-    CURRENT_LOGIN_LEVEL = isManagementPassword ? 'owner' : 'staff';
-    CURRENT_CASHIER = loginStaff ? {id:loginStaff.id,name:loginStaff.name,permissions:loginStaff.permissions||[]} : null;
-    sessionStorage.removeItem(BOSS_SESSION_KEY);
-    sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
-    closeAccessGate();
-    applyDeviceAuthorizationMode();
-    updateCashierDisplay();
-    renderAssign();
-    return;
-  }
-  const legacyAccessPassword=getAccessPassword();
-  if(!legacyAccessPassword || val!==legacyAccessPassword){
-    alert('密碼錯誤');
-    input.value='';
-    input.focus();
-    return;
-  }
-  sessionStorage.setItem(ACCESS_SESSION_KEY,'yes');
-  closeAccessGate();
-  applyDeviceAuthorizationMode();
+
+
+
+
+
+
+function setDevAccessReady(ready, message){
+  const status=$('#accessLoadStatus');
+  if(status) status.textContent=message||'';
 }
-document.addEventListener('click',function(e){
-  if(e.target && e.target.id==='btnAccessEnter') verifyAccessPassword();
-});
-document.addEventListener('keydown',function(e){
-  if(e.key==='Enter' && document.activeElement && document.activeElement.id==='accessPassword'){
-    verifyAccessPassword();
-  }
-});
-
-
-
-
-
-
-const BOOT_TEST_CLEAR_VERSION='V11.0.56_test_reset_counter_fix';
-const BOOT_TEST_CLEAR_KEY='oba_hair_boot_test_clear_version';
-async function hardClearTestDataOnBoot(){
-  // V11.0.56：測試期根本清除。這一版第一次開啟時，直接把舊測試單/退票/業績/流水號從本機與雲端 main row 清乾淨。
-  // 保留：員工、品項、PIN、權限、抽成、密碼；測試流水號歸零回 001。
-  if(localStorage.getItem(BOOT_TEST_CLEAR_KEY)===BOOT_TEST_CLEAR_VERSION) return true;
-  const cleanState=buildGoLiveResetState();
-  cleanState.forceTestClearVersion=BOOT_TEST_CLEAR_VERSION;
-  state=cleanState;
-  CURRENT_CASHIER=null;
-  LAST_ASSIGNED_ORDER_NO='';
-  ITEM_DIRTY=false;
-  STAFF_DIRTY=false;
-  localStorage.setItem(KEY,JSON.stringify(state));
-  localStorage.setItem(BOOT_TEST_CLEAR_KEY,BOOT_TEST_CLEAR_VERSION);
-  setLocalResetMarker(state.lastResetAt);
-  console.log('V11.0.58 測試資料根本清除：本機已清空 orders/refunds/cart/monthlyOrderCounter，準備重建雲端 main row');
-  const cloudOk=await replaceCloudMainRowForReset(state);
-  localStorage.setItem(KEY,JSON.stringify(state));
-  console.log('V11.0.58 測試資料根本清除完成', {cloudOk, orders:state.orders.length, refunds:state.refunds.length, cart:state.cart.length, monthlyOrderCounter:state.monthlyOrderCounter});
-  return cloudOk;
+async function waitForSecureEntry(){
+  if(!window.OBA_POS_ENTRY_READY)return false;
+  setTimeout(()=>$('#accessPin')?.focus(),60);
+  return window.OBA_POS_ENTRY_READY;
 }
 async function init(){
   ensureBranchFields(state);
-  // V11.0.75：保留既有測試資料，開機不再執行 hardClearTestDataOnBoot()，不清 orders/refunds/cart/monthlyOrderCounter，也不重建雲端 main row。
+  openAccessGate();
+  setDevAccessReady(false, '請輸入 6 位 PIN 驗證身分。');
+
+  const entryOk=await waitForSecureEntry();
+  if(!entryOk)return;
+
+  // V11.1.68：只有伺服器建立入口 session 後才允許讀取 DEV state。
+  let bootstrapOk=false,bootstrapFailureShown=false;
+  try{
+    bootstrapOk=await bootstrapDevCloudState();
+  }catch(error){
+    showPersistentEntryError('AUTHORIZATION_DATA_LOAD_EXCEPTION',{code:error?.code||'BOOTSTRAP_EXCEPTION',message:error?.message||String(error),details:error?.details||error?.stack||'',hint:error?.hint||''});
+    bootstrapFailureShown=true;
+  }
+  if(!bootstrapOk){
+    if(!bootstrapFailureShown)showPersistentEntryError(window.OBA_LAST_CLOUD_ERROR?.source||'AUTHORIZATION_DATA_LOAD',window.OBA_LAST_CLOUD_ERROR||{code:'BOOTSTRAP_FAILED',message:'Authorized session was created, but DEV state could not be loaded.',details:'',hint:''});
+    setDevAccessReady(false, 'DEV 雲端資料載入失敗。已停止進入與寫入，請檢查網路/DEV 資料庫後重新整理。');
+    console.error('DEV 啟動封鎖：無法取得可用的 DEV 資料');
+    return;
+  }
+
+  applyEntryRolePermissions();
   updateCashierDisplay();
   renderCashier();
   renderAssign();
@@ -374,13 +272,22 @@ async function init(){
   renderTimeclock();
   renderExpenses();
   renderManage();
-  if(sessionStorage.getItem(ACCESS_SESSION_KEY)==='yes' || isBossMode()){
-    closeAccessGate();
-    applyDeviceAuthorizationMode();
-  }else{
-    openAccessGate();
+  setDevAccessReady(true, '授權資料已安全載入。');
+  if(window.OBA_ACCESS_SESSION?.kind==='boss'){
+    enterBossMode();
+    return;
   }
+  if(!isBossMode()){
+    const entryKind=window.OBA_ACCESS_SESSION?.kind||'staff';
+    const ownerEntry=entryKind==='owner-control';
+    window.USER_ROLE=ownerEntry?'owner':'staff';
+    CURRENT_LOGIN_LEVEL=ownerEntry?'owner':'staff';
+    CURRENT_CASHIER=null;
+  }
+  closeAccessGate();
+  applyDeviceAuthorizationMode();
+  updateCashierDisplay();
   window.addEventListener('resize', function(){ if(!isBossMode()) applyDeviceAuthorizationMode(); });
-  startCloudSync();
+  startCloudSync(true);
 }
 init();

@@ -1,4 +1,206 @@
 let expenseEditingId='';
+const PAYROLL_TRIAL_INPUT_KEY='oba_hair_dev_payroll_trial_inputs_v11169_phase1b';
+const PAYROLL_GUARANTEE=40000;
+const PAYROLL_TARGET=80000;
+const JEAN_MANAGEMENT_SHARE_RATE_KEY='oba_hair_dev_jean_management_share_rates_v11169';
+const CUSTOM_EXPENSE_CATEGORY_KEY='oba_hair_dev_custom_expense_categories_v11169_phase1c';
+const FIXED_EXPENSE_CATEGORIES=['材料','進貨','租金','水電','廣告','雜支','公司負擔保險','其他公司成本'];
+const BLOCKED_EXPENSE_CATEGORY_NAMES=new Set(['實發薪資','員工薪資','薪資','抽成薪資','commission','年終獎金','借支','材料代墊','員工保險自付額']);
+
+function payrollTrialMonth(value){
+  const month=String(value||'').trim();
+  return /^\d{4}-\d{2}$/.test(month) ? month : monthStr();
+}
+function loadJeanManagementShareRates(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(JEAN_MANAGEMENT_SHARE_RATE_KEY)||'{}');
+    return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{};
+  }catch(error){
+    return {};
+  }
+}
+function jeanManagementShareRate(monthValue){
+  const month=payrollTrialMonth(monthValue);
+  const rates=loadJeanManagementShareRates();
+  if(!Object.prototype.hasOwnProperty.call(rates,month)) return 0.1;
+  const rate=Number(rates[month]);
+  return Number.isFinite(rate)?Math.max(0,Math.min(1,rate)):0.1;
+}
+function jeanManagementSharePercentText(rate){
+  const percent=Number(rate||0)*100;
+  return Number.isInteger(percent)?String(percent):String(Number(percent.toFixed(2)));
+}
+function renderJeanManagementShareRate(monthValue){
+  const input=$('#jeanManagementShareRate');
+  if(!input) return;
+  const rate=jeanManagementShareRate(monthValue);
+  input.value=jeanManagementSharePercentText(rate);
+}
+function saveJeanManagementShareRate(){
+  if(!requirePageTabAuthorization('expense')){renderJeanManagementShareRate($('#payrollTrialMonth')?.value);return;}
+  const month=payrollTrialMonth($('#payrollTrialMonth')?.value);
+  const input=$('#jeanManagementShareRate');
+  const percent=Number(input?.value);
+  if(!Number.isFinite(percent)||percent<0||percent>100){
+    alert('JEAN 管理分潤比例請輸入 0～100');
+    renderJeanManagementShareRate(month);
+    return;
+  }
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
+  const rates=loadJeanManagementShareRates();
+  rates[month]=percent/100;
+  localStorage.setItem(JEAN_MANAGEMENT_SHARE_RATE_KEY,JSON.stringify(rates));
+  renderPayrollTrial();
+}
+function loadPayrollTrialInputs(){
+  try{
+    const parsed=JSON.parse(localStorage.getItem(PAYROLL_TRIAL_INPUT_KEY)||'{}');
+    return parsed && typeof parsed==='object' && !Array.isArray(parsed) ? parsed : {};
+  }catch(error){
+    return {};
+  }
+}
+function savePayrollTrialInputs(data){
+  localStorage.setItem(PAYROLL_TRIAL_INPUT_KEY,JSON.stringify(data&&typeof data==='object'?data:{}));
+}
+function payrollTrialNumber(value){
+  const amount=Number(value||0);
+  return Number.isFinite(amount) && amount>0 ? Math.round(amount) : 0;
+}
+function isSystemPayrollAccount(staff){
+  const values=[staff?.id,staff?.name,staff?.nickname,staff?.role,staff?.systemRole]
+    .map(value=>String(value||'').trim().toLowerCase());
+  return values.some(value=>value==='開機'||value==='session'||value==='系統帳號'||value==='system'||value==='system account');
+}
+function payrollTrialOrders(month){
+  return salaryBaseOrders().filter(order=>
+    String(order?.date||'').startsWith(month) &&
+    !!order?.assignedDesignerId &&
+    order?.refunded!==true
+  );
+}
+function payrollTrialStaff(month,orders){
+  const byId=new Map();
+  (state.staff||[]).forEach(staff=>{
+    if(!staff?.id||isSystemPayrollAccount(staff)) return;
+    const hasMonthOrders=orders.some(order=>String(order.assignedDesignerId)===String(staff.id));
+    if(staff.active===true||hasMonthOrders) byId.set(String(staff.id),staff);
+  });
+  orders.forEach(order=>{
+    const id=String(order.assignedDesignerId||'');
+    if(!id||byId.has(id)) return;
+    const historical={id,name:order.assignedDesignerName||id,nickname:order.assignedDesignerName||'',active:false};
+    if(!isSystemPayrollAccount(historical)) byId.set(id,historical);
+  });
+  return Array.from(byId.values()).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'zh-Hant'));
+}
+function payrollTrialForStaff(staff,month,orders,manual={}){
+  const staffOrders=orders.filter(order=>String(order.assignedDesignerId)===String(staff.id));
+  const performanceTotal=staffOrders.reduce((sum,order)=>sum+Number(order.total||0),0);
+  const commissionTotal=staffOrders.reduce((sum,order)=>sum+Number(order.commission||0),0);
+  const baseSalary=Math.max(PAYROLL_GUARANTEE,commissionTotal);
+  const advance=payrollTrialNumber(manual.advance);
+  const materialAdvance=payrollTrialNumber(manual.materialAdvance);
+  const insurance=payrollTrialNumber(manual.insurance);
+  const annualBonus=payrollTrialNumber(manual.annualBonus);
+  return {
+    staff,month,orderCount:staffOrders.length,performanceTotal,commissionTotal,
+    achievementRate:performanceTotal/PAYROLL_TARGET*100,
+    baseSalary,advance,materialAdvance,insurance,annualBonus,
+    actualSalary:baseSalary+annualBonus-advance-materialAdvance-insurance
+  };
+}
+function payrollTrialSummary(monthValue){
+  const month=payrollTrialMonth(monthValue);
+  const orders=payrollTrialOrders(month);
+  const staffList=payrollTrialStaff(month,orders);
+  const allInputs=loadPayrollTrialInputs();
+  const monthInputs=allInputs[month]&&typeof allInputs[month]==='object'?allInputs[month]:{};
+  const trials=staffList.map(staff=>payrollTrialForStaff(staff,month,orders,monthInputs[String(staff.id)]||{}));
+  return {
+    month,orders,trials,
+    commissionTotal:trials.reduce((sum,row)=>sum+row.commissionTotal,0),
+    actualSalaryTotal:trials.reduce((sum,row)=>sum+row.actualSalary,0)
+  };
+}
+function payrollAchievementText(rate){
+  const value=Number.isFinite(rate)?rate:0;
+  return `${value.toFixed(value%1===0?0:1)}%`;
+}
+function renderPayrollTrial(){
+  if(window.OBA_ACCESS_SESSION?.kind==='boss')return;
+  if(typeof shouldPreservePayrollAuthorityView==='function'&&shouldPreservePayrollAuthorityView())return;
+  if(typeof buildDraftPayrollPageModel!=='function'||typeof setPayrollPageModel!=='function')return;
+  const month=payrollTrialMonth($('#payrollTrialMonth')?.value);
+  const revision=(typeof OBA_PAYROLL!=='undefined'&&OBA_PAYROLL.pageModel?OBA_PAYROLL.pageModel.sourceRevision||0:0)+1;
+  return setPayrollPageModel(buildDraftPayrollPageModel(month,revision));
+}
+function savePayrollTrialInput(input){
+  if(!requirePageTabAuthorization('expense')){renderPayrollTrial();return;}
+  const card=input.closest('.payroll-trial-card');
+  const staffId=String(card?.dataset.staffId||'');
+  const field=String(input.dataset.field||'');
+  if(!staffId||!['advance','materialAdvance','insurance','annualBonus'].includes(field)) return;
+  const month=payrollTrialMonth($('#payrollTrialMonth')?.value);
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
+  const allInputs=loadPayrollTrialInputs();
+  if(!allInputs[month]||typeof allInputs[month]!=='object') allInputs[month]={};
+  if(!allInputs[month][staffId]||typeof allInputs[month][staffId]!=='object') allInputs[month][staffId]={};
+  allInputs[month][staffId][field]=payrollTrialNumber(input.value);
+  savePayrollTrialInputs(allInputs);
+  renderPayrollTrial();
+}
+function loadCustomExpenseCategories(){
+  try{
+    const list=JSON.parse(localStorage.getItem(CUSTOM_EXPENSE_CATEGORY_KEY)||'[]');
+    return Array.isArray(list) ? list.map(value=>String(value||'').trim()).filter(Boolean) : [];
+  }catch(error){
+    return [];
+  }
+}
+function saveCustomExpenseCategories(list){
+  localStorage.setItem(CUSTOM_EXPENSE_CATEGORY_KEY,JSON.stringify(Array.from(new Set((list||[]).map(value=>String(value||'').trim()).filter(Boolean)))));
+}
+function isBlockedExpenseCategoryName(name){
+  return BLOCKED_EXPENSE_CATEGORY_NAMES.has(String(name||'').trim().toLowerCase());
+}
+function renderExpenseCategoryOptions(preferred=''){
+  const select=$('#expenseCategory');
+  if(!select) return;
+  const current=String(preferred||select.value||'材料');
+  const categories=[...FIXED_EXPENSE_CATEGORIES,...loadCustomExpenseCategories()];
+  if(current&&!categories.includes(current)) categories.push(current);
+  select.innerHTML=Array.from(new Set(categories)).map(category=>`<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+  select.value=categories.includes(current)?current:'材料';
+}
+function rejectClosedPayrollExpenseEdit(){
+  if(typeof payrollMonthClosed==='function'&&payrollMonthClosed()){
+    const message=typeof closedPayrollMessage==='function'?closedPayrollMessage():'本月份已完成月結，請先重新開放修改。';
+    setExpenseStatus(message,'dirty');
+    return true;
+  }
+  return false;
+}
+function addCustomExpenseCategory(){
+  if(guardBossAction()) return;
+  if(!requirePageTabAuthorization('expense')) return;
+  if(rejectClosedPayrollExpenseEdit()) return;
+  const input=$('#customExpenseCategory');
+  const name=String(input?.value||'').trim();
+  if(!name){alert('請輸入新的支出分類名稱');input?.focus();return;}
+  if(name.length>20){alert('支出分類名稱最多 20 個字');input?.focus();return;}
+  if(isBlockedExpenseCategoryName(name)){
+    alert('薪資、年終、借支、材料代墊與員工保險自付額不得建立為公司一般支出，以免重複扣除');
+    input?.focus();
+    return;
+  }
+  const all=[...FIXED_EXPENSE_CATEGORIES,...loadCustomExpenseCategories()];
+  if(all.includes(name)){alert('這個支出分類已經存在');renderExpenseCategoryOptions(name);return;}
+  saveCustomExpenseCategories([...loadCustomExpenseCategories(),name]);
+  if(input) input.value='';
+  renderExpenseCategoryOptions(name);
+  setExpenseStatus('自訂分類已儲存在本機','saved');
+}
 function loadExpenses(){
   try{
     const raw=localStorage.getItem(EXPENSE_KEY);
@@ -30,7 +232,7 @@ function setExpenseEditingMode(id=''){
 function clearExpenseForm(){
   const dateEl=$('#expenseDate'), categoryEl=$('#expenseCategory'), amountEl=$('#expenseAmount'), noteEl=$('#expenseNote');
   if(dateEl) dateEl.value=todayStr();
-  if(categoryEl) categoryEl.value='材料';
+  renderExpenseCategoryOptions('材料');
   if(amountEl) amountEl.value='';
   if(noteEl) noteEl.value='';
   setExpenseEditingMode('');
@@ -46,48 +248,26 @@ function expenseMonthOf(date){
   return String(date||'').slice(0,7);
 }
 function renderExpenses(){
+  if(window.OBA_ACCESS_SESSION?.kind==='boss')return;
   bindExpenseEvents();
-  updateExpenseAdminButtons();
+  renderExpenseCategoryOptions();
   const dateEl=$('#expenseDate');
   if(dateEl && !dateEl.value) dateEl.value=todayStr();
-  const list=loadExpenses().sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  const today=todayStr();
-  const month=monthStr();
-  const todayList=list.filter(e=>e.date===today);
-  const monthList=list.filter(e=>expenseMonthOf(e.date)===month);
-  const todayTotal=todayList.reduce((s,e)=>s+Number(e.amount||0),0);
-  const monthTotal=monthList.reduce((s,e)=>s+Number(e.amount||0),0);
-  const t1=$('#expenseTodayTotal'), t2=$('#expenseMonthTotal'), t3=$('#expenseMonthCount');
-  if(t1) t1.textContent=money(todayTotal);
-  if(t2) t2.textContent=money(monthTotal);
-  if(t3) t3.textContent=monthList.length;
-  const table=$('#expenseTable');
-  if(!table) return;
-  if(!list.length){
-    table.innerHTML='<div class="tr"><div>目前還沒有支出紀錄</div></div>';
-    return;
-  }
-  table.innerHTML='<div class="tr header"><div>日期</div><div>分類</div><div>金額</div><div>備註</div><div>操作</div></div>'+list.map(e=>`
-    <div class="tr">
-      <div>${escapeHtml(e.date)}</div>
-      <div>${escapeHtml(e.category)}</div>
-      <div>${money(e.amount)}</div>
-      <div>${escapeHtml(e.note||'-')}</div>
-      <div class="row">
-        <button class="btn btn-soft btnEditExpense" data-id="${escapeHtml(e.id)}" type="button">編輯</button>
-        <button class="btn btn-danger btnDeleteExpense" data-id="${escapeHtml(e.id)}" type="button">刪除</button>
-      </div>
-    </div>`).join('');
+  if(typeof shouldPreservePayrollAuthorityView==='function'&&shouldPreservePayrollAuthorityView())return;
+  renderPayrollTrial();
 }
 
 function startExpenseEdit(id){
   if(guardBossAction()) return;
+  if(!requirePageTabAuthorization('expense')) return;
+  if(rejectClosedPayrollExpenseEdit()) return;
   const list=loadExpenses();
-  const item=list.find(e=>String(e.id)===String(id));
+  const modelItem=(typeof OBA_PAYROLL!=='undefined'&&OBA_PAYROLL.pageModel?.expenses||[]).find(e=>String(e.expenseId)===String(id));
+  const item=list.find(e=>String(e.id)===String(id))||(modelItem?{id:modelItem.expenseId,date:modelItem.expenseDate,category:modelItem.category,amount:modelItem.amount,note:modelItem.note}:null);
   if(!item){ alert('找不到這筆支出'); return; }
   const dateEl=$('#expenseDate'), categoryEl=$('#expenseCategory'), amountEl=$('#expenseAmount'), noteEl=$('#expenseNote');
   if(dateEl) dateEl.value=item.date||todayStr();
-  if(categoryEl) categoryEl.value=item.category||'材料';
+  renderExpenseCategoryOptions(item.category||'材料');
   if(amountEl) amountEl.value=Number(item.amount||0);
   if(noteEl) noteEl.value=item.note||'';
   setExpenseEditingMode(item.id);
@@ -99,6 +279,8 @@ function startExpenseEdit(id){
 
 function saveExpenseEntry(){
   if(guardBossAction()) return;
+  if(!requirePageTabAuthorization('expense')) return;
+  if(rejectClosedPayrollExpenseEdit()) return;
   const date=($('#expenseDate')?.value || todayStr()).trim();
   const category=($('#expenseCategory')?.value || '').trim();
   const rawAmount=String($('#expenseAmount')?.value || '').trim();
@@ -109,6 +291,7 @@ function saveExpenseEntry(){
   if(!category){ alert('請選擇支出分類'); $('#expenseCategory')?.focus(); setExpenseStatus('分類未選','dirty'); return; }
   if(!rawAmount || !Number.isFinite(amount) || amount<=0){ alert('請輸入正確的支出金額'); $('#expenseAmount')?.focus(); setExpenseStatus('金額未完成','dirty'); return; }
 
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
   const list=loadExpenses();
   if(expenseEditingId){
     const idx=list.findIndex(e=>String(e.id)===String(expenseEditingId));
@@ -151,11 +334,16 @@ function addExpense(){
 }
 function deleteExpense(id){
   if(guardBossAction()) return;
+  if(!requirePageTabAuthorization('expense')) return;
+  if(rejectClosedPayrollExpenseEdit()) return;
   const list=loadExpenses();
-  const item=list.find(e=>String(e.id)===String(id));
+  const modelItem=(typeof OBA_PAYROLL!=='undefined'&&OBA_PAYROLL.pageModel?.expenses||[]).find(e=>String(e.expenseId)===String(id));
+  const item=list.find(e=>String(e.id)===String(id))||(modelItem?{id:modelItem.expenseId,date:modelItem.expenseDate,category:modelItem.category,amount:modelItem.amount,note:modelItem.note}:null);
   const label=item ? `${item.date || ''} ${item.category || ''} ${money(item.amount || 0)}` : '這筆支出';
   if(!confirm(`確定刪除 ${label} 嗎？`)) return;
-  const next=list.filter(e=>String(e.id)!==String(id));
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
+  const draftList=loadExpenses();
+  const next=draftList.filter(e=>String(e.id)!==String(id));
   saveExpenses(next);
   if(String(expenseEditingId)===String(id)) clearExpenseForm();
   setExpenseStatus('支出已刪除','saved');
@@ -168,6 +356,11 @@ function bindExpenseEvents(){
   const cancelBtn=$('#btnCancelExpenseEdit');
   const refreshBtn=$('#btnExpenseRefresh');
   const table=$('#expenseTable');
+  const payrollMonth=$('#payrollTrialMonth');
+  const payrollList=$('#payrollTrialStaffList');
+  const customCategoryInput=$('#customExpenseCategory');
+  const addCategoryBtn=$('#btnAddExpenseCategory');
+  const managementShareRate=$('#jeanManagementShareRate');
   const inputs=['#expenseDate','#expenseCategory','#expenseAmount','#expenseNote'];
 
   if(saveBtn && !saveBtn.dataset.bound){
@@ -195,6 +388,27 @@ function bindExpenseEvents(){
       if(deleteBtn) deleteExpense(deleteBtn.dataset.id);
     });
   }
+  // V11.1.76：月份切換只由 payroll.js 的單一狀態機處理，避免雙重 renderer。
+  if(payrollList&&!payrollList.dataset.bound){
+    payrollList.dataset.bound='yes';
+    payrollList.addEventListener('change',event=>{
+      const input=event.target.closest('.payrollTrialInput');
+      if(input) savePayrollTrialInput(input);
+    });
+  }
+  if(addCategoryBtn&&!addCategoryBtn.dataset.bound){
+    addCategoryBtn.dataset.bound='yes';
+    addCategoryBtn.addEventListener('click',addCustomExpenseCategory);
+  }
+  if(customCategoryInput&&!customCategoryInput.dataset.bound){
+    customCategoryInput.dataset.bound='yes';
+    customCategoryInput.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();addCustomExpenseCategory();}});
+  }
+  if(managementShareRate&&!managementShareRate.dataset.bound){
+    managementShareRate.dataset.bound='yes';
+    managementShareRate.addEventListener('change',saveJeanManagementShareRate);
+    managementShareRate.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();saveJeanManagementShareRate();}});
+  }
   inputs.forEach(sel=>{
     const el=$(sel);
     if(el && !el.dataset.expenseDirtyBound){
@@ -208,29 +422,3 @@ function bindExpenseEvents(){
   });
   setExpenseEditingMode(expenseEditingId);
 }
-
-
-function canUseExpenseAdminActions(){
-  if(window.USER_ROLE === 'boss') return false;
-  const staff = typeof getAssignLoginStaff === 'function' ? getAssignLoginStaff() : null;
-  if(staff?.owner) return true;
-  if(Array.isArray(staff?.permissions) && (staff.permissions.includes('manage') || staff.permissions.includes('view_all'))) return true;
-  const current = typeof CURRENT_CASHIER !== 'undefined' ? CURRENT_CASHIER : null;
-  if(current?.owner) return true;
-  if(Array.isArray(current?.permissions) && (current.permissions.includes('manage') || current.permissions.includes('view_all'))) return true;
-  const loginId = sessionStorage.getItem('oba_access_staff_id') || localStorage.getItem('oba_access_staff_id') || '';
-  const loginStaff = Array.isArray(state?.staff) ? state.staff.find(s=>s.id===loginId) : null;
-  if(loginStaff?.owner) return true;
-  if(Array.isArray(loginStaff?.permissions) && (loginStaff.permissions.includes('manage') || loginStaff.permissions.includes('view_all'))) return true;
-  return false;
-}
-function updateExpenseAdminButtons(){
-  const ok=canUseExpenseAdminActions();
-  ['btnSalaryClose','btnResetAll'].forEach(id=>{
-    const btn=$('#'+id);
-    if(!btn) return;
-    btn.classList.toggle('hidden', !ok);
-    btn.disabled=!ok;
-  });
-}
-

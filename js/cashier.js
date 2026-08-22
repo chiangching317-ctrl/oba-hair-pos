@@ -1,6 +1,7 @@
 // OBA Hair POS - Cashier module
 // DEV V11.1.20-D5：收款出單模組
 // 從 index.html 拆出：品項顯示、購物車、付款確認、建立訂單。
+let CHECKOUT_SAVE_IN_PROGRESS=false;
 
 function renderCashier(){
   $('#todayText').textContent=todayStr();
@@ -83,6 +84,7 @@ document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=async ()=>{
   const method=btn.dataset.pay;
   const lockedOrderNo=currentOrderNo();
   CHECKOUT_SNAPSHOT={
+    checkoutId:'txn-'+Date.now()+'-'+Math.random().toString(36).slice(2,10),
     orderNo:lockedOrderNo,
     items:clone(checkoutItems),
     total:checkoutTotal,
@@ -92,6 +94,7 @@ document.querySelectorAll('[data-pay]').forEach(btn=>btn.onclick=async ()=>{
   };
   state.pendingPay=method;
   state.pendingCheckoutCart=clone(checkoutItems); // V11.0.85：雙重鎖住本單快照，避免確認前 cart 被同步洗掉變無品項單
+  state.pendingCheckoutId=CHECKOUT_SNAPSHOT.checkoutId;
   localStorage.setItem(KEY, JSON.stringify(state));
   $('#paySummary').textContent=`單號：${lockedOrderNo}｜總金額：${money(checkoutTotal)}｜收款方式：${method}｜經手人：${CURRENT_CASHIER?.name||'-'}`;
   $('#payDialog').showModal()
@@ -100,11 +103,13 @@ $('#btnCancelPay').onclick=()=>{
   CHECKOUT_SNAPSHOT=null;
   state.pendingPay='';
   state.pendingCheckoutCart=null;
+  state.pendingCheckoutId=null;
   localStorage.setItem(KEY, JSON.stringify(state));
   $('#payDialog').close();
 };
-$('#btnConfirmPay').onclick=()=>{
+$('#btnConfirmPay').onclick=async()=>{
   if(guardBossAction()) return;
+  if(CHECKOUT_SAVE_IN_PROGRESS) return;
   const snap = CHECKOUT_SNAPSHOT || {};
   const checkoutItems = Array.isArray(snap.items) && snap.items.length ? clone(snap.items) : (Array.isArray(state.pendingCheckoutCart) && state.pendingCheckoutCart.length ? clone(state.pendingCheckoutCart) : clone(state.cart));
   const checkoutTotal = Number(snap.total || checkoutItems.reduce((s,i)=>s+Number(i.price||0),0));
@@ -114,19 +119,33 @@ $('#btnConfirmPay').onclick=()=>{
     CHECKOUT_SNAPSHOT=null;
     state.pendingPay='';
     state.pendingCheckoutCart=null;
+    state.pendingCheckoutId=null;
     $('#payDialog').close();
     renderCashier();
     return;
   }
-  const order={id:snap.orderNo||currentOrderNo(),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:checkoutItems,total:checkoutTotal,paymentMethod:snap.paymentMethod||state.pendingPay,cashierId:snap.cashierId||CURRENT_CASHIER?.id||'',cashierName:snap.cashierName||CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:taipeiNowIso()};
-  state.orders.unshift(order);
-  consumeMonthlyOrderNo(order.id);
+  const orderDraft={checkoutId:snap.checkoutId||state.pendingCheckoutId||('txn-'+Date.now()+'-'+Math.random().toString(36).slice(2,10)),date:todayStr(),time:nowTime(),branchId:state.branchId||DEFAULT_BRANCH_ID,branchName:state.branchName||DEFAULT_BRANCH_NAME,items:checkoutItems,total:checkoutTotal,paymentMethod:snap.paymentMethod||state.pendingPay,cashierId:snap.cashierId||CURRENT_CASHIER?.id||'',cashierName:snap.cashierName||CURRENT_CASHIER?.name||'',assignedDesignerId:'',assignedDesignerName:'',commission:0,assignedAt:'',refunded:false,createdAt:new Date().toISOString()};
+  const confirmButton=$('#btnConfirmPay');
+  const cancelButton=$('#btnCancelPay');
+  CHECKOUT_SAVE_IN_PROGRESS=true;
+  if(confirmButton){confirmButton.disabled=true;confirmButton.textContent='正在確認雲端保存…';}
+  if(cancelButton) cancelButton.disabled=true;
+  const result=await saveCheckoutOrderVerified(orderDraft);
+  CHECKOUT_SAVE_IN_PROGRESS=false;
+  if(confirmButton){confirmButton.disabled=false;confirmButton.textContent='確認收款並列印';}
+  if(cancelButton) cancelButton.disabled=false;
+  if(!result.ok){
+    alert(result.message||'雲端保存失敗，購物車已保留，請重試');
+    return;
+  }
+  const order=result.order;
   state.cart=[];
   state.pendingPay='';
   state.pendingCheckoutCart=null;
+  state.pendingCheckoutId=null;
   CHECKOUT_SNAPSHOT=null;
   CURRENT_CASHIER=null;
-  saveState(true);
+  localStorage.setItem(KEY,JSON.stringify(state));
   renderCashier();renderAssign();renderReport();updateCashierDisplay();
   $('#payDialog').close();
   openReceipt(order)

@@ -3,10 +3,54 @@ let cloudClient=null;
 let cloudReady=false;
 let cloudSaving=false;
 let cloudResetting=false; // V11.0.45：清空歸零時暫停 pull，避免雲端舊資料蓋回 nextNo
-function getCloudClient(){
+let devEnvironmentBlocked=false;
+let devBootstrapReady=false;
+let credentialWriteGuardReady=false;
+const DEV_ISOLATION_MIGRATION_KEY='oba_hair_DEV_isolation_cleanup_v11138';
+const DEV_PULL_FAIL_LOG_KEY='oba_hair_DEV_pull_fail_logs_v1';
+function recordDevPullFail(reason,error=null){
+  const entry={
+    event:'PULL_FAIL',
+    status:'OFFLINE',
+    reason,
+    timestamp:new Date().toISOString(),
+    error:error ? (error.message||String(error)) : ''
+  };
+  window.OBA_LAST_CLOUD_ERROR={
+    source:reason==='SUPABASE_READ_ERROR'?'STATE_PULL_RLS':'AUTHORIZATION_DATA_LOAD',
+    reason,
+    code:error?.code||'',
+    message:error?.message||String(error||''),
+    details:error?.details||'',
+    hint:error?.hint||''
+  };
+  console.warn('PULL_FAIL',entry);
+  try{
+    const raw=localStorage.getItem(DEV_PULL_FAIL_LOG_KEY);
+    const parsed=raw ? JSON.parse(raw) : [];
+    const logs=Array.isArray(parsed) ? parsed : [];
+    logs.unshift(entry);
+    localStorage.setItem(DEV_PULL_FAIL_LOG_KEY,JSON.stringify(logs.slice(0,50)));
+  }catch(logError){
+    console.warn('PULL_FAIL 紀錄寫入失敗',logError);
+  }
+}
+function resetCloudClientForAccessSession(){cloudClient=null}
+function getCloudClient(allowAnonymous=false){
   if(cloudClient) return cloudClient;
   if(!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
-  cloudClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  if(typeof DEV_ENVIRONMENT!=='undefined' && DEV_ENVIRONMENT){
+    const expected=String(typeof DEV_EXPECTED_PROJECT_REF!=='undefined' ? DEV_EXPECTED_PROJECT_REF : '');
+    if(!expected || !String(SUPABASE_URL).includes(expected)){
+      devEnvironmentBlocked=true;
+      console.error('DEV 安全封鎖：Supabase 不是指定 DEV 專案', SUPABASE_URL);
+      return null;
+    }
+  }
+  const token=window.OBA_ACCESS_SESSION?.token||'';
+  if(!allowAnonymous&&!token) return null;
+  const options=token?{global:{headers:{'x-oba-session':token}}}:undefined;
+  cloudClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
   return cloudClient;
 }
 function getLocalResetMarker(){return localStorage.getItem(RESET_MARKER_KEY)||''}
@@ -19,19 +63,40 @@ function isEmptyOrBrokenCloudData(data){
   const itemsEmpty = !Array.isArray(data.items) || data.items.length===0;
   return staffEmpty || itemsEmpty;
 }
+function hasUsableCloudAuthData(data){
+  return !!data&&Number(data.credentialStorageVersion||0)>=1;
+}
+function stripPlaintextCredentials(data){
+  if(!data) return data;
+  delete data.managementPassword;
+  if(Array.isArray(data.staff)) data.staff.forEach(staff=>{if(staff&&typeof staff==='object') delete staff.pin});
+  return data;
+}
+function purgeClientCredentialMaterial(){
+  stripPlaintextCredentials(state);
+  try{localStorage.setItem(KEY,JSON.stringify(state))}catch(error){console.warn('本機 credential 清理失敗',error)}
+}
+purgeClientCredentialMaterial();
 
 function normalizeCloudState(data){
   const merged = ensureBranchFields(Object.assign(clone(defaultState), data || {}));
-  if(!merged.staff.find(s=>s.owner)) merged.staff[0].owner=true;
-  return merged;
+  if(merged.staff.length&&!merged.staff.find(s=>s.owner)) merged.staff[0].owner=true;
+  return stripPlaintextCredentials(merged);
 }
 async function pullCloudState(){
+  const localStateBeforePull=state;
+  const localStateRawBeforePull=localStorage.getItem(KEY);
+  const hadCloudResetAtBeforePull=Object.prototype.hasOwnProperty.call(window,'OBA_DEV_CLOUD_LAST_RESET_AT');
+  const cloudResetAtBeforePull=window.OBA_DEV_CLOUD_LAST_RESET_AT;
   if(cloudResetting){
     console.log('正在執行清空歸零，暫停雲端 pull，避免舊資料蓋回業績');
     return false;
   }
   const client=getCloudClient();
-  if(!client) return false;
+  if(!client){
+    recordDevPullFail('CLOUD_CLIENT_UNAVAILABLE');
+    return false;
+  }
   try{
     // V11.0.47：抓多筆 main row，避免 Supabase 曾經有 duplicated main row 時拉到舊 orders。
     const { data, error } = await client
@@ -41,7 +106,10 @@ async function pullCloudState(){
       .order('updated_at', { ascending:false })
       .limit(20);
 
-    if(error){ console.log('雲端讀取失敗', error); return false; }
+    if(error){
+      recordDevPullFail('SUPABASE_READ_ERROR',error);
+      return false;
+    }
 
     if(data && data.length>0){
       const rows = data.filter(r=>r && r.data);
@@ -54,22 +122,16 @@ async function pullCloudState(){
           return String(b.updated_at||'').localeCompare(String(a.updated_at||''));
         });
         const chosen = rows[0];
-
-        // V11.0.69：線上測試保護。雲端若是空資料，不准覆蓋畫面，改成用目前本機/預設資料補回雲端。
-        if(isEmptyOrBrokenCloudData(chosen.data)){
-          console.log('雲端資料是空的或不完整，已阻止覆蓋本機資料，改上傳目前資料到雲端');
-          await saveState(true);
-          return true;
-        }
-
-        const localResetAt = newestStamp(state?.lastResetAt, getLocalResetMarker());
         const cloudResetAt = String(chosen.data?.lastResetAt || '');
-        const localIsClean = Array.isArray(state.orders) && state.orders.length===0 && Array.isArray(state.refunds) && state.refunds.length===0;
-        const cloudHasOldOrders = Array.isArray(chosen.data?.orders) && chosen.data.orders.length>0;
-        if(localResetAt && localIsClean && cloudHasOldOrders && cloudResetAt < localResetAt){
-          console.log('已擋下舊雲端 orders：本機已歸零，雲端 row 較舊，不覆蓋', {localResetAt, cloudResetAt, cloudOrders:chosen.data.orders.length});
+
+        // V11.1.38 DEV 根治：DEV 雲端若空白、不完整或沒有任何可用 PIN/管理密碼，
+        // 絕不拿本機/defaultState 回填。否則可能把正式站殘留資料或空白 PIN 灌入 DEV。
+        if(isEmptyOrBrokenCloudData(chosen.data)){
+          console.error('DEV 雲端資料不完整，已停止載入與回填');
+          recordDevPullFail('MAIN_ROW_INVALID');
           return false;
         }
+
         // V11.0.87：開單中保護。若正在選品項或確認收款，雲端 15 秒 pull 不可把本單 cart 洗掉。
         const keepCheckout = (typeof isCheckoutInProgress === 'function') && isCheckoutInProgress();
         const localCartSnapshot = keepCheckout ? clone(state.cart || []) : null;
@@ -82,12 +144,11 @@ async function pullCloudState(){
           state.pendingCheckoutCart = localPendingCheckoutSnapshot;
           localStorage.setItem(KEY, JSON.stringify(state));
         }
-        const effectiveResetAt = newestStamp(state.lastResetAt, getLocalResetMarker());
-        if(effectiveResetAt){
-          state.lastResetAt = effectiveResetAt;
-          setLocalResetMarker(effectiveResetAt);
-          state.orders = (state.orders||[]).filter(o=>isAfterStamp(timeStampOfOrder(o), effectiveResetAt));
-          state.refunds = (state.refunds||[]).filter(r=>isAfterStamp(timeStampOfOrder(r), effectiveResetAt));
+        window.OBA_DEV_CLOUD_LAST_RESET_AT=cloudResetAt;
+        state.lastResetAt=cloudResetAt;
+        if(cloudResetAt){
+          state.orders = (state.orders||[]).filter(o=>isAfterStamp(timeStampOfOrder(o), cloudResetAt));
+          state.refunds = (state.refunds||[]).filter(r=>isAfterStamp(timeStampOfOrder(r), cloudResetAt));
           state.cart = [];
           state.pendingPay = '';
         }
@@ -97,25 +158,37 @@ async function pullCloudState(){
       }
     }
 
-    await saveState(true);
-    return true;
+    console.error('DEV 雲端找不到有效 main row，已停止自動回填');
+    recordDevPullFail('MAIN_ROW_NOT_FOUND');
+    return false;
   }catch(err){
-    console.log('雲端讀取錯誤', err);
+    state=localStateBeforePull;
+    try{
+      if(localStateRawBeforePull===null) localStorage.removeItem(KEY);
+      else localStorage.setItem(KEY,localStateRawBeforePull);
+    }catch(restoreError){
+      console.warn('DEV pull 失敗後本機快取還原失敗',restoreError);
+    }
+    if(hadCloudResetAtBeforePull) window.OBA_DEV_CLOUD_LAST_RESET_AT=cloudResetAtBeforePull;
+    else delete window.OBA_DEV_CLOUD_LAST_RESET_AT;
+    recordDevPullFail('SUPABASE_READ_EXCEPTION',err);
     return false;
   }
 }
 async function saveState(forceCloud=false){
+  stripPlaintextCredentials(state);
   localStorage.setItem(KEY,JSON.stringify(state));
   console.log('本機已存檔');
 
   const client=getCloudClient();
   if(!client) return;
+  if(!credentialWriteGuardReady){console.error('DEV credential 防回寫護欄尚未確認，已阻止雲端 saveState');return}
   if(cloudSaving && !forceCloud) return;
   cloudSaving=true;
   try{
     const payload = {
       id:CLOUD_ROW_ID,
-      data:state,
+      data:stripPlaintextCredentials(clone(state)),
       updated_at:new Date().toISOString()
     };
 
@@ -127,25 +200,17 @@ async function saveState(forceCloud=false){
       .select('id,updated_at');
 
     if(updateResult.error){
-      console.log('雲端 update 失敗', updateResult.error);
+      console.error('雲端 update 失敗，已停止；不會自動建立或重建 main row', updateResult.error);
+      return false;
     }
 
     if(!updateResult.data || updateResult.data.length===0){
-      console.log('找不到 main row，建立新的 main row');
-      const insertResult = await client
-        .from(CLOUD_TABLE)
-        .insert(payload)
-        .select('id,updated_at');
-
-      if(insertResult.error){
-        console.log('雲端 insert 失敗', insertResult.error);
-      }else{
-        cloudReady=true;
-        console.log('雲端同步成功（insert main）', insertResult.data);
-      }
+      console.error('找不到 main row，已 fail-closed；不會自動建立、補寫或用本機 state 重建');
+      return false;
     }else{
       cloudReady=true;
       console.log('雲端同步成功（update main）', updateResult.data);
+      return true;
     }
   }catch(err){
     console.log('同步錯誤', err);
@@ -170,6 +235,107 @@ function chooseAuthoritativeCloudRow(inputRows){
   return rows[0]||null;
 }
 
+// V11.1.50：收款專用驗證存檔。訂單與月流水號必須同一次 optimistic update 寫入，
+// 並在查回驗證成功後才允許前端完成交易。
+async function saveCheckoutOrderVerified(orderDraft){
+  const draft=clone(orderDraft||{});
+  const checkoutId=String(draft.checkoutId||'').trim();
+  if(!checkoutId) return {ok:false,message:'交易識別碼遺失，已停止收款'};
+  if(!Array.isArray(draft.items)||!draft.items.length||Number(draft.total||0)<=0){
+    return {ok:false,message:'訂單內容不完整，已停止收款'};
+  }
+  const client=getCloudClient();
+  if(!client) return {ok:false,message:'目前未連上 DEV 雲端，購物車已保留，請恢復網路後重試'};
+  if(!credentialWriteGuardReady) return {ok:false,message:'DEV credential 防回寫護欄尚未就緒，已停止收款'};
+  if(cloudSaving) return {ok:false,message:'系統正在同步，購物車已保留，請稍候再試'};
+
+  cloudSaving=true;
+  try{
+    const maxAttempts=3;
+    for(let attempt=1;attempt<=maxAttempts;attempt++){
+      const latest=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(latest.error) return {ok:false,message:'讀取 DEV 雲端失敗：'+latest.error.message};
+
+      const chosen=chooseAuthoritativeCloudRow(latest.data||[]);
+      if(!chosen) return {ok:false,message:'DEV 雲端找不到 main，已停止收款'};
+      const merged=normalizeCloudState(clone(chosen.data));
+      if(!Array.isArray(merged.orders)) merged.orders=[];
+
+      // 若前一次其實已寫入、但回傳驗證中斷，以 checkoutId 找回同一交易，避免重複出單。
+      const existing=merged.orders.find(o=>String(o.checkoutId||'')===checkoutId);
+      if(existing){
+        state=merged;
+        localStorage.setItem(KEY,JSON.stringify(state));
+        cloudReady=true;
+        return {ok:true,order:clone(existing),alreadyVerified:true};
+      }
+
+      const dateKey=String(draft.date||'').replace(/-/g,'');
+      const monthKey=dateKey.slice(0,6);
+      if(!/^\d{8}$/.test(dateKey)||!/^\d{6}$/.test(monthKey)){
+        return {ok:false,message:'訂單日期格式錯誤，已停止收款'};
+      }
+      const reservation=reserveMonthlyOrderNo(merged,draft.date);
+      const sequence=reservation.sequence;
+      const orderNo=reservation.orderNo;
+
+      const order=Object.assign({},draft,{id:orderNo});
+      merged.orders.unshift(order);
+      merged.cart=[];
+      merged.pendingPay='';
+      merged.pendingCheckoutCart=null;
+      merged.pendingCheckoutId=null;
+
+      const stamp=new Date().toISOString();
+      const updateResult=await client
+        .from(CLOUD_TABLE)
+        .update({data:merged,updated_at:stamp})
+        .eq('id',CLOUD_ROW_ID)
+        .eq('updated_at',chosen.updated_at)
+        .select('id,updated_at');
+      if(updateResult.error) return {ok:false,message:'DEV 雲端寫入失敗：'+updateResult.error.message};
+      if(!updateResult.data||!updateResult.data.length){
+        if(attempt<maxAttempts){
+          await new Promise(resolve=>setTimeout(resolve,180*attempt));
+          continue;
+        }
+        return {ok:false,message:'資料剛被其他裝置更新，購物車已保留，請重新按一次確認收款'};
+      }
+
+      const verify=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(verify.error) return {ok:false,message:'寫入後驗證失敗：'+verify.error.message};
+      const verifiedRow=chooseAuthoritativeCloudRow(verify.data||[]);
+      const verifiedState=verifiedRow?.data ? normalizeCloudState(verifiedRow.data) : null;
+      const verifiedOrder=verifiedState?.orders?.find(o=>String(o.checkoutId||'')===checkoutId&&String(o.id||'')===orderNo);
+      const verifiedCounter=Number(verifiedState?.monthlyOrderCounter?.[monthKey]||0);
+      if(!verifiedOrder||verifiedCounter!==reservation.nextCounter||!verifiedState.usedOrderNos?.includes(orderNo)){
+        return {ok:false,message:'DEV 雲端驗證未通過，系統沒有完成交易；購物車已保留'};
+      }
+
+      state=verifiedState;
+      localStorage.setItem(KEY,JSON.stringify(state));
+      cloudReady=true;
+      return {ok:true,order:clone(verifiedOrder)};
+    }
+    return {ok:false,message:'DEV 雲端忙碌，購物車已保留，請稍後重試'};
+  }catch(err){
+    console.log('收款驗證存檔錯誤',err);
+    return {ok:false,message:'收款存檔發生錯誤：'+(err?.message||err)};
+  }finally{
+    cloudSaving=false;
+  }
+}
+
 async function saveAssignedOrderVerified(orderId, assignment, assignLog){
   const id=String(orderId||'').trim();
   if(!id) return {ok:false, message:'缺少單號'};
@@ -181,6 +347,7 @@ async function saveAssignedOrderVerified(orderId, assignment, assignLog){
   if(!client){
     return {ok:false, message:'目前未連上雲端，為避免假成功，這次不掛入業績'};
   }
+  if(!credentialWriteGuardReady) return {ok:false,message:'DEV credential 防回寫護欄尚未就緒，這次沒有掛入'};
   if(cloudSaving) return {ok:false, message:'系統正在同步，請稍候再試'};
 
   cloudSaving=true;
@@ -278,6 +445,7 @@ async function saveStatePatch(patchFields){
     console.log('無雲端 client，局部存檔只寫本機', Object.keys(patchFields||{}));
     return false;
   }
+  if(!credentialWriteGuardReady){console.error('DEV credential 防回寫護欄尚未確認，已阻止局部雲端存檔');return false}
   if(cloudSaving) return false;
   cloudSaving=true;
   try{
@@ -336,107 +504,6 @@ async function saveStatePatch(patchFields){
   }
 }
 
-async function replaceCloudMainRowForReset(resetState){
-  const client=getCloudClient();
-  if(!client) return false;
-  const cleanState = normalizeCloudState(clone(resetState));
-  const payload = {
-    id:CLOUD_ROW_ID,
-    data:cleanState,
-    updated_at:new Date().toISOString()
-  };
-
-  cloudResetting=true;
-  cloudSaving=true;
-  try{
-    // V11.0.45：清空全部資料時，不只 update；先刪掉所有 id=main 的舊列，避免 duplicated main row 之後又把 nextNo 拉回舊值。
-    const deleteResult = await client
-      .from(CLOUD_TABLE)
-      .delete()
-      .eq('id', CLOUD_ROW_ID)
-      .select('id,updated_at');
-
-    if(deleteResult.error){
-      console.log('雲端 reset delete 失敗，改用 update 覆蓋所有 main row', deleteResult.error);
-      const updateResult = await client
-        .from(CLOUD_TABLE)
-        .update({ data:payload.data, updated_at:payload.updated_at })
-        .eq('id', CLOUD_ROW_ID)
-        .select('id,updated_at');
-
-      if(updateResult.error){
-        console.log('雲端 reset update 也失敗', updateResult.error);
-        return false;
-      }
-
-      if(!updateResult.data || updateResult.data.length===0){
-        const insertFallback = await client
-          .from(CLOUD_TABLE)
-          .insert(payload)
-          .select('id,updated_at');
-        if(insertFallback.error){
-          console.log('雲端 reset insert fallback 失敗', insertFallback.error);
-          return false;
-        }
-      }
-    }else{
-      console.log('雲端 reset 已刪除舊 main row 數量', deleteResult.data?.length || 0);
-      const insertResult = await client
-        .from(CLOUD_TABLE)
-        .insert(payload)
-        .select('id,data,updated_at');
-
-      if(insertResult.error){
-        console.log('雲端 reset insert 失敗，改用 upsert', insertResult.error);
-        const upsertResult = await client
-          .from(CLOUD_TABLE)
-          .upsert(payload, { onConflict:'id' })
-          .select('id,data,updated_at');
-        if(upsertResult.error){
-          console.log('雲端 reset upsert 失敗', upsertResult.error);
-          return false;
-        }
-      }
-    }
-
-    // V11.0.47：驗證所有 main row 都已經被清成 orders=0、refunds=0，避免 duplicated main row 又拉回舊業績。
-    const verify = await client
-      .from(CLOUD_TABLE)
-      .select('id,data,updated_at')
-      .eq('id', CLOUD_ROW_ID)
-      .order('updated_at', { ascending:false })
-      .limit(20);
-
-    if(verify.error){
-      console.log('雲端 reset 驗證失敗', verify.error);
-      return false;
-    }
-
-    const rows = verify.data || [];
-    const badRows = rows.filter(row=>{
-      const d=row.data||{};
-      const ordersOk=Array.isArray(d.orders) && d.orders.length===0;
-      const refundsOk=Array.isArray(d.refunds) && d.refunds.length===0;
-      const cartOk=Array.isArray(d.cart) && d.cart.length===0;
-      const resetOk=String(d.lastResetAt||'')===String(cleanState.lastResetAt||'');
-      return !(ordersOk && refundsOk && cartOk && resetOk);
-    });
-    if(rows.length===0 || badRows.length>0){
-      console.log('雲端 reset 驗證未通過：仍有舊 main row 或資料未清乾淨', {rows, badRows});
-      return false;
-    }
-
-    cloudReady=true;
-    console.log('雲端 reset 完成：orders=0，refunds=0，cart=0，業績歸零，main rows=', rows.length);
-    return true;
-  }catch(err){
-    console.log('雲端 reset 錯誤', err);
-    return false;
-  }finally{
-    cloudSaving=false;
-    cloudResetting=false;
-  }
-}
 function refreshAllScreens(){
   updateCashierDisplay();
   renderCashier();
@@ -444,22 +511,56 @@ function refreshAllScreens(){
   renderReport();
   renderTimeclock();
   renderExpenses();
+  if(typeof refreshPayrollPageAfterStatePull==='function')refreshPayrollPageAfterStatePull();
   renderManage();
   applyBossMode();
 }
-async function startCloudSync(){
-  const ok = await pullCloudState();
-  if(ok){
-    if(purgeInvalidEmptyOrders()) saveState(true);
-    refreshAllScreens();
-  }else{
-    console.log('目前使用本機資料，並嘗試補上雲端，避免線上空白');
-    await saveState(true);
-    refreshAllScreens();
+async function runDevIsolationCleanupOnce(){
+  // V11.1.49：舊版一次性 migration 已停用。DEV 啟動只能讀取共用雲端資料，
+  // 不得再依賴單一裝置 localStorage marker 自動清空或重建 Supabase main。
+  console.log('DEV 啟動自動清空已停用；如需清空測試資料，僅能由管理者手動操作');
+  return true;
+}
+async function bootstrapDevCloudState(){
+  devBootstrapReady=false;
+  credentialWriteGuardReady=false;
+  const client=getCloudClient();
+  if(!client || devEnvironmentBlocked) return false;
+  const ok=await pullCloudState();
+  if(!ok) return false;
+  const credentialSecurity=await credentialSecurityStatusSecure();
+  const missing=Array.isArray(credentialSecurity?.missingActiveStaff)?credentialSecurity.missingActiveStaff:[];
+  if(!credentialSecurity?.guardInstalled || !credentialSecurity?.ownerConfigured || !credentialSecurity?.bossConfigured){
+    console.error('DEV PIN 安全護欄未就緒，已停止啟動',{reason:credentialSecurity?.reason||'',missingActiveStaff:missing.map(item=>item?.id||'')});
+    recordDevPullFail('CREDENTIAL_GUARD_NOT_READY');
+    return false;
+  }
+  credentialWriteGuardReady=true;
+  if(missing.length){
+    const missingIds=missing.map(item=>String(item?.id||'')).filter(Boolean);
+    console.error('PIN credential 不完整，已停止啟動；未修改任何員工資料',{missingActiveStaff:missingIds});
+    recordDevPullFail('ACTIVE_STAFF_CREDENTIAL_MISSING');
+    credentialWriteGuardReady=false;
+    return false;
+  }
+  const isolationOk=await runDevIsolationCleanupOnce();
+  if(!isolationOk) return false;
+  devBootstrapReady=true;
+  return true;
+}
+async function startCloudSync(skipInitialPull=false){
+  if(!devBootstrapReady){
+    console.warn('DEV 尚未完成安全啟動，不開始背景同步');
+    return;
+  }
+  if(!skipInitialPull){
+    const ok=await pullCloudState();
+    if(ok) refreshAllScreens();
   }
   setInterval(async()=>{
+    if(!devBootstrapReady || devEnvironmentBlocked) return;
     if(ITEM_DIRTY || STAFF_DIRTY || isManageEditing() || ((typeof isCheckoutInProgress === 'function') && isCheckoutInProgress())){ console.log('資料正在編輯或開單中，暫停雲端覆蓋'); return; }
-    const ok = await pullCloudState();
+    const ok=await pullCloudState();
     if(ok) refreshAllScreens();
-  }, 15000);
+  },15000);
 }

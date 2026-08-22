@@ -19,13 +19,13 @@ function timeDiffText(start,end){
   const h=Math.floor(mins/60), m=mins%60;
   return `${h}小時${String(m).padStart(2,'0')}分`;
 }
-function verifyTimeclockPin(staffId){
+async function verifyTimeclockPin(staffId){
   const staff=staffById(staffId);
   const pin=String($('#timeclockPin')?.value||'').trim();
   if(!staff){ alert('請選擇員工'); return null; }
   if(!pin){ alert('請輸入員工 PIN'); $('#timeclockPin')?.focus(); return null; }
-  const ok = String(staff.pin||'').trim()===pin || String(state.managementPassword||'').trim()===pin;
-  if(!ok){ alert('PIN 錯誤'); $('#timeclockPin').value=''; $('#timeclockPin')?.focus(); return null; }
+  const verified=await verifyPinSecure(pin,'timeclock',staff.id);
+  if(!verified.ok||verified.kind!=='staff'){ alert(pinFailureMessage(verified,'打卡')); $('#timeclockPin').value=''; $('#timeclockPin')?.focus(); return null; }
   return staff;
 }
 function renderTimeclock(){
@@ -79,10 +79,10 @@ function renderTimeclockTable(){
     return `<div class="tr"><div>${escapeHtml(r.staffName||r.staffId)}</div><div>${escapeHtml(r.clockIn||'--')}</div><div>${escapeHtml(r.clockOut||'--')}</div><div>${r.clockIn&&r.clockOut?timeDiffText(r.clockIn,r.clockOut):'--'}</div><div>${done?'已完成':'上班中'}</div></div>`;
   }).join('');
 }
-function clockIn(){
+async function clockIn(){
   if(guardBossAction()) return;
   const staffId=$('#timeclockStaff')?.value || '';
-  const staff=verifyTimeclockPin(staffId);
+  const staff=await verifyTimeclockPin(staffId);
   if(!staff) return;
   const today=todayStr();
   const logs=ensureTimeClockLogs();
@@ -100,10 +100,10 @@ function clockIn(){
   renderTimeclock();
   alert(`${staff.name} 上班打卡完成：${rec.clockIn}`);
 }
-function clockOut(){
+async function clockOut(){
   if(guardBossAction()) return;
   const staffId=$('#timeclockStaff')?.value || '';
-  const staff=verifyTimeclockPin(staffId);
+  const staff=await verifyTimeclockPin(staffId);
   if(!staff) return;
   const rec=timeclockRecordFor(staff.id,todayStr());
   if(!rec || !rec.clockIn){ alert(`${staff.name} 今天還沒有上班打卡`); return; }
@@ -118,9 +118,9 @@ function clockOut(){
 }
 function bindTimeclockEvents(){
   const inBtn=$('#btnClockIn'), outBtn=$('#btnClockOut'), refreshBtn=$('#btnTimeclockRefresh'), staffSel=$('#timeclockStaff'), pinEl=$('#timeclockPin');
-  if(inBtn && !inBtn.dataset.bound){ inBtn.dataset.bound='yes'; inBtn.onclick=clockIn; }
-  if(outBtn && !outBtn.dataset.bound){ outBtn.dataset.bound='yes'; outBtn.onclick=clockOut; }
+  if(inBtn && !inBtn.dataset.bound){ inBtn.dataset.bound='yes'; inBtn.onclick=()=>void clockIn(); }
+  if(outBtn && !outBtn.dataset.bound){ outBtn.dataset.bound='yes'; outBtn.onclick=()=>void clockOut(); }
   if(refreshBtn && !refreshBtn.dataset.bound){ refreshBtn.dataset.bound='yes'; refreshBtn.onclick=renderTimeclock; }
   if(staffSel && !staffSel.dataset.bound){ staffSel.dataset.bound='yes'; staffSel.onchange=updateTimeclockStatus; }
-  if(pinEl && !pinEl.dataset.bound){ pinEl.dataset.bound='yes'; pinEl.addEventListener('keydown',e=>{ if(e.key==='Enter') clockIn(); }); }
+  if(pinEl && !pinEl.dataset.bound){ pinEl.dataset.bound='yes'; pinEl.addEventListener('keydown',e=>{ if(e.key==='Enter') void clockIn(); }); }
 }
