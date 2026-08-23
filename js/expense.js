@@ -46,7 +46,7 @@ function saveJeanManagementShareRate(){
     renderJeanManagementShareRate(month);
     return;
   }
-  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft('managementShareRate'))return;
   const rates=loadJeanManagementShareRates();
   rates[month]=percent/100;
   localStorage.setItem(JEAN_MANAGEMENT_SHARE_RATE_KEY,JSON.stringify(rates));
@@ -142,7 +142,7 @@ function savePayrollTrialInput(input){
   const field=String(input.dataset.field||'');
   if(!staffId||!['advance','materialAdvance','insurance','annualBonus'].includes(field)) return;
   const month=payrollTrialMonth($('#payrollTrialMonth')?.value);
-  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft('employeeInputs'))return;
   const allInputs=loadPayrollTrialInputs();
   if(!allInputs[month]||typeof allInputs[month]!=='object') allInputs[month]={};
   if(!allInputs[month][staffId]||typeof allInputs[month][staffId]!=='object') allInputs[month][staffId]={};
@@ -291,7 +291,7 @@ function saveExpenseEntry(){
   if(!category){ alert('請選擇支出分類'); $('#expenseCategory')?.focus(); setExpenseStatus('分類未選','dirty'); return; }
   if(!rawAmount || !Number.isFinite(amount) || amount<=0){ alert('請輸入正確的支出金額'); $('#expenseAmount')?.focus(); setExpenseStatus('金額未完成','dirty'); return; }
 
-  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft('expenses'))return;
   const list=loadExpenses();
   if(expenseEditingId){
     const idx=list.findIndex(e=>String(e.id)===String(expenseEditingId));
@@ -341,7 +341,7 @@ function deleteExpense(id){
   const item=list.find(e=>String(e.id)===String(id))||(modelItem?{id:modelItem.expenseId,date:modelItem.expenseDate,category:modelItem.category,amount:modelItem.amount,note:modelItem.note}:null);
   const label=item ? `${item.date || ''} ${item.category || ''} ${money(item.amount || 0)}` : '這筆支出';
   if(!confirm(`確定刪除 ${label} 嗎？`)) return;
-  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft())return;
+  if(typeof markPayrollLocalDraft==='function'&&!markPayrollLocalDraft('expenses'))return;
   const draftList=loadExpenses();
   const next=draftList.filter(e=>String(e.id)!==String(id));
   saveExpenses(next);

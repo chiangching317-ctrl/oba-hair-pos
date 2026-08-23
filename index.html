@@ -8,7 +8,7 @@
 <meta content="no-store, no-cache, must-revalidate" http-equiv="Cache-Control"/>
 <meta content="no-cache" http-equiv="Pragma"/>
 <meta content="0" http-equiv="Expires"/>
-<title>OBA Hair V11.1.79 Production Candidate</title>
+<title>OBA Hair V11.1.80 Production</title>
 <style>
 #runtimeVersionGate{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:#111;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
 #runtimeVersionGate[hidden]{display:none}
@@ -16,7 +16,7 @@
 .runtime-version-card h2{margin:0 0 14px}.runtime-version-card p{line-height:1.7}.runtime-version-card button{margin-top:12px;padding:12px 22px;border:0;border-radius:12px;background:#8be0eb;color:#111;font-weight:800;cursor:pointer}
 .runtime-version-locked body{overflow:hidden}
 </style>
-<script src="runtime-config.js?v=11.1.79"></script>
+<script src="runtime-config.js?v=11.1.80"></script>
 <script>
 const OBA_RUNTIME_CONFIG=Object.freeze(window.OBA_RUNTIME_CONFIG||{});
 window.OBA_RUNTIME_CONFIG_VALID=!!(
@@ -29,12 +29,12 @@ window.OBA_RUNTIME_PROJECT_REF=String(OBA_RUNTIME_CONFIG.projectRef);
 window.OBA_RUNTIME_CHANNEL=String(OBA_RUNTIME_CONFIG.channel||'');
 window.OBA_RUNTIME_MODE=String(OBA_RUNTIME_CONFIG.mode||'NORMAL');
 </script>
-<script src="js/runtime-version.js?v=11.1.79"></script>
+<script src="js/runtime-version.js?v=11.1.80"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<link href="css/style.css?v=11.1.79" rel="stylesheet"/>
+<link href="css/style.css?v=11.1.80" rel="stylesheet"/>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = String(OBA_RUNTIME_CONFIG.supabaseUrl);
@@ -59,7 +59,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="wrap">
 <div class="hero">
-<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.79 Production Deployment Candidate</div></div>
+<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.80 Production</div></div>
 <div class="row"><div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div><button class="btn btn-soft" id="btnPosLogout" type="button">登出</button></div>
 </div>
 <div class="tabs">
@@ -282,6 +282,12 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="card" id="payrollLocalDraftWorkspace">
 <div class="section-title">薪資損益共同介面</div>
 <div class="note" id="payrollCommonSourceNote">畫面載入時以雲端權威資料顯示；總控修改人工項目後屬本機草稿，完成「儲存薪資試算」後才成為雲端正式資料。BOSS 僅能查看。</div>
+<div class="card hidden" id="payrollExpenseConflictWorkspace">
+<div class="section-title">本機支出 Recovery 安全檢查</div>
+<div class="note" id="payrollExpenseConflictSummary">正在比對本機支出與雲端權威資料。</div>
+<div class="space"></div>
+<div class="row"><button class="btn btn-soft hidden" id="btnPayrollReviewLocalExpenses" type="button" disabled>檢視本機支出草稿</button><button class="btn btn-primary hidden" id="btnPayrollConfirmExpenseRecovery" type="button" disabled>確認支出 Recovery</button></div>
+</div>
 <div class="space"></div>
 <div class="grid4">
 <div><div class="label">試算月份</div><input class="input" id="payrollTrialMonth" type="month"/></div>
@@ -412,16 +418,16 @@ const DEFAULT_BRANCH_NAME = "總店";
 <input accept="image/*" capture="environment" class="hidden" id="cameraScanFile" type="file"/>
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入密碼</h3><div class="space"></div><div class="pwd-wrap"><input class="input" id="pwdOld" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" type="password"/><button class="pwd-eye" id="togglePwdOld" type="button">👁</button></div><div class="space"></div><div class="hidden" id="pwdNewWrap"><div class="pwd-wrap"><input class="input" id="pwdNew" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" type="password"/><button class="pwd-eye" id="togglePwdNew" type="button">👁</button></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 <dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input autocomplete="off" class="input" id="maskedPasswordInput" inputmode="numeric" maxlength="6" pattern="[0-9]*" placeholder="輸入後會以 ●●●● 顯示" type="password"/><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
-<script src="js/utils.js?v=11.1.79"></script>
-<script src="js/core.js?v=11.1.79"></script>
-<script src="js/storage.js?v=11.1.79"></script>
-<script src="js/pin-security.js?v=11.1.79"></script>
-<script src="js/access-security.js?v=11.1.79"></script>
-<script src="js/report.js?v=11.1.79"></script>
-<script src="js/order.js?v=11.1.79"></script><script src="js/ui.js?v=11.1.79"></script>
-<script src="js/cashier.js?v=11.1.79"></script>
-<script src="js/print.js?v=11.1.79"></script>
-<script src="js/assign.js?v=11.1.79"></script>
+<script src="js/utils.js?v=11.1.80"></script>
+<script src="js/core.js?v=11.1.80"></script>
+<script src="js/storage.js?v=11.1.80"></script>
+<script src="js/pin-security.js?v=11.1.80"></script>
+<script src="js/access-security.js?v=11.1.80"></script>
+<script src="js/report.js?v=11.1.80"></script>
+<script src="js/order.js?v=11.1.80"></script><script src="js/ui.js?v=11.1.80"></script>
+<script src="js/cashier.js?v=11.1.80"></script>
+<script src="js/print.js?v=11.1.80"></script>
+<script src="js/assign.js?v=11.1.80"></script>
 <script>
 
 
@@ -432,13 +438,13 @@ function escapeHtml(value){
   return String(value ?? '').replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
 }
 </script>
-<script src="js/timeclock.js?v=11.1.79"></script>
+<script src="js/timeclock.js?v=11.1.80"></script>
 <script>
 </script>
-<script src="js/expense.js?v=11.1.79"></script>
-<script src="js/payroll.js?v=11.1.79"></script>
-<script src="js/manage.js?v=11.1.79"></script>
-<script src="js/system.js?v=11.1.79"></script>
-<script src="js/security.js?v=11.1.79"></script>
+<script src="js/expense.js?v=11.1.80"></script>
+<script src="js/payroll.js?v=11.1.80.3"></script>
+<script src="js/manage.js?v=11.1.80"></script>
+<script src="js/system.js?v=11.1.80"></script>
+<script src="js/security.js?v=11.1.80"></script>
 </body>
 </html>

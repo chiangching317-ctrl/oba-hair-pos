@@ -152,7 +152,10 @@ function monthlyCompanyProfitBreakdown(monthValue){
   return {month,sales,refunds:refundTotal,generalExpenses,staffSalaries,companyInsurance,profitBeforeManagementShare,managementShareRate,managementShare,finalProfit};
 }
 function renderProfitSummary(){
-  if(window.OBA_ACCESS_SESSION?.kind==='boss')return;
+  if(['boss','owner-control'].includes(window.OBA_ACCESS_SESSION?.kind||''))return;
+  // V11.1.80: once the payroll Page Model exists, it is the only writer for all
+  // expense-dependent daily/monthly profit DOM. This prevents local/authority mixing.
+  if(typeof OBA_PAYROLL!=='undefined'&&OBA_PAYROLL.pageModel)return;
   const today=todayStr();
   const orders=activeReportOrders().filter(o=>!o.refunded);
   const refunds=activeReportRefunds();
