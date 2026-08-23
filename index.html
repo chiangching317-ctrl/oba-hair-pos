@@ -272,6 +272,13 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="stat"><div class="k">本月筆數</div><div class="v" id="expenseMonthCount">0</div></div>
 </div>
 </div>
+<div class="card" id="expenseRecordsWorkspace">
+<div class="row" style="justify-content:space-between"><div class="section-title">支出明細列表</div><button class="btn btn-soft" id="btnExpenseRefresh" type="button">重新整理</button></div>
+<div class="table expense-table">
+<div class="tr header"><div>日期</div><div>分類</div><div>金額</div><div>備註</div><div>操作</div></div>
+<div id="expenseTable"></div>
+</div>
+</div>
 <div class="card" id="payrollLocalDraftWorkspace">
 <div class="section-title">薪資損益共同介面</div>
 <div class="note" id="payrollCommonSourceNote">畫面載入時以雲端權威資料顯示；總控修改人工項目後屬本機草稿，完成「儲存薪資試算」後才成為雲端正式資料。BOSS 僅能查看。</div>
@@ -339,10 +346,6 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="stat"><div class="k">本月淨損益</div><div class="v" id="profitMonthAfterSalary">$0</div></div>
 <div class="stat"><div class="k">計算公式</div><div class="v" style="font-size:14px">營業額－退款－一般支出－員工實發薪資－公司負擔保險－JEAN 管理分潤</div></div>
 </div>
-</div>
-<div class="card" id="expenseRecordsWorkspace">
-<div class="row" style="justify-content:space-between"><div class="section-title">支出紀錄</div><button class="btn btn-soft" id="btnExpenseRefresh" type="button">重新整理</button></div>
-<div class="table expense-table" id="expenseTable"></div>
 </div>
 </div>
 </div>
