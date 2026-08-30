@@ -258,9 +258,9 @@ async function init(){
     bootstrapFailureShown=true;
   }
   if(!bootstrapOk){
-    if(!bootstrapFailureShown)showPersistentEntryError(window.OBA_LAST_CLOUD_ERROR?.source||'AUTHORIZATION_DATA_LOAD',window.OBA_LAST_CLOUD_ERROR||{code:'BOOTSTRAP_FAILED',message:'Authorized session was created, but DEV state could not be loaded.',details:'',hint:''});
-    setDevAccessReady(false, 'DEV 雲端資料載入失敗。已停止進入與寫入，請檢查網路/DEV 資料庫後重新整理。');
-    console.error('DEV 啟動封鎖：無法取得可用的 DEV 資料');
+    if(!bootstrapFailureShown)showPersistentEntryError(window.OBA_LAST_CLOUD_ERROR?.source||'AUTHORIZATION_DATA_LOAD',window.OBA_LAST_CLOUD_ERROR||{code:'BOOTSTRAP_FAILED',message:`Authorized session was created, but ${cloudEnvironmentName()} state could not be loaded.`,details:'',hint:''});
+    setDevAccessReady(false, `${cloudEnvironmentName()}雲端資料載入失敗。已停止進入與寫入，請檢查網路或資料庫後重新整理。`);
+    console.error(`${cloudEnvironmentName()}啟動封鎖：無法取得可用資料`);
     return;
   }
 

@@ -8,7 +8,7 @@
 <meta content="no-store, no-cache, must-revalidate" http-equiv="Cache-Control"/>
 <meta content="no-cache" http-equiv="Pragma"/>
 <meta content="0" http-equiv="Expires"/>
-<title>OBA Hair V11.1.80 Production</title>
+<title>OBA Hair POS</title>
 <style>
 #runtimeVersionGate{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:#111;color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
 #runtimeVersionGate[hidden]{display:none}
@@ -16,25 +16,30 @@
 .runtime-version-card h2{margin:0 0 14px}.runtime-version-card p{line-height:1.7}.runtime-version-card button{margin-top:12px;padding:12px 22px;border:0;border-radius:12px;background:#8be0eb;color:#111;font-weight:800;cursor:pointer}
 .runtime-version-locked body{overflow:hidden}
 </style>
-<script src="runtime-config.js?v=11.1.80"></script>
+<script src="runtime-config.js?v=11.1.81"></script>
 <script>
 const OBA_RUNTIME_CONFIG=Object.freeze(window.OBA_RUNTIME_CONFIG||{});
 window.OBA_RUNTIME_CONFIG_VALID=!!(
   OBA_RUNTIME_CONFIG.version&&OBA_RUNTIME_CONFIG.projectRef&&OBA_RUNTIME_CONFIG.supabaseUrl&&OBA_RUNTIME_CONFIG.supabaseKey&&
   OBA_RUNTIME_CONFIG.storageKeys?.state&&OBA_RUNTIME_CONFIG.storageKeys?.resetMarker&&
-  OBA_RUNTIME_CONFIG.storageKeys?.pinMigration&&OBA_RUNTIME_CONFIG.storageKeys?.cashierDevice
+  OBA_RUNTIME_CONFIG.storageKeys?.pinMigration&&OBA_RUNTIME_CONFIG.storageKeys?.cashierDevice&&
+  OBA_RUNTIME_CONFIG.storageKeys?.pullFailLog
 );
 window.OBA_RUNTIME_VERSION=String(OBA_RUNTIME_CONFIG.version);
 window.OBA_RUNTIME_PROJECT_REF=String(OBA_RUNTIME_CONFIG.projectRef);
 window.OBA_RUNTIME_CHANNEL=String(OBA_RUNTIME_CONFIG.channel||'');
 window.OBA_RUNTIME_MODE=String(OBA_RUNTIME_CONFIG.mode||'NORMAL');
+const OBA_RUNTIME_DISPLAY_CHANNEL=window.OBA_RUNTIME_CHANNEL==='PRODUCTION'?'Production':'DEV';
+const OBA_RUNTIME_DISPLAY_VERSION=`V${window.OBA_RUNTIME_VERSION} ${OBA_RUNTIME_DISPLAY_CHANNEL}`;
+document.title=`OBA Hair ${OBA_RUNTIME_DISPLAY_VERSION}`;
 </script>
-<script src="js/runtime-version.js?v=11.1.80"></script>
+<script src="js/runtime-version.js?v=11.1.81"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<link href="css/style.css?v=11.1.80" rel="stylesheet"/>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<link href="css/style.css?v=11.1.81-reportxlsx2" rel="stylesheet"/>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = String(OBA_RUNTIME_CONFIG.supabaseUrl);
@@ -59,9 +64,10 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="wrap">
 <div class="hero">
-<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub">V11.1.80 Production</div></div>
+<div><h1 class="title">OBA Hair 收銀系統</h1><div class="sub" id="appVersionLabel"></div></div>
 <div class="row"><div class="pill" id="cashierDisplay">現金 / 轉帳 / LINE Pay ｜ 尚未登入</div><button class="btn btn-soft" id="btnPosLogout" type="button">登出</button></div>
 </div>
+<script>document.getElementById('appVersionLabel').textContent=`${OBA_RUNTIME_DISPLAY_VERSION} 支出專用雲端寫入版`;</script>
 <div class="tabs">
 <button class="tab active" data-tab="cashier">收款出單</button>
 <button class="tab" data-tab="assign">刷單入業績</button>
@@ -109,7 +115,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 <button class="btn btn-soft" id="btnSwitchAssignStaff" type="button">切換刷單身份</button>
 </div>
 <div class="note" id="assignIdentityNote">第一次刷單會要求輸入自己的 PIN。</div>
-<div class="note" id="assignDevTrace" style="margin-top:10px;border:1px solid #b7d7bf;background:#f0fff4;color:#245f38;font-weight:800">BOOT：等待 V11.1.54 assign.js 載入…</div>
+<div class="note assign-dev-trace hidden" id="assignDevTrace">BOOT：等待 V11.1.54 assign.js 載入…</div>
 <div class="space"></div>
 <div class="camera-box"><button class="btn btn-camera" id="btnCameraScan" type="button">📷 相機刷單</button><div class="note">手機相機掃到有效單號後，會自動掛入業績；雲端確認成功後才會顯示完成。</div></div>
 <div class="row device-auth-row"><button class="btn btn-soft" id="btnAuthorizeCashierDevice" type="button">授權本機為收銀設備</button><div class="note">未授權設備只能刷單；本機測試檔不受限制，線上店內平板/電腦輸入密碼授權一次即可收銀。</div></div>
@@ -234,11 +240,12 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="space"></div>
 <div class="stats">
 <div class="stat"><div class="k">資料匯出</div><div class="v"><button class="btn btn-soft" id="btnExport">匯出</button></div></div>
+<div class="stat"><div class="k">查帳明細</div><div class="v"><button class="btn btn-primary" id="btnReportExcel" type="button">匯出 Excel</button></div></div>
 </div>
 </div>
 <div class="card">
 <div class="row" style="justify-content:space-between"><div class="section-title" id="reportRecordTitle">區間紀錄</div><div class="row"><button class="btn btn-soft" id="btnReprintOpen">補印單據</button></div></div>
-<div class="table" id="reportTable"></div>
+<div class="table report-record-table" id="reportTable"></div>
 </div>
 </div>
 </div>
@@ -386,7 +393,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <dialog id="itemPickDialog"><div class="modal"><h3 id="itemPickTitle">選擇品項</h3><div class="chip-grid" id="itemPickGrid"></div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseItemPick">取消</button></div></div></dialog>
 <dialog id="payDialog"><div class="modal"><h3>確認收款與出單</h3><div class="note" id="paySummary"></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnConfirmPay">確認收款並列印</button><button class="btn btn-soft" id="btnCancelPay">取消</button></div></div></dialog>
-<dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input class="input" id="refundOrderNo" placeholder="掃描條碼或輸入 OBA-20260513-001"/><div class="space"></div><div class="label">退票原因</div><select class="select" id="refundReason"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input class="input hidden" id="refundReasonOther" placeholder="請輸入其他原因"/><div class="space"></div><div class="bill" id="refundPreview">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
+<dialog id="refundDialog"><div class="modal"><h3>查單 / 退票</h3><div class="space"></div><div class="label">掃描 / 輸入單號</div><input class="input" id="refundOrderNo" placeholder="掃描條碼或輸入 OBA-20260513-001"/><div class="space"></div><div class="row"><button class="btn btn-camera" id="btnRefundCameraScan" type="button">📷 相機掃描</button></div><div class="space"></div><div class="label">退票原因</div><select class="select" id="refundReason"><option value="">請選擇退票原因</option><option value="客人取消">客人取消</option><option value="操作錯誤">操作錯誤</option><option value="重複結帳">重複結帳</option><option value="金額輸入錯誤">金額輸入錯誤</option><option value="改單重開">改單重開</option><option value="其他">其他</option></select><div class="space"></div><input class="input hidden" id="refundReasonOther" placeholder="請輸入其他原因"/><div class="space"></div><div class="bill" id="refundPreview">請掃描或輸入單號</div><div class="space"></div><div class="row"><button class="btn btn-danger" id="btnDoRefund">確認退票</button><button class="btn btn-soft" id="btnCloseRefund">取消</button></div></div></dialog>
 <dialog id="reprintDialog"><div class="modal"><h3>補印單據</h3><div class="note">已經開過的單都可以補印；補印不會新增業績、不會改單號。選日期後，直接點選下面單據即可補印。</div><div class="space"></div><div class="grid2"><div><div class="label">指定日期</div><input class="input" id="reprintDate" type="date"/></div><div><div class="label">輸入單號搜尋（可不填）</div><input class="input" id="reprintOrderNo" placeholder="可留空，直接從列表選單"/></div></div><div class="space"></div><div class="bill" id="reprintList">請選日期，或直接點選單據補印</div><div class="space"></div><div class="row"><button class="btn btn-soft" id="btnCloseReprint">關閉</button></div></div></dialog>
 <dialog id="redeemDialog"><div class="modal">
 <h3>集點卡兌換</h3>
@@ -405,8 +412,9 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 </div></dialog>
 <dialog id="receiptDialog"><div class="modal"><h3>品牌單據預覽</h3><div class="space"></div><div class="receiptWrap"><div class="receipt" id="printArea"></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPrint">一鍵列印 RawBT</button><button class="btn btn-soft" id="btnImageBackup" type="button">備用產生圖片</button><button class="btn btn-soft" id="btnCloseReceipt">關閉</button></div><div class="note" id="receiptImageHint">按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。</div><div class="row hidden" id="receiptImageActions"><a class="btn btn-ok" download="OBA_receipt.png" id="receiptImageDownload">下載圖片</a><button class="btn btn-soft" id="btnShareReceiptImage" type="button">分享圖片</button></div><div class="row" style="display:none"></div></div></dialog>
+<dialog id="staffCommissionDetailDialog"><div class="modal commission-detail-modal"><div class="row" style="justify-content:space-between"><h3 id="staffCommissionDetailTitle">員工抽成明細</h3><button class="btn btn-soft" id="btnCloseStaffCommissionDetail" type="button">關閉</button></div><div class="note" id="staffCommissionDetailSummary"></div><div class="space"></div><div class="commission-detail-scroll"><table class="commission-detail-table"><thead><tr><th>日期時間</th><th>單號</th><th>服務項目</th><th>原金額</th><th>計薪基礎</th><th>抽成％</th><th>項目抽成</th><th>單據業績</th><th>單據抽成</th><th>狀態／核對</th></tr></thead><tbody id="staffCommissionDetailBody"></tbody></table></div></div></dialog>
 <dialog id="cameraScanDialog"><div class="modal">
-<h3>相機刷單</h3>
+<h3 id="cameraScanTitle">相機刷單</h3>
 <div class="scanner-wrap">
 <video id="scanVideo" muted="" playsinline=""></video>
 <div class="scan-status" id="scanStatus">請允許相機權限，開啟後直接對準收據 QR Code，不需要拍照。</div>
@@ -416,18 +424,19 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 </div></dialog>
 <input accept="image/*" capture="environment" class="hidden" id="cameraScanFile" type="file"/>
+<dialog id="assignManualDialog"><div class="modal"><h3>手動輸入單號</h3><div class="note" id="assignManualMessage">請輸入完整單號。</div><div class="space"></div><input autocomplete="off" autocapitalize="characters" class="input" id="assignManualOrderNo" placeholder="例如 OBA-20260804-001"/><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnAssignManualOk" type="button">確認單號</button><button class="btn btn-soft" id="btnAssignManualCancel" type="button">取消</button></div></div></dialog>
 <dialog id="passwordDialog"><div class="modal"><h3 id="pwdTitle">輸入密碼</h3><div class="space"></div><div class="pwd-wrap"><input class="input" id="pwdOld" inputmode="numeric" pattern="[0-9]*" placeholder="輸入密碼" type="password"/><button class="pwd-eye" id="togglePwdOld" type="button">👁</button></div><div class="space"></div><div class="hidden" id="pwdNewWrap"><div class="pwd-wrap"><input class="input" id="pwdNew" inputmode="numeric" pattern="[0-9]*" placeholder="輸入新密碼" type="password"/><button class="pwd-eye" id="togglePwdNew" type="button">👁</button></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPwdOk">確認</button><button class="btn btn-soft" id="btnPwdCancel">取消</button></div></div></dialog>
 <dialog id="maskedPasswordDialog"><div class="modal"><h3 id="maskedPasswordTitle">輸入密碼</h3><div class="space"></div><input autocomplete="off" class="input" id="maskedPasswordInput" inputmode="numeric" maxlength="6" pattern="[0-9]*" placeholder="輸入後會以 ●●●● 顯示" type="password"/><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnMaskedPasswordOk">確認</button><button class="btn btn-soft" id="btnMaskedPasswordCancel">取消</button></div></div></dialog>
-<script src="js/utils.js?v=11.1.80"></script>
-<script src="js/core.js?v=11.1.80"></script>
-<script src="js/storage.js?v=11.1.80"></script>
-<script src="js/pin-security.js?v=11.1.80"></script>
-<script src="js/access-security.js?v=11.1.80"></script>
-<script src="js/report.js?v=11.1.80"></script>
-<script src="js/order.js?v=11.1.80"></script><script src="js/ui.js?v=11.1.80"></script>
-<script src="js/cashier.js?v=11.1.80"></script>
-<script src="js/print.js?v=11.1.80"></script>
-<script src="js/assign.js?v=11.1.80"></script>
+<script src="js/utils.js?v=11.1.81"></script>
+<script src="js/core.js?v=11.1.81"></script>
+<script src="js/storage.js?v=11.1.81-precheck2"></script>
+<script src="js/pin-security.js?v=11.1.81"></script>
+<script src="js/access-security.js?v=11.1.81"></script>
+<script src="js/report.js?v=11.1.81-reportxlsx2"></script>
+<script src="js/order.js?v=11.1.81-reportxlsx1"></script><script src="js/ui.js?v=11.1.81"></script>
+<script src="js/cashier.js?v=11.1.81"></script>
+<script src="js/print.js?v=11.1.81"></script>
+<script src="js/assign.js?v=11.1.81-p10camera1"></script>
 <script>
 
 
@@ -438,13 +447,13 @@ function escapeHtml(value){
   return String(value ?? '').replace(/[&<>'"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[c]));
 }
 </script>
-<script src="js/timeclock.js?v=11.1.80"></script>
+<script src="js/timeclock.js?v=11.1.81"></script>
 <script>
 </script>
-<script src="js/expense.js?v=11.1.80"></script>
-<script src="js/payroll.js?v=11.1.80.3"></script>
-<script src="js/manage.js?v=11.1.80"></script>
-<script src="js/system.js?v=11.1.80"></script>
-<script src="js/security.js?v=11.1.80"></script>
+<script src="js/expense.js?v=11.1.81"></script>
+<script src="js/payroll.js?v=11.1.81"></script>
+<script src="js/manage.js?v=11.1.81"></script>
+<script src="js/system.js?v=11.1.81"></script>
+<script src="js/security.js?v=11.1.81"></script>
 </body>
 </html>

@@ -4,10 +4,13 @@
 function setAssignDevTrace(message,reset=false){
   const box=document.getElementById('assignDevTrace');
   if(!box) return;
+  const devChannel=String(window.OBA_RUNTIME_CHANNEL||'').toUpperCase()==='DEV';
+  box.classList.toggle('hidden',!devChannel);
+  if(!devChannel) return;
   const line=`${new Date().toLocaleTimeString('zh-TW',{hour12:false})}｜${message}`;
   box.textContent=reset ? line : (box.textContent ? box.textContent+'\n'+line : line);
-  box.style.whiteSpace='pre-wrap';
   box.style.color=String(message).startsWith('ERROR') ? '#b91c1c' : '#245f38';
+  box.scrollTop=box.scrollHeight;
 }
 function setAssignDevError(error){
   const message=error?.message||String(error||'未知錯誤');
@@ -147,7 +150,7 @@ function needAssignPinFirst(){
   return true;
 }
 async function promptAssignPinOnce(message='第一次刷單請輸入自己的 6 位數 PIN'){
-  const pin = prompt(message);
+  const pin = await askMaskedPassword(message,'6 位數 PIN');
   if(pin === null) return null;
   const verified=await verifyPinSecure(pin,'assign');
   if(!verified.ok||verified.kind!=='staff'){
@@ -564,9 +567,38 @@ if(secureRefundButton){
 }
 
 let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null, zxingControls=null;
+let cameraScanPurpose='assign';
 let cameraAssignInProgress=false;
+function askManualAssignOrderNo(message){
+  return new Promise(resolve=>{
+    const dialog=$('#assignManualDialog'),input=$('#assignManualOrderNo'),note=$('#assignManualMessage');
+    const ok=$('#btnAssignManualOk'),cancel=$('#btnAssignManualCancel');
+    if(!dialog||!input||!note||!ok||!cancel){
+      setAssignDevTrace('ERROR：手動單號輸入介面尚未就緒');
+      alert('手動單號輸入介面尚未就緒，未執行刷單。');
+      resolve(null);
+      return;
+    }
+    note.textContent=String(message||'請輸入完整單號。');
+    input.value='';
+    let settled=false;
+    const cleanup=value=>{
+      if(settled)return;
+      settled=true;
+      ok.onclick=null;cancel.onclick=null;input.onkeydown=null;dialog.oncancel=null;
+      if(dialog.open)dialog.close();
+      resolve(value);
+    };
+    ok.onclick=()=>cleanup(input.value);
+    cancel.onclick=()=>cleanup(null);
+    input.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();cleanup(input.value)}else if(event.key==='Escape'){event.preventDefault();cleanup(null)}};
+    dialog.oncancel=event=>{event.preventDefault();cleanup(null)};
+    dialog.showModal();
+    setTimeout(()=>input.focus(),60);
+  });
+}
 async function startManualAssignFallback(message){
-  const raw=prompt(message+'\n\n請輸入完整單號，例如 OBA-20260804-001：');
+  const raw=await askManualAssignOrderNo(`${message}\n\n請輸入完整單號，例如 OBA-20260804-001。`);
   if(raw===null) return false;
   const code=normalizeOrderNoText(raw);
   if(!code){alert('沒有輸入單號，未執行刷單');return false}
@@ -575,12 +607,20 @@ async function startManualAssignFallback(message){
   input.dispatchEvent(new Event('input',{bubbles:true}));
   return await assignCurrentOrder('manual');
 }
-function fillScannedCode(raw){
+function fillScannedCode(raw,purpose=cameraScanPurpose){
   const code = String(raw||'').trim();
-  if(!code || cameraAssignInProgress) return false;
+  const scanPurpose=purpose==='refund'?'refund':'assign';
+  if(!code || (scanPurpose==='assign'&&cameraAssignInProgress)) return false;
   const finalCode = normalizeOrderNoText(code);
   const order=findOrderByCode(finalCode);
   if(!order) return false;
+  if(scanPurpose==='refund'){
+    const refundInput=$('#refundOrderNo');
+    if(!refundInput) return false;
+    refundInput.value=finalCode;
+    refundInput.dispatchEvent(new Event('input',{bubbles:true}));
+    return true;
+  }
   cameraAssignInProgress=true;
   $('#assignOrderNo').value = finalCode;
   $('#assignOrderNo').dispatchEvent(new Event('input', {bubbles:true}));
@@ -593,10 +633,20 @@ function fillScannedCode(raw){
   },180);
   return true;
 }
-async function startCameraScan(){
+async function startCameraScan(purpose='assign'){
+  cameraScanPurpose=purpose==='refund'?'refund':'assign';
   const dialog=$('#cameraScanDialog'), video=$('#scanVideo'), status=$('#scanStatus');
+  const title=$('#cameraScanTitle');
+  const refundDialog=$('#refundDialog');
+  if(title) title.textContent=cameraScanPurpose==='refund'?'相機掃描原單條碼':'相機刷單';
+  if(cameraScanPurpose==='refund'&&refundDialog?.open) refundDialog.close();
   try{
     if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      if(cameraScanPurpose==='refund'){
+        stopCameraScan();
+        alert('目前瀏覽器無法開啟相機，未執行退票。請直接手動輸入原單單號。');
+        return;
+      }
       await startManualAssignFallback('目前是 HTTP 區網網址，iPhone 瀏覽器基於安全限制無法開啟網頁相機。系統已切換成手動刷單模式。');
       return;
     }
@@ -667,6 +717,8 @@ async function startCameraScan(){
   }
 }
 function stopCameraScan(){
+  const completedPurpose=cameraScanPurpose;
+  cameraScanPurpose='assign';
   if(scanTimer){clearInterval(scanTimer);scanTimer=null;}
   if(zxingControls && typeof zxingControls.stop==='function'){
     try{zxingControls.stop();}catch(e){console.log(e)}
@@ -678,8 +730,14 @@ function stopCameraScan(){
   if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null;}
   const video=$('#scanVideo'); if(video){video.pause(); video.srcObject=null;}
   const dialog=$('#cameraScanDialog'); if(dialog && dialog.open) dialog.close();
+  if(completedPurpose==='refund'){
+    const refundDialog=$('#refundDialog');
+    if(refundDialog&&!refundDialog.open) refundDialog.showModal();
+    renderRefundPreview();
+  }
 }
 document.addEventListener('click',function(e){
   if(e.target && e.target.id==='btnCameraScan') startCameraScan();
+  if(e.target && e.target.id==='btnRefundCameraScan') startCameraScan('refund');
   if(e.target && e.target.id==='btnCloseCameraScan') stopCameraScan();
 });

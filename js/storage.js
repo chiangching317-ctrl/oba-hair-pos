@@ -6,8 +6,12 @@ let cloudResetting=false; // V11.0.45：清空歸零時暫停 pull，避免雲�
 let devEnvironmentBlocked=false;
 let devBootstrapReady=false;
 let credentialWriteGuardReady=false;
-const DEV_ISOLATION_MIGRATION_KEY='oba_hair_DEV_isolation_cleanup_v11138';
-const DEV_PULL_FAIL_LOG_KEY='oba_hair_DEV_pull_fail_logs_v1';
+const PULL_FAIL_LOG_KEY=String(window.OBA_RUNTIME_CONFIG?.storageKeys?.pullFailLog||'');
+if(!PULL_FAIL_LOG_KEY)throw new Error('OBA_RUNTIME_STORAGE_CONFIG_INVALID');
+function cloudEnvironmentName(){
+  const channel=String(window.OBA_RUNTIME_CONFIG?.channel||window.OBA_RUNTIME_CHANNEL||'').trim().toUpperCase();
+  return channel==='PRODUCTION'?'正式':channel==='DEV'?'DEV':'目前';
+}
 function recordDevPullFail(reason,error=null){
   const entry={
     event:'PULL_FAIL',
@@ -26,11 +30,11 @@ function recordDevPullFail(reason,error=null){
   };
   console.warn('PULL_FAIL',entry);
   try{
-    const raw=localStorage.getItem(DEV_PULL_FAIL_LOG_KEY);
+    const raw=localStorage.getItem(PULL_FAIL_LOG_KEY);
     const parsed=raw ? JSON.parse(raw) : [];
     const logs=Array.isArray(parsed) ? parsed : [];
     logs.unshift(entry);
-    localStorage.setItem(DEV_PULL_FAIL_LOG_KEY,JSON.stringify(logs.slice(0,50)));
+    localStorage.setItem(PULL_FAIL_LOG_KEY,JSON.stringify(logs.slice(0,50)));
   }catch(logError){
     console.warn('PULL_FAIL 紀錄寫入失敗',logError);
   }
@@ -124,10 +128,10 @@ async function pullCloudState(){
         const chosen = rows[0];
         const cloudResetAt = String(chosen.data?.lastResetAt || '');
 
-        // V11.1.38 DEV 根治：DEV 雲端若空白、不完整或沒有任何可用 PIN/管理密碼，
+        // Fail closed when the configured cloud state is blank, incomplete, or has no usable credential metadata.
         // 絕不拿本機/defaultState 回填。否則可能把正式站殘留資料或空白 PIN 灌入 DEV。
         if(isEmptyOrBrokenCloudData(chosen.data)){
-          console.error('DEV 雲端資料不完整，已停止載入與回填');
+          console.error(`${cloudEnvironmentName()}雲端資料不完整，已停止載入與回填`);
           recordDevPullFail('MAIN_ROW_INVALID');
           return false;
         }
@@ -158,7 +162,7 @@ async function pullCloudState(){
       }
     }
 
-    console.error('DEV 雲端找不到有效 main row，已停止自動回填');
+    console.error(`${cloudEnvironmentName()}雲端找不到有效 main row，已停止自動回填`);
     recordDevPullFail('MAIN_ROW_NOT_FOUND');
     return false;
   }catch(err){
@@ -245,7 +249,7 @@ async function saveCheckoutOrderVerified(orderDraft){
     return {ok:false,message:'訂單內容不完整，已停止收款'};
   }
   const client=getCloudClient();
-  if(!client) return {ok:false,message:'目前未連上 DEV 雲端，購物車已保留，請恢復網路後重試'};
+  if(!client) return {ok:false,message:`目前未連上${cloudEnvironmentName()}雲端，購物車已保留，請恢復網路後重試`};
   if(!credentialWriteGuardReady) return {ok:false,message:'DEV credential 防回寫護欄尚未就緒，已停止收款'};
   if(cloudSaving) return {ok:false,message:'系統正在同步，購物車已保留，請稍候再試'};
 
@@ -259,10 +263,10 @@ async function saveCheckoutOrderVerified(orderDraft){
         .eq('id',CLOUD_ROW_ID)
         .order('updated_at',{ascending:false})
         .limit(20);
-      if(latest.error) return {ok:false,message:'讀取 DEV 雲端失敗：'+latest.error.message};
+      if(latest.error) return {ok:false,message:`讀取${cloudEnvironmentName()}雲端失敗：`+latest.error.message};
 
       const chosen=chooseAuthoritativeCloudRow(latest.data||[]);
-      if(!chosen) return {ok:false,message:'DEV 雲端找不到 main，已停止收款'};
+      if(!chosen) return {ok:false,message:`${cloudEnvironmentName()}雲端找不到 main，已停止收款`};
       const merged=normalizeCloudState(clone(chosen.data));
       if(!Array.isArray(merged.orders)) merged.orders=[];
 
@@ -298,7 +302,7 @@ async function saveCheckoutOrderVerified(orderDraft){
         .eq('id',CLOUD_ROW_ID)
         .eq('updated_at',chosen.updated_at)
         .select('id,updated_at');
-      if(updateResult.error) return {ok:false,message:'DEV 雲端寫入失敗：'+updateResult.error.message};
+      if(updateResult.error) return {ok:false,message:`${cloudEnvironmentName()}雲端寫入失敗：`+updateResult.error.message};
       if(!updateResult.data||!updateResult.data.length){
         if(attempt<maxAttempts){
           await new Promise(resolve=>setTimeout(resolve,180*attempt));
@@ -319,7 +323,7 @@ async function saveCheckoutOrderVerified(orderDraft){
       const verifiedOrder=verifiedState?.orders?.find(o=>String(o.checkoutId||'')===checkoutId&&String(o.id||'')===orderNo);
       const verifiedCounter=Number(verifiedState?.monthlyOrderCounter?.[monthKey]||0);
       if(!verifiedOrder||verifiedCounter!==reservation.nextCounter||!verifiedState.usedOrderNos?.includes(orderNo)){
-        return {ok:false,message:'DEV 雲端驗證未通過，系統沒有完成交易；購物車已保留'};
+        return {ok:false,message:`${cloudEnvironmentName()}雲端驗證未通過，系統沒有完成交易；購物車已保留`};
       }
 
       state=verifiedState;
@@ -327,7 +331,7 @@ async function saveCheckoutOrderVerified(orderDraft){
       cloudReady=true;
       return {ok:true,order:clone(verifiedOrder)};
     }
-    return {ok:false,message:'DEV 雲端忙碌，購物車已保留，請稍後重試'};
+    return {ok:false,message:`${cloudEnvironmentName()}雲端忙碌，購物車已保留，請稍後重試`};
   }catch(err){
     console.log('收款驗證存檔錯誤',err);
     return {ok:false,message:'收款存檔發生錯誤：'+(err?.message||err)};

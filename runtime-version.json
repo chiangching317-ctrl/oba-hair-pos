@@ -1,7 +1,7 @@
 {
-  "app": "OBA Hair POS",
-  "channel": "PRODUCTION",
-  "version": "11.1.80",
-  "projectRef": "cvehdsmeaggqmdsafalw",
-  "mode": "NORMAL"
+    "app":  "OBA Hair POS",
+    "channel":  "PRODUCTION",
+    "version":  "11.1.81",
+    "projectRef":  "cvehdsmeaggqmdsafalw",
+    "mode":  "NORMAL"
 }

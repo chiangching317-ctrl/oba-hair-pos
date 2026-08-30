@@ -157,7 +157,20 @@ function orderPerformanceSnapshot(order){
   }
   return Number(order.total||0);
 }
-function calcCommission(order,staffId){const staff=staffById(staffId);if(!staff)return 0;return (order.items||[]).reduce((sum,item,index)=>{const rate=staff.rules?.[item.name] ?? staff.rules?.[item.category] ?? staff.rules?.default ?? 0.5;return sum+Math.round(orderItemCommissionBase(order,item,index)*Number(rate||0));},0)}
+function commissionRateForItem(staff,item){
+  if(!staff)return 0;
+  return Number(staff.rules?.[item?.name] ?? staff.rules?.[item?.category] ?? staff.rules?.default ?? 0.5);
+}
+function calcCommissionItems(order,staffId){
+  const staff=staffById(staffId);
+  if(!staff)return [];
+  return (order?.items||[]).map((item,index)=>{
+    const base=orderItemCommissionBase(order,item,index);
+    const rate=commissionRateForItem(staff,item);
+    return {index,item,base,rate,commission:Math.round(base*rate)};
+  });
+}
+function calcCommission(order,staffId){return calcCommissionItems(order,staffId).reduce((sum,row)=>sum+row.commission,0)}
 function ensureOrderPerformance(order){
   if(!order || !order.assignedDesignerId) return order;
   const staff=staffById(order.assignedDesignerId);
