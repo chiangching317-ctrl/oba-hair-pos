@@ -39,7 +39,7 @@ document.title=`OBA Hair ${OBA_RUNTIME_DISPLAY_VERSION}`;
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<link href="css/style.css?v=11.1.81-reportxlsx2" rel="stylesheet"/>
+<link href="css/style.css?v=11.1.81-today-package1" rel="stylesheet"/>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = String(OBA_RUNTIME_CONFIG.supabaseUrl);
@@ -197,7 +197,6 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div><div class="label">結束日期</div><input class="input" id="reportEndDate" type="date"/></div>
 <div><div class="label">開始時間</div><input class="input" id="reportStartTime" type="time"/></div>
 <div><div class="label">結束時間</div><input class="input" id="reportEndTime" type="time"/></div>
-<div><div class="label">個人業績</div><select class="select" id="reportStaff"></select></div>
 </div>
 <div class="note">可查單日或多日區間；不填開始/結束時間＝查整天。</div>
 </div>
@@ -252,9 +251,9 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="panel hidden" id="tab-expense">
 <div class="stack">
 <div class="card hidden" id="payrollAuthorityWorkspace">
-<div class="section-title">雲端權威薪資損益</div>
-<div class="note" id="payrollAuthorityRoleNote">BOSS 與總控使用同一份雲端權威資料及同一套畫面；角色差異只影響下方操作權限。</div>
-<div class="space"></div><div class="save-status" id="payrollAuthorityStatus">等待查詢</div>
+<div class="section-title">薪資資料狀態</div>
+<div class="note" id="payrollAuthorityRoleNote">系統會自動載入同一份正式薪資資料；角色差異只影響操作權限。</div>
+<div class="space"></div><div class="save-status" id="payrollAuthorityStatus">等待載入</div>
 </div>
 <div class="card" id="expenseWriteWorkspace">
 <div class="section-title">支出登記</div>
@@ -274,7 +273,6 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="card" id="expenseSummaryWorkspace">
 <div class="section-title">支出統計</div>
 <div class="expense-summary">
-<div class="stat"><div class="k">今日支出</div><div class="v" id="expenseTodayTotal">$0</div></div>
 <div class="stat"><div class="k">本月支出</div><div class="v" id="expenseMonthTotal">$0</div></div>
 <div class="stat"><div class="k">本月筆數</div><div class="v" id="expenseMonthCount">0</div></div>
 </div>
@@ -287,8 +285,8 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 </div>
 <div class="card" id="payrollLocalDraftWorkspace">
-<div class="section-title">薪資損益共同介面</div>
-<div class="note" id="payrollCommonSourceNote">畫面載入時以雲端權威資料顯示；總控修改人工項目後屬本機草稿，完成「儲存薪資試算」後才成為雲端正式資料。BOSS 僅能查看。</div>
+<div class="section-title" id="payrollMonthTitle">本月薪資</div>
+<div class="note" id="payrollCommonSourceNote">系統會自動載入本月正式資料；BOSS 僅能查看，具管理權限者才可調整及月結。</div>
 <div class="card hidden" id="payrollExpenseConflictWorkspace">
 <div class="section-title">本機支出 Recovery 安全檢查</div>
 <div class="note" id="payrollExpenseConflictSummary">正在比對本機支出與雲端權威資料。</div>
@@ -299,30 +297,28 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="grid4">
 <div><div class="label">試算月份</div><input class="input" id="payrollTrialMonth" type="month"/></div>
 <div><div class="label">JEAN 管理分潤％</div><input class="input" id="jeanManagementShareRate" type="number" min="0" max="100" step="0.1" value="10"/></div>
-<div class="stat"><div class="k">計薪員工</div><div class="v" id="payrollTrialEmployeeCount">0</div></div>
-<div class="stat"><div class="k">commission 合計</div><div class="v" id="payrollTrialCommissionTotal">$0</div></div>
-<div class="stat"><div class="k">試算實發合計</div><div class="v" id="payrollTrialSalaryTotal">$0</div></div>
+<div class="stat"><div class="k">員工人數</div><div class="v" id="payrollTrialEmployeeCount">0</div></div>
+<div class="stat"><div class="k">抽成總額</div><div class="v" id="payrollTrialCommissionTotal">$0</div></div>
+<div class="stat"><div class="k">預計實發薪資</div><div class="v" id="payrollTrialSalaryTotal">$0</div></div>
+<div class="stat"><div class="k">JEAN 管理分潤</div><div class="v" id="payrollManagementShareTotal">$0</div></div>
 </div>
 <div class="space"></div>
-<div class="row"><button class="btn btn-soft" id="btnPayrollAuthorityRefresh" type="button">查詢雲端權威資料</button><button class="btn btn-soft" id="btnPayrollAuthorityHistory" type="button">查看月結紀錄</button></div>
-<div class="space"></div>
 <div class="stack" id="payrollTrialStaffList"></div>
+<div class="space"></div><div class="row"><button class="btn btn-soft" id="btnPayrollAuthorityHistory" type="button">查看月結紀錄</button></div>
 <div class="space"></div>
 <div class="note">借支、材料代墊、保險自付額只從該員工薪資扣回，不會再次當成公司支出；年終獎金已計入實發。JEAN 管理分潤比例依月份保存，並以扣除成本後正利潤獨立計算。</div>
 <div class="space"></div>
 <div class="card" id="payrollSettlementActionWorkspace">
-<div class="section-title">正式薪資月結（Phase 1D）</div>
-<div class="note">完成月結時會使用雲端重新計算，並保存不可覆蓋的月結版本。本機支出、人工薪資項目及分潤比例必須先完成「儲存薪資試算」；重新開放修改後再次月結會建立新版本，舊月結紀錄永久保留。</div>
+<div class="section-title">薪資月結</div>
+<div class="note">請依序完成三個步驟。系統仍會在背景執行權限、資料一致性及月結安全檢查。</div>
 <div class="space"></div>
-<div class="row"><input class="input" id="payrollSettlementReason" maxlength="100" placeholder="月結／重新開放原因（重新開放至少 3 字）"/><button class="btn btn-soft" id="btnPayrollCloudSync" type="button">儲存薪資試算</button><button class="btn btn-primary" id="btnPayrollFormalPreview" type="button">月結前確認</button><button class="btn btn-ok" id="btnPayrollFormalClose" type="button">完成本月月結</button><button class="btn btn-danger" id="btnPayrollFormalReopen" type="button">重新開放修改</button><button class="btn btn-soft" id="btnPayrollHistory" type="button">查看月結紀錄</button></div>
+<div class="payroll-close-steps"><button class="btn btn-soft" id="btnPayrollAuthorityRefresh" type="button">① 檢查本月薪資資料</button><button class="btn btn-primary" id="btnPayrollFormalPreview" type="button">② 確認月結內容</button><button class="btn btn-ok" id="btnPayrollFormalClose" type="button">③ 完成月結</button></div>
 <div class="space"></div>
-<div class="stats">
-<div class="stat"><div class="k">月份狀態</div><div class="v" id="payrollPeriodState">not_created</div></div>
-<div class="stat"><div class="k">目前月結版本</div><div class="v" id="payrollCurrentRevision">0</div></div>
-<div class="stat"><div class="k">操作授權</div><div class="v" id="payrollActionState">未授權</div></div>
-</div>
+<div class="row"><button class="btn btn-soft" id="btnPayrollCloudSync" type="button">儲存薪資調整</button><button class="btn btn-soft" id="btnPayrollHistory" type="button">查看月結紀錄</button></div>
+<div class="space"></div><div class="save-status" id="payrollCompletionStatus">本月尚未完成月結</div>
 <div class="space"></div><div class="save-status" id="payrollFormalStatus">尚未進行正式月結操作</div>
 <div class="space"></div><div id="payrollFormalPreview"><div class="note">尚未進行月結前確認。</div></div>
+<div class="space"></div><details class="payroll-advanced"><summary>進階 / 管理操作</summary><div class="space"></div><div class="note">重新開啟月份仍須管理權限、PIN 與至少 3 個字的原因；既有月結紀錄會完整保留。</div><div class="space"></div><div class="row"><input class="input" id="payrollSettlementReason" maxlength="100" placeholder="重新開啟原因（至少 3 字）"/><button class="btn btn-danger" id="btnPayrollFormalReopen" type="button">重新開啟月份</button></div></details>
 </div>
 <div class="space"></div><div class="section-title">月結紀錄</div>
 <div class="stack" id="payrollFormalHistory"><div class="note">尚未查詢月結紀錄。</div></div>
@@ -332,13 +328,6 @@ const DEFAULT_BRANCH_NAME = "總店";
 <div class="note">管理維護按鈕已從報表移到損益頁，避免開放報表給員工時誤觸。</div>
 <div class="space"></div>
 <div class="stats">
-<div class="stat"><div class="k">今日營業額</div><div class="v" id="profitTodaySales">$0</div></div>
-<div class="stat"><div class="k">今日退票</div><div class="v" id="profitTodayRefund">$0</div></div>
-<div class="stat"><div class="k">今日支出</div><div class="v" id="profitTodayExpense">$0</div></div>
-</div>
-<div class="space"></div>
-<div class="stats">
-<div class="stat"><div class="k">今日損益（未扣薪資）</div><div class="v" id="profitTodayNet">$0</div></div>
 <div class="stat"><div class="k">本月營業額</div><div class="v" id="profitMonthSales">$0</div></div>
 <div class="stat"><div class="k">本月一般支出</div><div class="v" id="profitMonthExpense">$0</div></div>
 </div>
@@ -349,12 +338,11 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 <div class="space"></div>
 <div class="stats">
-<div class="stat"><div class="k">今日抽成薪資</div><div class="v" id="profitTodaySalary">$0</div></div>
-<div class="stat"><div class="k">今日薪資後損益</div><div class="v" id="profitTodayAfterSalary">$0</div></div>
 <div class="stat"><div class="k">本月員工實發薪資總額</div><div class="v" id="profitMonthSalary">$0</div></div>
 </div>
 <div class="space"></div>
 <div class="stats">
+<div class="stat"><div class="k">分潤前利潤</div><div class="v" id="profitBeforeManagementShare">$0</div></div>
 <div class="stat"><div class="k" id="profitMonthManagementBonusLabel">JEAN 管理分潤</div><div class="v" id="profitMonthManagementBonus">$0</div></div>
 <div class="stat"><div class="k">本月淨損益</div><div class="v" id="profitMonthAfterSalary">$0</div></div>
 <div class="stat"><div class="k">計算公式</div><div class="v" style="font-size:14px">營業額－退款－一般支出－員工實發薪資－公司負擔保險－JEAN 管理分潤</div></div>
@@ -412,7 +400,7 @@ const DEFAULT_BRANCH_NAME = "總店";
 </div>
 </div></dialog>
 <dialog id="receiptDialog"><div class="modal"><h3>品牌單據預覽</h3><div class="space"></div><div class="receiptWrap"><div class="receipt" id="printArea"></div></div><div class="space"></div><div class="row"><button class="btn btn-primary" id="btnPrint">一鍵列印 RawBT</button><button class="btn btn-soft" id="btnImageBackup" type="button">備用產生圖片</button><button class="btn btn-soft" id="btnCloseReceipt">關閉</button></div><div class="note" id="receiptImageHint">按「一鍵列印 RawBT」會直接叫出 RawBT 送印，不用下載、不用相簿、不用分享。</div><div class="row hidden" id="receiptImageActions"><a class="btn btn-ok" download="OBA_receipt.png" id="receiptImageDownload">下載圖片</a><button class="btn btn-soft" id="btnShareReceiptImage" type="button">分享圖片</button></div><div class="row" style="display:none"></div></div></dialog>
-<dialog id="staffCommissionDetailDialog"><div class="modal commission-detail-modal"><div class="row" style="justify-content:space-between"><h3 id="staffCommissionDetailTitle">員工抽成明細</h3><button class="btn btn-soft" id="btnCloseStaffCommissionDetail" type="button">關閉</button></div><div class="note" id="staffCommissionDetailSummary"></div><div class="space"></div><div class="commission-detail-scroll"><table class="commission-detail-table"><thead><tr><th>日期時間</th><th>單號</th><th>服務項目</th><th>原金額</th><th>計薪基礎</th><th>抽成％</th><th>項目抽成</th><th>單據業績</th><th>單據抽成</th><th>狀態／核對</th></tr></thead><tbody id="staffCommissionDetailBody"></tbody></table></div></div></dialog>
+<dialog id="staffCommissionDetailDialog"><div class="modal commission-detail-modal"><div class="row" style="justify-content:space-between"><h3 id="staffCommissionDetailTitle">員工抽成明細</h3><button class="btn btn-soft" id="btnCloseStaffCommissionDetail" type="button">關閉</button></div><div class="note" id="staffCommissionDetailSummary"></div><div class="space"></div><div class="commission-detail-scroll"><table class="commission-detail-table"><thead><tr><th>日期時間</th><th>單號</th><th>服務項目</th><th>付款／計薪來源</th><th>原金額</th><th>計薪基礎</th><th>抽成％</th><th>項目抽成</th><th>單據業績</th><th>單據抽成</th><th>狀態／核對</th></tr></thead><tbody id="staffCommissionDetailBody"></tbody></table></div></div></dialog>
 <dialog id="cameraScanDialog"><div class="modal">
 <h3 id="cameraScanTitle">相機刷單</h3>
 <div class="scanner-wrap">
@@ -431,8 +419,8 @@ const DEFAULT_BRANCH_NAME = "總店";
 <script src="js/core.js?v=11.1.81"></script>
 <script src="js/storage.js?v=11.1.81-precheck2"></script>
 <script src="js/pin-security.js?v=11.1.81"></script>
-<script src="js/access-security.js?v=11.1.81"></script>
-<script src="js/report.js?v=11.1.81-reportxlsx2"></script>
+<script src="js/access-security.js?v=11.1.81-today-package1"></script>
+<script src="js/report.js?v=11.1.81-today-package1"></script>
 <script src="js/order.js?v=11.1.81-reportxlsx1"></script><script src="js/ui.js?v=11.1.81"></script>
 <script src="js/cashier.js?v=11.1.81"></script>
 <script src="js/print.js?v=11.1.81"></script>
@@ -451,7 +439,7 @@ function escapeHtml(value){
 <script>
 </script>
 <script src="js/expense.js?v=11.1.81-expense-conflict-hotfix1"></script>
-<script src="js/payroll.js?v=11.1.81-expense-conflict-hotfix1"></script>
+<script src="js/payroll.js?v=11.1.81-today-package1"></script>
 <script src="js/manage.js?v=11.1.81"></script>
 <script src="js/system.js?v=11.1.81"></script>
 <script src="js/security.js?v=11.1.81"></script>

@@ -55,8 +55,8 @@ function applyEntryRolePermissions(){
   if(settlementActions)settlementActions.classList.toggle('hidden',s.kind==='boss');
   const roleNote=document.getElementById('payrollAuthorityRoleNote');
   if(roleNote)roleNote.textContent=s.kind==='boss'
-    ? 'BOSS 與總控使用同一份雲端權威資料及同一套畫面；目前為 BOSS 完全唯讀模式。'
-    : 'BOSS 與總控使用同一份雲端權威資料及同一套畫面；總控原有操作區保留在下方。';
+    ? '本月薪資資料會自動載入；目前為 BOSS 完全唯讀模式。'
+    : '本月薪資資料會自動載入；具管理權限者可在下方調整及月結。';
   document.querySelectorAll('.tab').forEach(tab=>{
     const name=tab.dataset.tab;let allowed=true;
     if(s.kind==='boss')allowed=name==='report'||name==='expense';

@@ -1,6 +1,6 @@
 // V11.1.81 - authority/local expense conflicts fail closed; expense writes use a dedicated cloud path.
 // Action tokens live in memory only. PIN values are never persisted or logged.
-const OBA_PAYROLL={action:null,lastPayload:'',preview:null,previewContext:null,history:null,busy:false,backgroundRefreshPending:false,pageModel:null,requestSeq:0,authorityRequestSerial:0,authorityResult:null,authorityMonth:'',authorityLoad:null,localDraftDirty:false,recoveryCandidate:null};
+const OBA_PAYROLL={action:null,lastPayload:'',preview:null,previewContext:null,uiCheckContext:null,history:null,busy:false,backgroundRefreshPending:false,pageModel:null,requestSeq:0,authorityRequestSerial:0,authorityResult:null,authorityMonth:'',authorityLoad:null,localDraftDirty:false,recoveryCandidate:null};
 const PAYROLL_AUTHORITY_LOAD_TIMEOUT_MS=Number.isFinite(Number(window.OBA_PAYROLL_AUTHORITY_TIMEOUT_MS))?Math.max(1,Number(window.OBA_PAYROLL_AUTHORITY_TIMEOUT_MS)):15000;
 const OBA_PAYROLL_LOCAL_MIGRATION_KEY='oba_hair_dev_payroll_phase1d_cloud_migration_v1';
 const OBA_PAYROLL_DRAFT_META_KEY='oba_hair_payroll_draft_meta_v11180';
@@ -34,6 +34,10 @@ function payrollFailure(result){
   return `${map[reason]||reason}${result?.code?' ['+result.code+']':''}${result?.message?'：'+result.message:''}`;
 }
 function payrollCurrentMonth(){return payrollTrialMonth(document.getElementById('payrollTrialMonth')?.value);}
+function payrollMonthDisplay(monthValue=payrollCurrentMonth()){
+  const match=String(monthValue||'').match(/^(\d{4})-(\d{2})$/);
+  return match?`${Number(match[1])} 年 ${Number(match[2])} 月`:String(monthValue||'本月');
+}
 function isPayrollAuthorityViewer(){return ['boss','owner-control'].includes(window.OBA_ACCESS_SESSION?.kind||'');}
 function payrollModelNumber(value){const n=Number(value||0);return Number.isFinite(n)?Math.round(n):0;}
 function payrollMonthClosed(model=OBA_PAYROLL.pageModel){return String(model?.period?.status||'')==='closed';}
@@ -234,21 +238,25 @@ function confirmPayrollExpenseRecovery(){
 }
 function renderPayrollControls(model){
   const caps=payrollRoleCapabilities(model);
-  const sync=document.getElementById('btnPayrollCloudSync'),preview=document.getElementById('btnPayrollFormalPreview'),close=document.getElementById('btnPayrollFormalClose'),reopen=document.getElementById('btnPayrollFormalReopen');
+  const sync=document.getElementById('btnPayrollCloudSync'),check=document.getElementById('btnPayrollAuthorityRefresh'),preview=document.getElementById('btnPayrollFormalPreview'),close=document.getElementById('btnPayrollFormalClose'),reopen=document.getElementById('btnPayrollFormalReopen');
   if(sync)sync.disabled=!caps.canSync;
-  if(preview)preview.disabled=!caps.canPreview;
   const currentFingerprint=model?.authority?.fingerprint||(!OBA_PAYROLL.localDraftDirty?payrollPayloadText():'');
+  const checkMatches=!!(OBA_PAYROLL.uiCheckContext&&OBA_PAYROLL.uiCheckContext.month===model?.month&&OBA_PAYROLL.uiCheckContext.fingerprint===currentFingerprint);
+  if(check)check.disabled=!!OBA_PAYROLL.busy||model?.source==='loading'||caps.boss;
+  if(preview)preview.disabled=!(caps.canPreview&&checkMatches);
   const previewMatches=!!(OBA_PAYROLL.previewContext&&OBA_PAYROLL.previewContext.month===model?.month&&OBA_PAYROLL.previewContext.authorityFingerprint===currentFingerprint);
-  if(close)close.disabled=!(caps.canClose&&previewMatches);
+  if(close)close.disabled=!(caps.canClose&&checkMatches&&previewMatches);
   if(reopen)reopen.disabled=!caps.canReopen;
   ['expenseDate','expenseCategory','expenseAmount','expenseNote','customExpenseCategory','btnAddExpenseCategory','btnSaveExpense','btnCancelExpenseEdit'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!caps.canEditDraft;});
   safeSetText('payrollPeriodState',model?.period?.status||'not_created');
   safeSetText('payrollCurrentRevision',String(model?.period?.currentRevision||0));
   safeSetText('payrollActionState',payrollActionValid()?`已授權：${OBA_PAYROLL.action?.name||'操作者'}`:'未授權');
+  const completion=document.getElementById('payrollCompletionStatus');
+  if(completion){completion.textContent=payrollMonthClosed(model)?`✓ ${payrollMonthDisplay(model?.month)}已完成月結`:'本月尚未完成月結';completion.className='save-status '+(payrollMonthClosed(model)?'saved':'');}
 }
 function clearPayrollPageValues(message){
   const list=document.getElementById('payrollTrialStaffList');if(list)list.innerHTML=`<div class="note">${escapeHtml(message||'薪資損益資料尚未就緒。')}</div>`;
-  ['payrollTrialEmployeeCount','payrollTrialCommissionTotal','payrollTrialSalaryTotal','profitTodaySales','profitTodayRefund','profitTodayExpense','profitTodaySalary','profitTodayNet','profitTodayAfterSalary','profitMonthSales','profitMonthRefund','profitMonthExpense','profitMonthCompanyInsurance','profitMonthSalary','profitMonthManagementBonus','profitMonthAfterSalary','expenseMonthTotal','expenseMonthCount','expenseTodayTotal'].forEach(id=>safeSetText(id,'—'));
+  ['payrollTrialEmployeeCount','payrollTrialCommissionTotal','payrollTrialSalaryTotal','payrollManagementShareTotal','profitMonthSales','profitMonthRefund','profitMonthExpense','profitMonthCompanyInsurance','profitMonthSalary','profitBeforeManagementShare','profitMonthManagementBonus','profitMonthAfterSalary','expenseMonthTotal','expenseMonthCount'].forEach(id=>safeSetText(id,'—'));
   const rate=document.getElementById('jeanManagementShareRate');if(rate){rate.value='';rate.disabled=true;}
   const table=document.getElementById('expenseTable');if(table)table.innerHTML='<div class="tr"><div>資料尚未就緒</div></div>';
 }
@@ -257,6 +265,7 @@ function renderPayrollPage(model){
   const currentRevision=model.sourceRevision;
   const sourceNote=document.getElementById('payrollCommonSourceNote'),list=document.getElementById('payrollTrialStaffList');
   const input=document.getElementById('payrollTrialMonth');if(input&&document.activeElement!==input)input.value=model.month||payrollTrialMonth();
+  safeSetText('payrollMonthTitle',`${payrollMonthDisplay(model.month)}薪資`);
   renderPayrollRecoveryPanel(model);
   if(model.source==='loading'){
     if(sourceNote)sourceNote.textContent=`正在讀取${payrollCloudEnvironmentName()}雲端權威資料，本機草稿不會覆蓋目前畫面。`;
@@ -274,15 +283,14 @@ function renderPayrollPage(model){
     payrollAuthorityOverviewStatus((model.error?.details||[]).join('；')||'雲端薪資明細與摘要不一致，請重新查詢。','error');renderPayrollControls(model);return;
   }
   const caps=payrollRoleCapabilities(model),totals=model.totals||{},rate=Number(totals.managementShareRate||0),disabled=caps.canEditDraft?'':' disabled aria-disabled="true"';
-  if(sourceNote)sourceNote.textContent=model.source==='local-review'?'目前為本機支出 recovery 唯讀檢視；尚未修改 localStorage，也不是雲端權威資料。':model.source==='draft'?'目前為尚未儲存的本機薪資試算，不是雲端權威資料':(caps.boss?`目前顯示${payrollCloudEnvironmentName()}雲端權威資料；BOSS 完全唯讀。`:`目前顯示${payrollCloudEnvironmentName()}雲端權威資料；總控修改人工項目後會切換為本機草稿。`);
+  if(sourceNote)sourceNote.textContent=model.source==='local-review'?'目前為本機支出 Recovery 唯讀檢視；確認前不會修改任何資料。':model.source==='draft'?'目前有尚未儲存的薪資調整。':(caps.boss?'本月薪資資料已載入；BOSS 完全唯讀。':'本月薪資資料已載入；修改後請先儲存薪資調整。');
   const rateInput=document.getElementById('jeanManagementShareRate');if(rateInput){rateInput.value=(rate*100).toFixed(1).replace(/\.0$/,'');rateInput.disabled=!caps.canEditDraft;}
-  safeSetText('payrollTrialEmployeeCount',String(model.employees.length));safeSetText('payrollTrialCommissionTotal',money(totals.commissionTotal));safeSetText('payrollTrialSalaryTotal',money(totals.staffSalaryCost));
+  safeSetText('payrollTrialEmployeeCount',String(model.employees.length));safeSetText('payrollTrialCommissionTotal',money(totals.commissionTotal));safeSetText('payrollTrialSalaryTotal',money(totals.staffSalaryCost));safeSetText('payrollManagementShareTotal',money(totals.managementShare));
   const rows=model.employees.map(row=>{const isJean=String(row.staffName||row.staffId).trim().toUpperCase()==='JEAN';return `<div class="payroll-trial-card" data-staff-id="${escapeHtml(row.staffId)}"><div class="row payroll-trial-heading"><div><strong>${escapeHtml(row.staffName)}</strong></div><div class="pill">${escapeHtml(model.month)}</div></div><div class="payroll-trial-stats"><div><span>本月營收／業績顯示</span><strong>${money(row.performanceTotal)}</strong><small>${row.orderCount} 筆；集點卡 $0 不灌入營收</small></div><div><span>責任額／達成率</span><strong>${money(row.responsibilityTarget)}／${Number(row.achievementRate||0).toFixed(Number(row.achievementRate||0)%1===0?0:1)}%</strong><small>只顯示，不影響薪資</small></div><div><span>commission 薪資</span><strong>${money(row.commissionTotal)}</strong><small>直接加總訂單快照</small></div><div><span>保障／應領薪資</span><strong>${money(row.guaranteeSalary)}／${money(row.baseSalary)}</strong><small>max(保障薪資, commission)</small></div></div><div class="payroll-trial-inputs"><label>借支<input class="input payrollTrialInput" type="number" min="0" step="1" data-field="advance" value="${row.advance}"${disabled}></label><label>材料代墊<input class="input payrollTrialInput" type="number" min="0" step="1" data-field="materialAdvance" value="${row.materialAdvance}"${disabled}></label><label>保險自付額<input class="input payrollTrialInput" type="number" min="0" step="1" data-field="insurance" value="${row.insuranceSelf}"${disabled}></label><label>年終獎金<input class="input payrollTrialInput" type="number" min="0" step="1" data-field="annualBonus" value="${row.annualBonus}"${disabled}></label></div><div class="payroll-trial-result"><span>試算實發薪資</span><strong>${money(row.actualSalary)}</strong></div>${isJean?`<div class="payroll-trial-result"><span>JEAN 管理分潤（${(rate*100).toFixed(1).replace(/\.0$/,'')}%）</span><strong>${money(row.managementShare)}</strong></div><div class="payroll-trial-result"><span>本月總領</span><strong>${money(row.monthlyTotal)}</strong></div><div class="note">管理分潤不混入 commission、保障薪資、應領薪資或試算實發薪資。</div>`:''}</div>`;}).join('');
   if(OBA_PAYROLL.pageModel?.sourceRevision!==currentRevision)return;
   if(list)list.innerHTML=rows||'<div class="note">本月沒有員工薪資資料。</div>';
-  safeSetText('profitMonthSales',money(totals.grossSales));safeSetText('profitMonthRefund',money(totals.refunds));safeSetText('profitMonthExpense',money(totals.generalExpenses));safeSetText('profitMonthCompanyInsurance',money(totals.companyInsurance));safeSetText('profitMonthSalary',money(totals.staffSalaryCost));safeSetText('profitMonthManagementBonusLabel',`JEAN 管理分潤（${(rate*100).toFixed(1).replace(/\.0$/,'')}%）`);safeSetText('profitMonthManagementBonus',money(totals.managementShare));safeSetText('profitMonthAfterSalary',money(totals.finalProfit));
-  const today=model.todaySummary||payrollTodaySummary(model.expenses);safeSetText('profitTodaySales',money(today.sales));safeSetText('profitTodayRefund',money(today.refunds));safeSetText('profitTodayExpense',money(today.expenses));safeSetText('profitTodaySalary',money(today.salary));safeSetText('profitTodayNet',money(today.netBeforeSalary));safeSetText('profitTodayAfterSalary',money(today.netAfterSalary));
-  safeSetText('expenseMonthTotal',money(model.expenseSummary.monthTotal));safeSetText('expenseMonthCount',String(model.expenseSummary.monthCount));safeSetText('expenseTodayTotal',money(model.expenseSummary.todayTotal));
+  safeSetText('profitMonthSales',money(totals.grossSales));safeSetText('profitMonthRefund',money(totals.refunds));safeSetText('profitMonthExpense',money(totals.generalExpenses));safeSetText('profitMonthCompanyInsurance',money(totals.companyInsurance));safeSetText('profitMonthSalary',money(totals.staffSalaryCost));safeSetText('profitBeforeManagementShare',money(totals.profitBeforeManagementShare));safeSetText('profitMonthManagementBonusLabel',`JEAN 管理分潤（${(rate*100).toFixed(1).replace(/\.0$/,'')}%）`);safeSetText('profitMonthManagementBonus',money(totals.managementShare));safeSetText('profitMonthAfterSalary',money(totals.finalProfit));
+  safeSetText('expenseMonthTotal',money(model.expenseSummary.monthTotal));safeSetText('expenseMonthCount',String(model.expenseSummary.monthCount));
   const expenseTable=document.getElementById('expenseTable');if(expenseTable)expenseTable.innerHTML=model.expenses.length?model.expenses.map(row=>`<div class="tr"><div>${escapeHtml(row.expenseDate)}</div><div>${escapeHtml(row.category)}</div><div>${money(row.amount)}</div><div>${escapeHtml(row.note||'-')}</div><div>${caps.canEditDraft?`<button class="btn btn-soft btnEditExpense" data-id="${escapeHtml(row.expenseId)}" type="button">編輯</button> <button class="btn btn-danger btnDeleteExpense" data-id="${escapeHtml(row.expenseId)}" type="button">刪除</button>`:'唯讀'}</div></div>`).join(''):'<div class="tr"><div>本月沒有有效支出明細</div></div>';
   payrollAuthorityOverviewStatus(model.source==='local-review'?'本機支出 recovery 唯讀檢視；確認前不會修改任何資料。':model.source==='draft'?'目前為尚未儲存的本機薪資試算，不是雲端權威資料':`雲端權威薪資損益已更新（${caps.boss?'BOSS 唯讀':'總控'}）`,['draft','local-review'].includes(model.source)?'dirty':'saved');
   model.renderedAt=new Date().toISOString();renderPayrollControls(model);
@@ -357,6 +365,8 @@ function renderFormalPreview(preview){
 async function previewFormalPayroll(){
   if(OBA_PAYROLL.busy)return;
   const model=OBA_PAYROLL.pageModel,staff=window.OBA_ACCESS_SESSION?.kind==='staff';
+  const currentFingerprint=model?.authority?.fingerprint||(!OBA_PAYROLL.localDraftDirty?payrollPayloadText():'');
+  if(!OBA_PAYROLL.uiCheckContext||OBA_PAYROLL.uiCheckContext.month!==model?.month||OBA_PAYROLL.uiCheckContext.fingerprint!==currentFingerprint){payrollStatus('請先完成「① 檢查本月薪資資料」','error');return;}
   if(OBA_PAYROLL.localDraftDirty||model?.source==='draft'&&OBA_PAYROLL.lastPayload!==payrollPayloadText()){
     payrollStatus('目前有尚未儲存的本機薪資試算，請先完成「儲存薪資試算」並確認雲端權威資料後，再進行月結前確認。','error');return;
   }
@@ -370,7 +380,7 @@ async function previewFormalPayroll(){
   if(!staff&&(currentModel?.source!=='authority'||currentModel.month!==model.month||currentModel.authority?.fingerprint!==model.authority?.fingerprint||currentModel.consistency?.valid!==true||OBA_PAYROLL.localDraftDirty)){
     payrollStatus('月結前確認期間權威資料狀態已改變，結果未採用；請重新查詢及確認','error');return;
   }
-  OBA_PAYROLL.preview=result.preview;OBA_PAYROLL.previewContext={month:payrollCurrentMonth(),previewHash:String(result.preview?.previewHash||''),authorityFingerprint:model?.authority?.fingerprint||payrollPayloadText(),createdAt:new Date().toISOString()};renderFormalPreview(result.preview);renderPayrollControls(model);payrollStatus('月結前確認完成；完成月結前若資料改變，伺服器會拒絕舊確認結果。','saved');
+  OBA_PAYROLL.preview=result.preview;OBA_PAYROLL.previewContext={month:payrollCurrentMonth(),previewHash:String(result.preview?.previewHash||''),authorityFingerprint:model?.authority?.fingerprint||payrollPayloadText(),createdAt:new Date().toISOString()};renderFormalPreview(result.preview);renderPayrollControls(model);payrollStatus('② 月結內容已確認；資料若改變，系統會要求重新檢查。','saved');
 }
 async function closeFormalPayroll(){
   if(OBA_PAYROLL.busy)return;
@@ -386,7 +396,7 @@ async function closeFormalPayroll(){
   OBA_PAYROLL.busy=true; payrollStatus('正在完成本月月結…');
   const result=await payrollRpc('oba_payroll_close_v1',{p_month:payrollCurrentMonth(),p_preview_hash:OBA_PAYROLL.preview.previewHash,p_request_id:(crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random()}`),p_reason:reason,p_action_token:OBA_PAYROLL.action.token}); OBA_PAYROLL.busy=false;
   if(!result.ok){payrollStatus(payrollFailure(result),'error');if(result.reason==='preview_changed'){OBA_PAYROLL.preview=result.preview||null;renderFormalPreview(OBA_PAYROLL.preview);}return;}
-  payrollStatus(`本月月結完成：月結版本 ${result.revision}`,'saved'); OBA_PAYROLL.preview=null;OBA_PAYROLL.previewContext=null;await loadPayrollHistory();if(isPayrollAuthorityViewer())await loadPayrollAuthorityOverview();
+  OBA_PAYROLL.preview=null;OBA_PAYROLL.previewContext=null;OBA_PAYROLL.uiCheckContext=null;await loadPayrollHistory();if(isPayrollAuthorityViewer())await loadPayrollAuthorityOverview();payrollStatus(`✓ ${payrollMonthDisplay(model.month)}已完成月結`,'saved');renderPayrollControls(OBA_PAYROLL.pageModel);
 }
 async function reopenFormalPayroll(){
   const model=OBA_PAYROLL.pageModel,staff=window.OBA_ACCESS_SESSION?.kind==='staff';
@@ -403,7 +413,8 @@ async function reopenFormalPayroll(){
 function renderPayrollHistory(result,targetId='payrollFormalHistory'){
   const el=document.getElementById(targetId); if(!el)return;
   const period=result?.period||null, rows=result?.revisions||[];
-  el.innerHTML=`<div class="note">狀態：${escapeHtml(period?.status||'尚未結算')}／目前月結版本 ${period?.current_revision||0}</div>`+rows.map(r=>`<details><summary>月結版本 ${r.revision}｜${escapeHtml(r.settled_at||'')}｜淨損益 ${money(r.final_profit)}</summary><div class="note">結算人：${escapeHtml(r.settled_by_name||r.settled_by_id||'')}｜營業額 ${money(r.gross_sales)}｜退款 ${money(r.refunds)}｜支出 ${money(Number(r.general_expenses||0)+Number(r.company_insurance||0))}｜薪資 ${money(r.staff_salary_cost)}｜管理分潤 ${money(r.jean_management_share)}</div>${(r.employees||[]).map(e=>`<div class="row"><span>${escapeHtml(e.staff_name)}</span><span>實發 ${money(e.actual_salary)}／總領 ${money(e.monthly_total)}</span></div>`).join('')}</details>`).join('');
+  const stateText=String(period?.status||'')==='closed'?'已完成月結':'可編輯';
+  el.innerHTML=`<div class="note">本月狀態：${stateText}</div>`+rows.map((r,index)=>`<details><summary>第 ${index+1} 次月結｜${escapeHtml(r.settled_at||'')}｜淨損益 ${money(r.final_profit)}</summary><div class="note">結算人：${escapeHtml(r.settled_by_name||r.settled_by_id||'')}｜營業額 ${money(r.gross_sales)}｜退款 ${money(r.refunds)}｜支出 ${money(Number(r.general_expenses||0)+Number(r.company_insurance||0))}｜薪資 ${money(r.staff_salary_cost)}｜管理分潤 ${money(r.jean_management_share)}</div>${(r.employees||[]).map(e=>`<div class="row"><span>${escapeHtml(e.staff_name)}</span><span>實發 ${money(e.actual_salary)}／總領 ${money(e.monthly_total)}</span></div>`).join('')}</details>`).join('');
 }
 function payrollAuthorityOverviewStatus(text,mode=''){
   const el=document.getElementById('payrollAuthorityStatus');if(!el)return;
@@ -511,6 +522,17 @@ async function loadPayrollAuthorityOverview(options={}){
 }
 function loadBossPayrollOverview(){return loadPayrollAuthorityOverview();}
 function loadOwnerPayrollOverview(){return loadPayrollAuthorityOverview();}
+async function checkPayrollMonthData(){
+  if(OBA_PAYROLL.busy)return false;
+  OBA_PAYROLL.preview=null;OBA_PAYROLL.previewContext=null;OBA_PAYROLL.uiCheckContext=null;renderFormalPreview(null);renderPayrollControls(OBA_PAYROLL.pageModel);
+  let ready=false;
+  if(isPayrollAuthorityViewer())ready=await loadPayrollAuthorityOverview();
+  else ready=payrollRoleCapabilities(OBA_PAYROLL.pageModel).staffSynced;
+  const model=OBA_PAYROLL.pageModel,fingerprint=model?.authority?.fingerprint||(!OBA_PAYROLL.localDraftDirty?payrollPayloadText():'');
+  if(!ready||!fingerprint||model?.consistency?.valid!==true){payrollStatus('① 本月薪資資料檢查未通過；系統保持鎖定。','error');renderPayrollControls(model);return false;}
+  OBA_PAYROLL.uiCheckContext={month:model.month,fingerprint,checkedAt:new Date().toISOString()};
+  payrollStatus('① 本月薪資資料檢查完成。','saved');renderPayrollControls(model);return true;
+}
 function handlePayrollMonthChange(input){
   const previous=String(OBA_PAYROLL.pageModel?.month||'');
   const month=payrollTrialMonth(input?.value);
@@ -520,7 +542,7 @@ function handlePayrollMonthChange(input){
     return false;
   }
   if(input)input.value=month;
-  OBA_PAYROLL.preview=null;OBA_PAYROLL.previewContext=null;renderFormalPreview(null);renderPayrollHistory(null);
+  OBA_PAYROLL.preview=null;OBA_PAYROLL.previewContext=null;OBA_PAYROLL.uiCheckContext=null;renderFormalPreview(null);renderPayrollHistory(null);
   if(isPayrollAuthorityViewer()){
     loadPayrollAuthorityOverview();
   }else{
@@ -569,7 +591,7 @@ async function loadPayrollHistory(){
 function bindFormalPayroll(){
   [['btnPayrollCloudSync',syncPayrollLocalToCloud],['btnPayrollFormalPreview',previewFormalPayroll],['btnPayrollFormalClose',closeFormalPayroll],['btnPayrollFormalReopen',reopenFormalPayroll],['btnPayrollHistory',loadPayrollHistory]].forEach(([id,fn])=>{const el=document.getElementById(id);if(el&&!el.dataset.bound){el.dataset.bound='yes';el.addEventListener('click',fn);}});
   const month=document.getElementById('payrollTrialMonth');if(month&&!month.dataset.formalBound){month.dataset.formalBound='yes';month.addEventListener('change',()=>handlePayrollMonthChange(month));}
-  const authorityRefresh=document.getElementById('btnPayrollAuthorityRefresh');if(authorityRefresh&&!authorityRefresh.dataset.bound){authorityRefresh.dataset.bound='yes';authorityRefresh.addEventListener('click',loadPayrollAuthorityOverview);}
+  const authorityRefresh=document.getElementById('btnPayrollAuthorityRefresh');if(authorityRefresh&&!authorityRefresh.dataset.bound){authorityRefresh.dataset.bound='yes';authorityRefresh.addEventListener('click',checkPayrollMonthData);}
   const authorityHistory=document.getElementById('btnPayrollAuthorityHistory');if(authorityHistory&&!authorityHistory.dataset.bound){authorityHistory.dataset.bound='yes';authorityHistory.addEventListener('click',loadPayrollHistory);}
   const reviewRecovery=document.getElementById('btnPayrollReviewLocalExpenses');if(reviewRecovery&&!reviewRecovery.dataset.bound){reviewRecovery.dataset.bound='yes';reviewRecovery.addEventListener('click',reviewPayrollLocalExpenseRecovery);}
   const confirmRecovery=document.getElementById('btnPayrollConfirmExpenseRecovery');if(confirmRecovery&&!confirmRecovery.dataset.bound){confirmRecovery.dataset.bound='yes';confirmRecovery.addEventListener('click',confirmPayrollExpenseRecovery);}
