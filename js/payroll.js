@@ -209,7 +209,9 @@ function renderPayrollRecoveryPanel(model){
   if(!visible)return;
   const conflict=model.conflict||{};
   const closedHint=payrollMonthClosed(model)?' 本月份已完成月結；確認支出 Recovery 維持鎖定，請先按「重新開放修改」。':'';
-  if(summary)summary.textContent=(source==='local-review'?`正在唯讀檢視 ${model.month} 本機支出 recovery：${conflict.localCount||0} 筆／${money(conflict.localTotal||0)}。確認前不會修改 localStorage 或雲端。`:`偵測到 ${model.month} 支出來源不一致：本機 ${conflict.localCount||0} 筆／${money(conflict.localTotal||0)}；雲端 ${conflict.authorityCount||0} 筆／${money(conflict.authorityTotal||0)}。系統已停止寫入，兩邊資料都不會被覆蓋。`)+closedHint;
+  const localOnlyRows=Array.isArray(conflict.localOnly)?conflict.localOnly:[];
+  const localOnlyText=localOnlyRows.length?localOnlyRows.map(row=>`${row.expenseDate||''}｜${row.category||'未分類'}｜${money(row.amount||0)}${row.note?`｜${row.note}`:''}`).join('；'):'無';
+  if(summary)summary.textContent=(source==='local-review'?`正在唯讀檢視 ${model.month} 本機支出 recovery：${localOnlyRows.length} 筆／${money(localOnlyRows.reduce((sum,row)=>sum+Number(row.amount||0),0))}。確認前不會修改 localStorage 或雲端。`:`雲端 authority：${conflict.authorityCount||0} 筆／${money(conflict.authorityTotal||0)}。本機 local-only：${localOnlyText}。兩邊資料不一致，已停止自動同步；兩邊資料都不會被覆蓋。`)+closedHint;
   setVisible(review,source==='conflict');
   if(review)review.disabled=source!=='conflict'||!payrollExpenseRecoveryEligible(conflict);
   setVisible(confirmButton,source==='local-review'&&owner);

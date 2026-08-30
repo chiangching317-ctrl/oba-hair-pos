@@ -251,8 +251,8 @@ function expenseMonthOf(date){
   return String(date||'').slice(0,7);
 }
 async function renderExpenses(){
-  if(window.OBA_ACCESS_SESSION?.kind==='boss')return;
   bindExpenseEvents();
+  if(window.OBA_ACCESS_SESSION?.kind==='boss')return;
   renderExpenseCategoryOptions();
   const dateEl=$('#expenseDate');
   if(dateEl && !dateEl.value) dateEl.value=todayStr();
@@ -262,6 +262,17 @@ async function renderExpenses(){
     return;
   }
   renderPayrollTrial();
+}
+
+async function refreshExpenseAuthority(){
+  const kind=String(window.OBA_ACCESS_SESSION?.kind||'');
+  if(['owner-control','boss'].includes(kind)&&typeof loadPayrollAuthorityOverview==='function'){
+    return await loadPayrollAuthorityOverview();
+  }
+  if(kind==='staff'){
+    return await loadExpenseAuthorityOverview(payrollTrialMonth($('#payrollTrialMonth')?.value));
+  }
+  return false;
 }
 
 function expenseSessionCanWrite(){
@@ -498,7 +509,7 @@ function bindExpenseEvents(){
   }
   if(refreshBtn && !refreshBtn.dataset.bound){
     refreshBtn.dataset.bound='yes';
-    refreshBtn.onclick=renderExpenses;
+    refreshBtn.onclick=refreshExpenseAuthority;
   }
   if(table && !table.dataset.bound){
     table.dataset.bound='yes';
