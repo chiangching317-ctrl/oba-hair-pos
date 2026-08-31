@@ -114,6 +114,13 @@ function payrollExpenseConflict(authorityModel){
   const differingIds=local.filter(row=>authorityById.has(row.expenseId)&&payrollExpenseEvidence([row])!==payrollExpenseEvidence([authorityById.get(row.expenseId)])).map(row=>row.expenseId);
   return {domains:['expenses'],month:authorityModel.month,local,authority,localOnly,authorityOnly,differingIds,localFingerprint:payrollExpenseEvidence(local),authorityFingerprint:payrollExpenseEvidence(authority),localCount:local.length,authorityCount:authority.length,localTotal:local.reduce((sum,row)=>sum+row.amount,0),authorityTotal:authority.reduce((sum,row)=>sum+row.amount,0),detectedAt:new Date().toISOString()};
 }
+function payrollExpenseRowsSameContent(left,right){
+  if(!Array.isArray(left)||!Array.isArray(right)||left.length!==right.length)return false;
+  const signature=row=>JSON.stringify([String(row?.expenseDate||''),String(row?.category||''),payrollModelNumber(row?.amount),String(row?.note||'')]);
+  const leftKeys=left.map(row=>signature(payrollNormalizeExpense(row))).sort();
+  const rightKeys=right.map(row=>signature(payrollNormalizeExpense(row))).sort();
+  return leftKeys.every((key,index)=>key===rightKeys[index]);
+}
 function payrollExpenseRecoveryEligible(conflict){
   return !!conflict&&Array.isArray(conflict.localOnly)&&conflict.localOnly.length>0&&!(conflict.differingIds||[]).length;
 }
@@ -450,6 +457,11 @@ function renderPayrollAuthorityOverview(result){
   if(authorityModel.source!=='authority')return setPayrollPageModel(authorityModel);
   const conflict=payrollExpenseConflict(authorityModel);
   if(conflict){
+    if(!conflict.differingIds.length&&conflict.localOnly.length&&conflict.authorityOnly.length&&payrollExpenseRowsSameContent(conflict.localOnly,conflict.authorityOnly)&&typeof mirrorConfirmedExpenseMonth==='function'){
+      mirrorConfirmedExpenseMonth(authorityModel.month,authorityModel.expenses);
+      OBA_PAYROLL.recoveryCandidate=null;OBA_PAYROLL.localDraftDirty=false;clearPayrollDraftMeta(authorityModel.month);
+      return setPayrollPageModel(authorityModel);
+    }
     if(!conflict.localOnly.length&&!conflict.differingIds.length&&conflict.authorityOnly.length&&typeof mirrorConfirmedExpenseMonth==='function'){
       mirrorConfirmedExpenseMonth(authorityModel.month,authorityModel.expenses);
       OBA_PAYROLL.recoveryCandidate=null;OBA_PAYROLL.localDraftDirty=false;clearPayrollDraftMeta(authorityModel.month);
