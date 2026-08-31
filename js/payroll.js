@@ -589,18 +589,15 @@ async function refreshPayrollPageAfterStatePull(){
   if(!expenseTab||expenseTab.classList.contains('hidden')||OBA_PAYROLL.busy)return false;
   const model=OBA_PAYROLL.pageModel;
   if(model?.source==='authority'){
-    if(OBA_PAYROLL.backgroundRefreshPending)return false;
-    OBA_PAYROLL.backgroundRefreshPending=true;
-    try{return await loadPayrollAuthorityOverview({background:true});}
-    finally{OBA_PAYROLL.backgroundRefreshPending=false;}
+    renderPayrollControls(model);
+    return true;
   }
   if(model?.source==='draft'){
     if(model?.draft?.recoveryOnly===true){
       if(OBA_PAYROLL.busy){renderPayrollPage(model);return true;}
       if(isPayrollAuthorityViewer())return await loadPayrollAuthorityOverview();
     }
-    setPayrollPageModel(buildDraftPayrollPageModel(model.month,(model.sourceRevision||0)+1));
-    return true;
+    return false;
   }
   // loading/conflict/local-review/error do not fall back to or overwrite either source.
   return false;

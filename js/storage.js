@@ -509,14 +509,17 @@ async function saveStatePatch(patchFields){
 }
 
 function refreshAllScreens(){
+  const active=typeof activeTabName==='function'?activeTabName():'';
   updateCashierDisplay();
-  renderCashier();
-  renderAssign();
-  renderReport();
-  renderTimeclock();
-  renderExpenses();
-  if(typeof refreshPayrollPageAfterStatePull==='function')refreshPayrollPageAfterStatePull();
-  renderManage();
+  if(active==='cashier')renderCashier();
+  if(active==='assign')renderAssign();
+  if(active==='report')renderReport();
+  if(active==='timeclock')renderTimeclock();
+  if(active==='expense'){
+    if(['boss','owner-control'].includes(window.OBA_ACCESS_SESSION?.kind||'')&&typeof refreshPayrollPageAfterStatePull==='function')refreshPayrollPageAfterStatePull();
+    else renderExpenses();
+  }
+  if(active==='manage')renderManage();
   applyBossMode();
 }
 async function runDevIsolationCleanupOnce(){
