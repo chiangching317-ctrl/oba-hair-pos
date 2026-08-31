@@ -98,8 +98,11 @@ function payrollTrialStaff(month,orders){
 }
 function payrollTrialForStaff(staff,month,orders,manual={}){
   const staffOrders=orders.filter(order=>String(order.assignedDesignerId)===String(staff.id));
+  const redeemOrders=staffOrders.filter(order=>typeof isRedeemOrder==='function'&&isRedeemOrder(order));
   const performanceTotal=staffOrders.reduce((sum,order)=>sum+Number(order.total||0),0);
   const commissionTotal=staffOrders.reduce((sum,order)=>sum+Number(order.commission||0),0);
+  const redeemSourceTotal=redeemOrders.reduce((sum,order)=>sum+(typeof redemptionSourceValue==='function'?redemptionSourceValue(order):Number(order?.redeemMeta?.sourcePrice||0)),0);
+  const redeemCommissionTotal=redeemOrders.reduce((sum,order)=>sum+Number(order.commission||0),0);
   const baseSalary=Math.max(PAYROLL_GUARANTEE,commissionTotal);
   const advance=payrollTrialNumber(manual.advance);
   const materialAdvance=payrollTrialNumber(manual.materialAdvance);
@@ -107,6 +110,7 @@ function payrollTrialForStaff(staff,month,orders,manual={}){
   const annualBonus=payrollTrialNumber(manual.annualBonus);
   return {
     staff,month,orderCount:staffOrders.length,performanceTotal,commissionTotal,
+    redeemCount:redeemOrders.length,redeemSourceTotal,redeemCommissionTotal,
     achievementRate:performanceTotal/PAYROLL_TARGET*100,
     baseSalary,advance,materialAdvance,insurance,annualBonus,
     actualSalary:baseSalary+annualBonus-advance-materialAdvance-insurance
