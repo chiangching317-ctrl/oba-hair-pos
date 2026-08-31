@@ -252,12 +252,18 @@ function expenseMonthOf(date){
 }
 async function renderExpenses(){
   bindExpenseEvents();
-  if(window.OBA_ACCESS_SESSION?.kind==='boss')return;
+  const kind=String(window.OBA_ACCESS_SESSION?.kind||'');
+  const expenseTab=document.getElementById('tab-expense');
+  const expenseVisible=!!expenseTab&&!expenseTab.classList.contains('hidden');
+  if(expenseVisible&&['owner-control','boss'].includes(kind)&&typeof loadPayrollAuthorityOverview==='function'){
+    return await loadPayrollAuthorityOverview();
+  }
+  if(kind==='boss')return;
   renderExpenseCategoryOptions();
   const dateEl=$('#expenseDate');
   if(dateEl && !dateEl.value) dateEl.value=todayStr();
   if(typeof shouldPreservePayrollAuthorityView==='function'&&shouldPreservePayrollAuthorityView())return;
-  if(window.OBA_ACCESS_SESSION?.kind==='staff'){
+  if(kind==='staff'){
     await loadExpenseAuthorityOverview(payrollTrialMonth($('#payrollTrialMonth')?.value));
     return;
   }

@@ -226,7 +226,7 @@ $('#btnPwdOk').onclick=async()=>{const oldPwd=$('#pwdOld').value.trim(), newPwd=
    if(targetTab==='manage' && typeof renderManage==='function') renderManage();
    pendingLockedTab='';
    const activated=setActiveTab(targetTab);
-   if(activated&&targetTab==='expense'&&pageAuthority.kind!=='owner-control'&&typeof renderExpenses==='function')renderExpenses();
+    if(activated&&targetTab==='expense'&&typeof renderExpenses==='function')await renderExpenses();
    focusScanIfNeeded(targetTab);
  }};
 $('#btnChangePwd').onclick=()=>{if(!requirePageTabAuthorization('manage'))return;pwdMode='change';$('#pwdOld').closest('.pwd-wrap')?.classList.add('hidden');$('#pwdOld').value='';$('#pwdNew').value='';$('#pwdNewWrap').classList.remove('hidden');$('#pwdTitle').textContent='設定新管理密碼（本次管理頁已授權）';$('#passwordDialog').showModal();setTimeout(()=>$('#pwdNew').focus(),60)}
