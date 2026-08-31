@@ -255,6 +255,11 @@ async function renderExpenses(){
   const kind=String(window.OBA_ACCESS_SESSION?.kind||'');
   const expenseTab=document.getElementById('tab-expense');
   const expenseVisible=!!expenseTab&&!expenseTab.classList.contains('hidden');
+  const recoveryPending=typeof OBA_PAYROLL!=='undefined'&&OBA_PAYROLL?.pageModel?.source==='draft'&&OBA_PAYROLL?.pageModel?.draft?.recoveryOnly===true;
+  if(expenseVisible&&recoveryPending&&typeof renderPayrollPage==='function'){
+    renderPayrollPage(OBA_PAYROLL.pageModel);
+    return true;
+  }
   if(expenseVisible&&['owner-control','boss'].includes(kind)&&typeof loadPayrollAuthorityOverview==='function'){
     return await loadPayrollAuthorityOverview();
   }
@@ -373,8 +378,10 @@ async function expenseCloudMutation(action,payload,expectedRowVersion,options={}
     if(!oldRead.ok||(oldRead.result.expenses||[]).some(row=>String(row.expenseId)===String(payload.expenseId)))return {ok:false,result:{ok:false,reason:'expense_readback_mismatch'}};
   }
   const confirmed=(read.result.expenses||[]).find(row=>String(row.expenseId)===String(payload.expenseId))||result.expense;
-  mirrorConfirmedExpenseMonth(targetMonth,read.result.expenses||[],{removeIds:action==='void'?[payload.expenseId]:[]});
-  if(oldRead?.ok)mirrorConfirmedExpenseMonth(String(options.originalDate).slice(0,7),oldRead.result.expenses||[],{removeIds:[payload.expenseId]});
+  if(!options.skipLocalMirror){
+    mirrorConfirmedExpenseMonth(targetMonth,read.result.expenses||[],{removeIds:action==='void'?[payload.expenseId]:[]});
+    if(oldRead?.ok)mirrorConfirmedExpenseMonth(String(options.originalDate).slice(0,7),oldRead.result.expenses||[],{removeIds:[payload.expenseId]});
+  }
   OBA_EXPENSE_CLOUD.pendingRequests.delete(key);
   return {ok:true,result,readback:read.result,targetMonth,confirmed};
 }
@@ -474,7 +481,7 @@ async function syncExpenseRecoveryToCloud(model){
   OBA_PAYROLL.busy=true;payrollStatus('正在逐筆儲存已確認的支出 Recovery…','dirty');
   for(const row of rows){
     const payload={expenseId:String(row.expenseId),expenseDate:String(row.expenseDate),category:String(row.category),amount:Number(row.amount),note:String(row.note||''),sourceCreatedAt:String(row.sourceCreatedAt||new Date().toISOString())};
-    const outcome=await expenseCloudMutation('create',payload,null,{originalDate:null});
+    const outcome=await expenseCloudMutation('create',payload,null,{originalDate:null,skipLocalMirror:true});
     if(!outcome.ok){
       OBA_PAYROLL.busy=false;
       await loadPayrollAuthorityOverview();
