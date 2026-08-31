@@ -255,8 +255,8 @@ async function renderExpenses(){
   const kind=String(window.OBA_ACCESS_SESSION?.kind||'');
   const expenseTab=document.getElementById('tab-expense');
   const expenseVisible=!!expenseTab&&!expenseTab.classList.contains('hidden');
-  const recoveryPending=typeof OBA_PAYROLL!=='undefined'&&OBA_PAYROLL?.pageModel?.source==='draft'&&OBA_PAYROLL?.pageModel?.draft?.recoveryOnly===true;
-  if(expenseVisible&&recoveryPending&&typeof renderPayrollPage==='function'){
+  const recoveryWriteLocked=typeof OBA_PAYROLL!=='undefined'&&OBA_PAYROLL.busy&&OBA_PAYROLL?.pageModel?.source==='draft'&&OBA_PAYROLL?.pageModel?.draft?.recoveryOnly===true&&OBA_PAYROLL?.pageModel?.draft?.recoveryPending===true;
+  if(expenseVisible&&recoveryWriteLocked&&typeof renderPayrollPage==='function'){
     renderPayrollPage(OBA_PAYROLL.pageModel);
     return true;
   }

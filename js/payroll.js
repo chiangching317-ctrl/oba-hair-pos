@@ -207,7 +207,7 @@ function setPayrollPageModel(model){
 }
 function renderPayrollRecoveryPanel(model){
   const panel=document.getElementById('payrollExpenseConflictWorkspace'),summary=document.getElementById('payrollExpenseConflictSummary'),review=document.getElementById('btnPayrollReviewLocalExpenses'),confirmButton=document.getElementById('btnPayrollConfirmExpenseRecovery');
-  const source=String(model?.source||''),recoveryPending=source==='draft'&&model?.draft?.recoveryOnly===true&&model?.draft?.recoveryPending===true,visible=['conflict','local-review'].includes(source)||recoveryPending,owner=window.OBA_ACCESS_SESSION?.kind==='owner-control';
+  const source=String(model?.source||''),recoveryPending=source==='draft'&&model?.draft?.recoveryOnly===true&&model?.draft?.recoveryPending===true,recoveryWriting=recoveryPending&&OBA_PAYROLL.busy,visible=['conflict','local-review'].includes(source)||recoveryPending,owner=window.OBA_ACCESS_SESSION?.kind==='owner-control';
   const setVisible=(element,show)=>{if(!element)return;element.classList.toggle('hidden',!show);element.hidden=!show;element.setAttribute('aria-hidden',show?'false':'true');};
   setVisible(panel,visible);
   if(!visible)return;
@@ -215,7 +215,7 @@ function renderPayrollRecoveryPanel(model){
   const closedHint=payrollMonthClosed(model)?' 本月份已完成月結；確認支出 Recovery 維持鎖定，請先按「重新開放修改」。':'';
   const localOnlyRows=Array.isArray(conflict.localOnly)?conflict.localOnly:[];
   const localOnlyText=localOnlyRows.length?localOnlyRows.map(row=>`${row.expenseDate||''}｜${row.category||'未分類'}｜${money(row.amount||0)}${row.note?`｜${row.note}`:''}`).join('；'):'無';
-  if(summary)summary.textContent=(recoveryPending?`雲端 authority：${conflict.authorityCount||0} 筆／${money(conflict.authorityTotal||0)}。正在寫入 Recovery：${localOnlyText}。完成逐筆寫入與權威查回前，畫面維持鎖定。`:source==='local-review'?`正在唯讀檢視 ${model.month} 本機支出 recovery：${localOnlyRows.length} 筆／${money(localOnlyRows.reduce((sum,row)=>sum+Number(row.amount||0),0))}。按「確認並寫入 Recovery」後才會安全寫入雲端並查回驗證。`:`雲端 authority：${conflict.authorityCount||0} 筆／${money(conflict.authorityTotal||0)}。本機 local-only：${localOnlyText}。兩邊資料不一致，已停止自動同步；兩邊資料都不會被覆蓋。`)+closedHint;
+  if(summary)summary.textContent=(recoveryPending?(recoveryWriting?`雲端 authority：${conflict.authorityCount||0} 筆／${money(conflict.authorityTotal||0)}。正在寫入 Recovery：${localOnlyText}。完成逐筆寫入與權威查回前，畫面維持鎖定。`:`支出 Recovery 尚未完成最終權威查回；請按重新整理重新確認雲端狀態。`):source==='local-review'?`正在唯讀檢視 ${model.month} 本機支出 recovery：${localOnlyRows.length} 筆／${money(localOnlyRows.reduce((sum,row)=>sum+Number(row.amount||0),0))}。按「確認並寫入 Recovery」後才會安全寫入雲端並查回驗證。`:`雲端 authority：${conflict.authorityCount||0} 筆／${money(conflict.authorityTotal||0)}。本機 local-only：${localOnlyText}。兩邊資料不一致，已停止自動同步；兩邊資料都不會被覆蓋。`)+closedHint;
   setVisible(review,source==='conflict');
   if(review)review.disabled=source!=='conflict'||!payrollExpenseRecoveryEligible(conflict);
   setVisible(confirmButton,source==='local-review'&&owner);
@@ -341,7 +341,7 @@ async function syncPayrollLocalToCloud(){
       setPayrollPageModel(failed);payrollStatus('支出 Recovery 最終 authority 驗證未通過；未標記完成，請停止操作並重新查核。','error');return false;
     }
     if(typeof mirrorConfirmedExpenseMonth==='function')mirrorConfirmedExpenseMonth(model.month,authorityRows);
-    clearPayrollDraftMeta(model.month);OBA_PAYROLL.localDraftDirty=false;
+    clearPayrollDraftMeta(model.month);OBA_PAYROLL.localDraftDirty=false;renderPayrollPage(OBA_PAYROLL.pageModel);renderPayrollControls(OBA_PAYROLL.pageModel);
     payrollStatus('支出 Recovery 已逐筆儲存並通過完整 authority read-back 驗證。','saved');return true;
   }
   if(payrollMonthClosed(model)){payrollStatus(closedPayrollMessage(),'error');return false;}
@@ -583,7 +583,10 @@ async function refreshPayrollPageAfterStatePull(){
     finally{OBA_PAYROLL.backgroundRefreshPending=false;}
   }
   if(model?.source==='draft'){
-    if(model?.draft?.recoveryOnly===true){renderPayrollPage(model);return true;}
+    if(model?.draft?.recoveryOnly===true){
+      if(OBA_PAYROLL.busy){renderPayrollPage(model);return true;}
+      if(isPayrollAuthorityViewer())return await loadPayrollAuthorityOverview();
+    }
     setPayrollPageModel(buildDraftPayrollPageModel(model.month,(model.sourceRevision||0)+1));
     return true;
   }
@@ -621,7 +624,7 @@ window.addEventListener('beforeunload',()=>{OBA_PAYROLL.action=null;});
 window.addEventListener('oba:tabchange',event=>{
   if(event.detail?.name!=='expense')OBA_PAYROLL.action=null;
   if(event.detail?.name==='expense'&&['boss','owner-control'].includes(window.OBA_ACCESS_SESSION?.kind)){
-    if(OBA_PAYROLL.pageModel?.source==='draft'&&OBA_PAYROLL.pageModel?.draft?.recoveryOnly===true){
+    if(OBA_PAYROLL.pageModel?.source==='draft'&&OBA_PAYROLL.pageModel?.draft?.recoveryOnly===true&&OBA_PAYROLL.busy){
       renderPayrollPage(OBA_PAYROLL.pageModel);
       return;
     }
