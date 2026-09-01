@@ -237,6 +237,9 @@ function reportOrderStatus(order){
   if(order?.refunded) return '已退票';
   return order?.assignedDesignerId?'有效／已掛業績':'有效／未掛業績';
 }
+function reportDisplayName(value){
+  return typeof displayUserLabel==='function' ? displayUserLabel(value) : String(value||'').replace(/總控／擁有者/g,'總控').replace(/^擁有者$/,'總控');
+}
 function reportOrderAffectsTotals(order){
   return !order?.refunded && !(order?.void===true||order?.cancelled===true||String(order?.status||'').toLowerCase()==='void');
 }
@@ -286,8 +289,8 @@ function buildReportExportData(filters=reportFilterValues(),ctx=reportViewerCont
       '單號':String(order.id||order.orderNo||''),
       '業績歸屬員工':String(order.assignedDesignerName||order.assignedDesignerId||'未掛業績'),
       '單據總業績':performanceTotal,
-      '單據總抽成':savedCommission,
-      '本期計入單據抽成':inSalary?savedCommission:0,
+      '單據總抽成':order.assignedDesignerId?savedCommission:'',
+      '本期計入單據抽成':order.assignedDesignerId?(inSalary?savedCommission:0):'',
       '付款／計薪來源':reportOrderSource(order),
       '單據狀態':status,
       '是否計入薪資':inSalary?'是':'否',
@@ -298,8 +301,8 @@ function buildReportExportData(filters=reportFilterValues(),ctx=reportViewerCont
       '各項原金額':Number(row.item?.sourcePrice||row.item?.originalPrice||row.item?.price||0),
       '各項計薪基礎':Number(row.base||0),
       '各項抽成％':order.assignedDesignerId?Number(row.rate||0):'',
-      '各項抽成金額':affectsTotals?Number(row.commission||0):0,
-      '本期計入各項抽成':inSalary?Number(row.commission||0):0
+      '各項抽成金額':order.assignedDesignerId?(affectsTotals?Number(row.commission||0):0):'',
+      '本期計入各項抽成':order.assignedDesignerId?(inSalary?Number(row.commission||0):0):''
     }));
     if(affectsTotals&&audit.difference!==0){
       detailRows.push({...common,
@@ -320,7 +323,7 @@ function buildReportExportData(filters=reportFilterValues(),ctx=reportViewerCont
   const refundRows=scopedRefunds.map(refund=>({
     '日期時間':`${refund.date||''} ${refund.time||''}`.trim(),
     '原單號':String(refund.orderId||''),'退款／退票金額':Number(refund.total||0),
-    '原因':String(refund.reason||''),'操作人':String(refund.staffName||refund.by||''),'狀態':'退票'
+    '原因':String(refund.reason||''),'操作人':reportDisplayName(refund.staffName||refund.by||''),'狀態':'退票'
   }));
   return {detailRows,orderRows,refundRows,orders:scopedOrders,refunds:scopedRefunds};
 }
@@ -450,14 +453,15 @@ function renderReport(){
   const reprintBtn=$('#btnReprintOpen'); if(reprintBtn) reprintBtn.classList.toggle('hidden',!canReprintReportData());
   const rows=[...rangeRecordOrders.map(o=>({kind:'sale',...o})),...rangeRefunds.map(r=>({kind:'refund',...r}))].sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''));
   $('#reportTable').innerHTML=rows.length?`<div class="tr header"><div>內容</div><div>金額</div><div>收款/操作</div><div>設計師</div><div>抽成％</div><div>抽成金額</div><div>時間</div><div>狀態</div></div>${rows.map(r=>{
-    if(r.kind!=='sale')return `<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${r.by}</div><div>--</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`;
+    if(r.kind!=='sale')return `<div class="tr"><div><strong>退票 ${r.orderId}</strong><br><span style="color:#6b7280">${r.reason}</span></div><div>${money(r.total)}</div><div>${reportEscapeHtml(reportDisplayName(r.by||r.staffName||''))}</div><div>--</div><div>--</div><div>--</div><div>${r.time}</div><div>退票</div></div>`;
     const commissionRows=reportCommissionAudit(r).rows;
     const status=reportOrderStatus(r);
     const rateLines=r.assignedDesignerId&&reportOrderAffectsTotals(r)
       ? commissionRows.map(row=>`${reportEscapeHtml(row.item?.name||'-')}：${(Number(row.rate||0)*100).toFixed(2).replace(/\.00$/,'')}%`).join('<br>')
       : '—';
     const commissionValue=reportOrderAffectsTotals(r)?Number(r.commission||0):0;
-    return `<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${r.cashierName||r.paymentMethod}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${rateLines}</div><div>${money(commissionValue)}</div><div>${r.time}</div><div>${status}</div></div>`;
+    const commissionText=r.assignedDesignerId?money(commissionValue):'—';
+    return `<div class="tr"><div><strong>${r.id}</strong><br><span style="color:#6b7280">${r.items.map(i=>i.name).join('、')}</span></div><div>${money(r.total)}</div><div>${reportEscapeHtml(reportDisplayName(r.cashierName||r.paymentMethod))}</div><div>${r.assignedDesignerName||'未掛業績'}</div><div>${rateLines}</div><div>${commissionText}</div><div>${r.time}</div><div>${status}</div></div>`;
   }).join('')}`:`<div class="tr header"><div>這個時間段沒有紀錄</div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>`;
 }
 document.addEventListener('change',function(e){

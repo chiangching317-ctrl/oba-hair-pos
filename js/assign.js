@@ -600,7 +600,7 @@ async function executeAssignedOrderVoidWithOwnerControl(){
   try{
     if(guardBossAction()) return false;
     if(!canExecuteAssignedOrderVoid()){
-      alert('已掛業績作廢僅限總控／擁有者執行');
+      alert('已掛業績作廢僅限總控執行');
       return false;
     }
     const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;
@@ -611,7 +611,7 @@ async function executeAssignedOrderVoidWithOwnerControl(){
     if(!reason){alert('請選擇作廢原因');return false}
 
     if(refundDialog?.open) refundDialog.close();
-    const pin=await askMaskedPassword('已掛業績作廢會回沖業績與抽成，請再次輸入總控／擁有者 PIN','總控／擁有者 PIN');
+    const pin=await askMaskedPassword('已掛業績作廢會回沖業績與抽成，請再次輸入總控 PIN','總控 PIN');
     if(pin===null){reopenRefundDialog();return false}
     const verified=await verifyPinSecure(pin,'report');
     if(!verified.ok||verified.kind!=='owner-control'){

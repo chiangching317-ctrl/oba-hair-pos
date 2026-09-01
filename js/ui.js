@@ -1,9 +1,14 @@
 function currentEntryViewerLabel(){
   const session=window.OBA_ACCESS_SESSION;
   if(!session)return '';
-  if(session.kind==='owner-control')return '總控／擁有者';
+  if(session.kind==='owner-control')return '總控';
   if(session.kind==='boss')return 'BOSS 唯讀';
   return String(session.name||session.id||'員工');
+}
+function displayUserLabel(value){
+  const text=String(value||'');
+  if(text==='擁有者'||text==='總控／擁有者') return '總控';
+  return text.replace(/總控／擁有者/g,'總控');
 }
 function updateCashierDisplay(){
   const badge=$('#cashierDisplay');
@@ -186,7 +191,7 @@ async function changeManagementPasswordSecurely(oldPwd,newPwd){
   if(!isPageTabAuthorized('manage')){alert('管理頁授權已失效，未修改管理密碼');return false}
   const next=String(newPwd||'').trim();
   if(!/^\d{6}$/.test(next)){alert('新總控 PIN 必須是固定 6 位數字');return false}
-  const current=await askMaskedPassword('請再次輸入目前總控／擁有者 PIN','6 位數 PIN');
+  const current=await askMaskedPassword('請再次輸入目前總控 PIN','6 位數 PIN');
   if(current===null) return false;
   const changed=await changeOwnerPinSecure(current,next);
   if(!changed.ok){alert('目前總控 PIN 驗證失敗，未修改');return false}
