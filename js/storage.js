@@ -438,6 +438,151 @@ async function saveAssignedOrderVerified(orderId, assignment, assignLog){
   }
 }
 
+async function saveAssignedOrderVoidVerified(orderId, reason, actor){
+  const id=String(orderId||'').trim();
+  const voidReason=String(reason||'').trim();
+  const operator={id:String(actor?.id||''),name:String(actor?.name||'總控')};
+  if(!id) return {ok:false,message:'缺少單號'};
+  if(!voidReason) return {ok:false,message:'請選擇作廢原因'};
+
+  const localOrder=(state.orders||[]).find(o=>String(o.id||o.orderNo||'')===id);
+  if(!localOrder) return {ok:false,message:'本機找不到這張單，請先同步後再查單'};
+  if(!String(localOrder.assignedDesignerId||'').trim()) return {ok:false,message:'這張單尚未掛業績，請使用一般退票'};
+
+  const client=getCloudClient();
+  if(!client) return {ok:false,message:'目前未連上雲端，為避免假成功，未執行作廢'};
+  if(!credentialWriteGuardReady) return {ok:false,message:'DEV credential 防回寫護欄尚未就緒，未執行作廢'};
+  if(cloudSaving) return {ok:false,message:'系統正在同步，請稍候再試'};
+
+  cloudSaving=true;
+  try{
+    const maxAttempts=3;
+    for(let attempt=1;attempt<=maxAttempts;attempt++){
+      const latest=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(latest.error) return {ok:false,message:'讀取雲端失敗：'+latest.error.message};
+
+      const chosen=chooseAuthoritativeCloudRow(latest.data||[]);
+      if(!chosen) return {ok:false,message:'雲端找不到正式資料'};
+
+      const merged=normalizeCloudState(clone(chosen.data));
+      const cloudOrder=(merged.orders||[]).find(o=>String(o.id||o.orderNo||'')===id);
+      if(!cloudOrder) return {ok:false,message:'雲端找不到這張單，未執行作廢'};
+      if(cloudOrder.refunded||cloudOrder.void===true||String(cloudOrder.status||'').toLowerCase()==='void'){
+        return {ok:false,message:'這張單已退票或作廢'};
+      }
+      if(!String(cloudOrder.assignedDesignerId||'').trim()) return {ok:false,message:'這張單尚未掛業績，請使用一般退票'};
+
+      const refundedAt=new Date().toISOString();
+      const originalSnapshot={
+        assignedDesignerId:String(cloudOrder.assignedDesignerId||''),
+        assignedDesignerName:String(cloudOrder.assignedDesignerName||''),
+        commission:Number(cloudOrder.commission||0),
+        performanceTotal:Number(orderPerformanceSnapshot(cloudOrder)||0),
+        assignedAt:String(cloudOrder.assignedAt||''),
+        paymentMethod:String(cloudOrder.paymentMethod||''),
+        total:Number(cloudOrder.total||0)
+      };
+
+      cloudOrder.refunded=true;
+      cloudOrder.void=true;
+      cloudOrder.status='void';
+      cloudOrder.voidType='assigned_order_void';
+      cloudOrder.refundedAt=refundedAt;
+      cloudOrder.refundReason=voidReason;
+      cloudOrder.refundedById=operator.id;
+      cloudOrder.refundedByName=operator.name;
+      cloudOrder.voidedAt=refundedAt;
+      cloudOrder.voidReason=voidReason;
+      cloudOrder.voidedById=operator.id;
+      cloudOrder.voidedByName=operator.name;
+      if(!cloudOrder.voidOriginal) cloudOrder.voidOriginal=originalSnapshot;
+
+      if(!Array.isArray(merged.assignLogs)) merged.assignLogs=[];
+      merged.assignLogs.forEach(log=>{
+        if(String(log.orderNo||'')===id && log.status!=='已退票' && log.status!=='作廢' && log.status!=='已作廢'){
+          log.status='已作廢';
+          log.voidedAt=refundedAt;
+          log.voidedBy=operator.name;
+          log.remark=voidReason || log.remark || '';
+        }
+      });
+
+      if(!Array.isArray(merged.refunds)) merged.refunds=[];
+      const existingRefund=merged.refunds.find(refund=>String(refund.orderId||'')===id);
+      if(!existingRefund){
+        merged.refunds.unshift({
+          id:'REFUND-'+Date.now()+'-'+Math.random().toString(16).slice(2),
+          orderId:id,
+          date:todayStr(),
+          time:nowTime(),
+          total:Number(cloudOrder.total||0),
+          reason:voidReason,
+          staffId:operator.id,
+          staffName:operator.name,
+          by:operator.name,
+          refundedAt,
+          createdAt:refundedAt,
+          voidType:'assigned_order_void',
+          sourceType:'已掛業績高權限作廢',
+          originalAssignedDesignerId:originalSnapshot.assignedDesignerId,
+          originalAssignedDesignerName:originalSnapshot.assignedDesignerName,
+          originalCommission:originalSnapshot.commission,
+          originalPerformanceTotal:originalSnapshot.performanceTotal
+        });
+      }
+
+      const stamp=new Date().toISOString();
+      const updateResult=await client
+        .from(CLOUD_TABLE)
+        .update({data:merged,updated_at:stamp})
+        .eq('id',CLOUD_ROW_ID)
+        .eq('updated_at',chosen.updated_at)
+        .select('id,updated_at');
+      if(updateResult.error) return {ok:false,message:'雲端寫入失敗：'+updateResult.error.message};
+      if(!updateResult.data||!updateResult.data.length){
+        if(attempt<maxAttempts){
+          await new Promise(resolve=>setTimeout(resolve,180*attempt));
+          continue;
+        }
+        return {ok:false,message:'資料剛被其他裝置更新，為避免覆蓋，未執行作廢，請再按一次'};
+      }
+
+      const verify=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(verify.error) return {ok:false,message:'寫入後驗證失敗：'+verify.error.message};
+
+      const verifiedRow=chooseAuthoritativeCloudRow(verify.data||[]);
+      const verifiedState=verifiedRow?.data ? normalizeCloudState(verifiedRow.data) : null;
+      const verifiedOrder=verifiedState?.orders?.find(o=>String(o.id||o.orderNo||'')===id);
+      const verifiedRefund=(verifiedState?.refunds||[]).find(refund=>String(refund.orderId||'')===id);
+      const orderVoided=!!(verifiedOrder?.refunded&&(verifiedOrder.void===true||String(verifiedOrder.status||'').toLowerCase()==='void'||String(verifiedOrder.voidType||'')==='assigned_order_void'));
+      if(!orderVoided||!verifiedRefund){
+        return {ok:false,message:'雲端驗證未通過，系統沒有把這張單當成完成作廢，請重新查單'};
+      }
+
+      state=verifiedState;
+      localStorage.setItem(KEY,JSON.stringify(state));
+      cloudReady=true;
+      return {ok:true,order:clone(verifiedOrder)};
+    }
+    return {ok:false,message:'雲端忙碌，未執行作廢，請稍後再試'};
+  }catch(err){
+    console.log('已掛業績作廢存檔錯誤',err);
+    return {ok:false,message:'作廢存檔發生錯誤：'+(err?.message||err)};
+  }finally{
+    cloudSaving=false;
+  }
+}
+
 
 // V11.1.29 P0：管理頁局部存檔保護。
 // 員工/品項儲存不可用本機舊 state 整包覆蓋雲端 orders/refunds/counters。

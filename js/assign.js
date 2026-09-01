@@ -421,7 +421,25 @@ function renderMyStats(){
   renderTodayAssignLogs();
 }
 
-function openRefund(code=''){ if(guardBossAction()) return; $('#refundOrderNo').value=code; $('#refundReason').value=''; $('#refundReasonOther').value=''; $('#refundReasonOther').classList.add('hidden'); renderRefundPreview(); $('#refundDialog').showModal() }
+function canExecuteAssignedOrderVoid(){
+  return !isBossMode() && window.OBA_ACCESS_SESSION?.kind==='owner-control';
+}
+function updateAssignedVoidButton(order=null){
+  const button=$('#btnDoAssignedVoid');
+  if(!button) return;
+  const show=!!(order && String(order.assignedDesignerId||'').trim() && !order.refunded && canExecuteAssignedOrderVoid());
+  button.classList.toggle('hidden',!show);
+  button.disabled=!show;
+}
+function openRefund(code=''){
+  if(guardBossAction()) return;
+  $('#refundOrderNo').value=code;
+  $('#refundReason').value='';
+  $('#refundReasonOther').value='';
+  $('#refundReasonOther').classList.add('hidden');
+  renderRefundPreview();
+  $('#refundDialog').showModal();
+}
 $('#btnRefundQuick').onclick=()=>openRefund(''); $('#btnAssignRefund').onclick=()=>openRefund($('#assignOrderNo').value.trim()); $('#btnCloseRefund').onclick=()=>$('#refundDialog').close();
 
 function openReprintDialog(){
@@ -482,7 +500,15 @@ function renderReprintList(){
 
 $('#refundReason').onchange=()=>$('#refundReasonOther').classList.toggle('hidden',$('#refundReason').value!=='其他');
 $('#refundOrderNo').addEventListener('input',renderRefundPreview);
-function renderRefundPreview(){const code=$('#refundOrderNo').value.trim();const order=findOrderByCode(code); if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return} $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>狀態</div><div>${order.refunded?'已退票':'可退票'}</div></div>`}
+function renderRefundPreview(){
+  const code=$('#refundOrderNo').value.trim();
+  const order=findOrderByCode(code);
+  updateAssignedVoidButton(order);
+  if(!order){$('#refundPreview').innerHTML='請掃描或輸入單號';return}
+  const assigned=String(order.assignedDesignerId||'').trim();
+  const status=order.refunded?'已退票':(assigned?'已掛業績，需總控高權限作廢':'可退票');
+  $('#refundPreview').innerHTML=`${order.items.map((i,idx)=>`<div class="bill-row"><div>${idx+1}. ${i.name}</div><div>${money(i.price)}</div></div>`).join('')}<div class="bill-row"><div>收款</div><div>${order.paymentMethod}</div></div><div class="bill-row"><div>收款操作員</div><div>${order.cashierName||'-'}</div></div><div class="bill-row"><div>業績歸屬</div><div>${order.assignedDesignerName||order.assignedDesignerId||'未掛業績'}</div></div><div class="bill-row"><div>狀態</div><div>${status}</div></div>`;
+}
 async function executeRefundWithPin(){
   const refundDialog=$('#refundDialog');
   const reopenRefundDialog=()=>{
@@ -564,6 +590,76 @@ if(secureRefundButton){
   secureRefundButton.addEventListener('touchend',activateSecureRefund,{passive:false});
 }else{
   console.error('V11.1.58：找不到 #btnDoRefund，退票功能保持停用');
+}
+
+async function executeAssignedOrderVoidWithOwnerControl(){
+  const refundDialog=$('#refundDialog');
+  const reopenRefundDialog=()=>{
+    try{if(refundDialog && !refundDialog.open) refundDialog.showModal()}catch(error){console.error('恢復退票視窗失敗',error)}
+  };
+  try{
+    if(guardBossAction()) return false;
+    if(!canExecuteAssignedOrderVoid()){
+      alert('已掛業績作廢僅限總控／擁有者執行');
+      return false;
+    }
+    const code=$('#refundOrderNo').value.trim(), selected=$('#refundReason').value.trim(), other=$('#refundReasonOther').value.trim(), reason=selected==='其他'?other:selected;
+    const order=findOrderByCode(code);
+    if(!order){alert('找不到單號：'+code+'。請先同步後再查單。');return false}
+    if(order.refunded){alert('這張單已退票或作廢');return false}
+    if(!String(order.assignedDesignerId||'').trim()){alert('這張單尚未掛業績，請使用一般退票');return false}
+    if(!reason){alert('請選擇作廢原因');return false}
+
+    if(refundDialog?.open) refundDialog.close();
+    const pin=await askMaskedPassword('已掛業績作廢會回沖業績與抽成，請再次輸入總控／擁有者 PIN','總控／擁有者 PIN');
+    if(pin===null){reopenRefundDialog();return false}
+    const verified=await verifyPinSecure(pin,'report');
+    if(!verified.ok||verified.kind!=='owner-control'){
+      alert(pinFailureMessage(verified,'已掛業績作廢'));
+      reopenRefundDialog();
+      return false;
+    }
+
+    const latestOrder=findOrderByCode(code);
+    if(!latestOrder || latestOrder.refunded || !String(latestOrder.assignedDesignerId||'').trim()){
+      alert('訂單狀態已變更，未執行作廢，請重新查單');
+      reopenRefundDialog();
+      return false;
+    }
+    const result=await saveAssignedOrderVoidVerified(latestOrder.id||latestOrder.orderNo,reason,{id:verified.id,name:verified.name||'總控'});
+    if(!result.ok){
+      alert(result.message||'已掛業績作廢未完成');
+      reopenRefundDialog();
+      return false;
+    }
+    if(LAST_ASSIGNED_ORDER_NO===String(latestOrder.id||latestOrder.orderNo||'')) LAST_ASSIGNED_ORDER_NO='';
+    renderRefundPreview();
+    renderAssign();
+    renderReport();
+    alert('已完成高權限作廢，原單保留查帳，營業額、付款、業績、抽成與薪資已排除');
+    return true;
+  }catch(error){
+    console.error('已掛業績作廢流程錯誤',error);
+    alert('已掛業績作廢發生錯誤，未執行作廢：'+(error?.message||error));
+    reopenRefundDialog();
+    return false;
+  }
+}
+let lastAssignedVoidActivationAt=0;
+async function activateAssignedOrderVoid(event){
+  const now=Date.now();
+  if(now-lastAssignedVoidActivationAt<700) return;
+  lastAssignedVoidActivationAt=now;
+  if(event?.type==='touchend') event.preventDefault();
+  const button=$('#btnDoAssignedVoid');
+  if(button){button.disabled=true;button.textContent='等待總控驗證…'}
+  try{await executeAssignedOrderVoidWithOwnerControl()}
+  finally{if(button){button.textContent='高權限作廢已掛業績單';renderRefundPreview()}}
+}
+const assignedVoidButton=$('#btnDoAssignedVoid');
+if(assignedVoidButton){
+  assignedVoidButton.addEventListener('click',activateAssignedOrderVoid);
+  assignedVoidButton.addEventListener('touchend',activateAssignedOrderVoid,{passive:false});
 }
 
 let scanStream=null, scanTimer=null, barcodeDetector=null, zxingReader=null, zxingControls=null;

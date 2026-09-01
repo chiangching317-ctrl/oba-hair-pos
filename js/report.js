@@ -233,8 +233,8 @@ function reportSalaryResetStamp(){
   return newestStamp(newestStamp(state.lastResetAt,getLocalResetMarker()),state.salaryResetAt);
 }
 function reportOrderStatus(order){
+  if(order?.void===true||order?.cancelled===true||String(order?.status||'').toLowerCase()==='void'||String(order?.voidType||'')==='assigned_order_void') return '作廢 / 已退票';
   if(order?.refunded) return '已退票';
-  if(order?.void===true||order?.cancelled===true||String(order?.status||'').toLowerCase()==='void') return '已作廢';
   return order?.assignedDesignerId?'有效／已掛業績':'有效／未掛業績';
 }
 function reportOrderAffectsTotals(order){
