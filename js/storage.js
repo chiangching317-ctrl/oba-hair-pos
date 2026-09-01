@@ -438,12 +438,140 @@ async function saveAssignedOrderVerified(orderId, assignment, assignLog){
   }
 }
 
+async function saveRefundOrderVerified(orderId, reason, actor){
+  const id=String(orderId||'').trim();
+  const refundReason=String(reason||'').trim();
+  const operator={id:String(actor?.id||''),name:String(actor?.name||''),kind:String(actor?.kind||'')};
+  if(!id) return {ok:false,message:'缺少單號'};
+  if(!refundReason) return {ok:false,message:'請選擇退票原因'};
+  if(operator.kind!=='staff'||!operator.id) return {ok:false,message:'退票需要員工 PIN 驗證'};
+
+  const localOrder=(state.orders||[]).find(o=>String(o.id||o.orderNo||'')===id);
+  if(!localOrder) return {ok:false,message:'本機找不到這張單，請先同步後再查單'};
+  if(String(localOrder.assignedDesignerId||'').trim()) return {ok:false,message:'此單已入業績，不允許退票'};
+
+  const client=getCloudClient();
+  if(!client) return {ok:false,message:'目前未連上雲端，為避免假成功，未執行退票'};
+  if(!credentialWriteGuardReady) return {ok:false,message:'DEV credential 防回寫護欄尚未就緒，未執行退票'};
+  if(cloudSaving) return {ok:false,message:'系統正在同步，請稍候再試'};
+
+  cloudSaving=true;
+  try{
+    const maxAttempts=3;
+    for(let attempt=1;attempt<=maxAttempts;attempt++){
+      const latest=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(latest.error) return {ok:false,message:'讀取雲端失敗：'+latest.error.message};
+
+      const chosen=chooseAuthoritativeCloudRow(latest.data||[]);
+      if(!chosen) return {ok:false,message:'雲端找不到正式資料'};
+
+      const merged=normalizeCloudState(clone(chosen.data));
+      const cloudOrder=(merged.orders||[]).find(o=>String(o.id||o.orderNo||'')===id);
+      if(!cloudOrder) return {ok:false,message:'雲端找不到這張單，未執行退票'};
+      if(String(cloudOrder.assignedDesignerId||'').trim()) return {ok:false,message:'此單已入業績，不允許退票'};
+
+      if(!Array.isArray(merged.refunds)) merged.refunds=[];
+      const existingRefund=merged.refunds.find(refund=>String(refund.orderId||'')===id);
+      if(cloudOrder.refunded){
+        state=merged;
+        localStorage.setItem(KEY,JSON.stringify(state));
+        cloudReady=true;
+        return existingRefund
+          ? {ok:true,alreadyVerified:true,order:clone(cloudOrder)}
+          : {ok:false,message:'這張單已退票，但退票紀錄未通過驗證，請停止操作並查核'};
+      }
+
+      const refundedAt=new Date().toISOString();
+      cloudOrder.refunded=true;
+      cloudOrder.refundedAt=refundedAt;
+      cloudOrder.refundReason=refundReason;
+      cloudOrder.refundedById=operator.id;
+      cloudOrder.refundedByName=operator.name;
+
+      if(!existingRefund){
+        merged.refunds.unshift({
+          id:'REFUND-'+Date.now()+'-'+Math.random().toString(16).slice(2),
+          orderId:id,
+          date:todayStr(),
+          time:nowTime(),
+          total:Number(cloudOrder.total||0),
+          reason:refundReason,
+          staffId:operator.id,
+          staffName:operator.name,
+          by:operator.name,
+          refundedAt,
+          createdAt:refundedAt
+        });
+      }
+
+      if(!Array.isArray(merged.assignLogs)) merged.assignLogs=[];
+      merged.assignLogs.forEach(log=>{
+        if(String(log.orderNo||'')===id && log.status!=='已退票'){
+          log.status='已退票';
+          log.voidedAt=refundedAt;
+          log.voidedBy=operator.name;
+          log.remark=refundReason || log.remark || '';
+        }
+      });
+
+      const stamp=new Date().toISOString();
+      const updateResult=await client
+        .from(CLOUD_TABLE)
+        .update({data:merged,updated_at:stamp})
+        .eq('id',CLOUD_ROW_ID)
+        .eq('updated_at',chosen.updated_at)
+        .select('id,updated_at');
+      if(updateResult.error) return {ok:false,message:'雲端寫入失敗：'+updateResult.error.message};
+      if(!updateResult.data||!updateResult.data.length){
+        if(attempt<maxAttempts){
+          await new Promise(resolve=>setTimeout(resolve,180*attempt));
+          continue;
+        }
+        return {ok:false,message:'資料剛被其他裝置更新，為避免覆蓋，未執行退票，請再按一次'};
+      }
+
+      const verify=await client
+        .from(CLOUD_TABLE)
+        .select('id,data,updated_at')
+        .eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false})
+        .limit(20);
+      if(verify.error) return {ok:false,message:'寫入後驗證失敗：'+verify.error.message};
+
+      const verifiedRow=chooseAuthoritativeCloudRow(verify.data||[]);
+      const verifiedState=verifiedRow?.data ? normalizeCloudState(verifiedRow.data) : null;
+      const verifiedOrder=verifiedState?.orders?.find(o=>String(o.id||o.orderNo||'')===id);
+      const verifiedRefunds=(verifiedState?.refunds||[]).filter(refund=>String(refund.orderId||'')===id);
+      if(!verifiedOrder?.refunded||verifiedRefunds.length!==1){
+        return {ok:false,message:'雲端驗證未通過，系統沒有把這張單當成完成退票，請重新查單'};
+      }
+
+      state=verifiedState;
+      localStorage.setItem(KEY,JSON.stringify(state));
+      cloudReady=true;
+      return {ok:true,order:clone(verifiedOrder)};
+    }
+    return {ok:false,message:'雲端忙碌，未執行退票，請稍後再試'};
+  }catch(err){
+    console.log('退票安全存檔錯誤',err);
+    return {ok:false,message:'退票存檔發生錯誤：'+(err?.message||err)};
+  }finally{
+    cloudSaving=false;
+  }
+}
+
 async function saveAssignedOrderVoidVerified(orderId, reason, actor){
   const id=String(orderId||'').trim();
   const voidReason=String(reason||'').trim();
-  const operator={id:String(actor?.id||''),name:String(actor?.name||'總控')};
+  const operator={id:String(actor?.id||''),name:String(actor?.name||'總控'),kind:String(actor?.kind||'')};
   if(!id) return {ok:false,message:'缺少單號'};
   if(!voidReason) return {ok:false,message:'請選擇作廢原因'};
+  if(window.OBA_ACCESS_SESSION?.kind!=='owner-control'||operator.kind!=='owner-control') return {ok:false,message:'已掛業績作廢僅限總控執行'};
 
   const localOrder=(state.orders||[]).find(o=>String(o.id||o.orderNo||'')===id);
   if(!localOrder) return {ok:false,message:'本機找不到這張單，請先同步後再查單'};

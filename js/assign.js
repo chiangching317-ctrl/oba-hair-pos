@@ -551,16 +551,13 @@ async function executeRefundWithPin(){
       reopenRefundDialog();
       return false;
     }
-    const refundedAt=new Date().toISOString();
-    verifiedOrder.refunded=true;
-    verifiedOrder.refundedAt=refundedAt;
-    verifiedOrder.refundReason=reason;
-    verifiedOrder.refundedById=operator.id;
-    verifiedOrder.refundedByName=operator.name;
-    markAssignLogsRefunded(verifiedOrder,reason);
-    state.refunds.unshift({orderId:verifiedOrder.id,date:todayStr(),time:nowTime(),total:Number(verifiedOrder.total||0),reason:reason,staffId:operator.id,staffName:operator.name,by:operator.name,refundedAt,createdAt:refundedAt});
-    if(LAST_ASSIGNED_ORDER_NO===verifiedOrder.id) LAST_ASSIGNED_ORDER_NO='';
-    saveState(true);
+    const result=await saveRefundOrderVerified(verifiedOrder.id||verifiedOrder.orderNo,reason,{id:operator.id,name:operator.name,kind:verifiedOperator.kind});
+    if(!result.ok){
+      alert(result.message||'退票未完成');
+      reopenRefundDialog();
+      return false;
+    }
+    if(LAST_ASSIGNED_ORDER_NO===String(verifiedOrder.id||verifiedOrder.orderNo||'')) LAST_ASSIGNED_ORDER_NO='';
     renderRefundPreview();
     renderAssign();
     renderReport();
@@ -626,7 +623,7 @@ async function executeAssignedOrderVoidWithOwnerControl(){
       reopenRefundDialog();
       return false;
     }
-    const result=await saveAssignedOrderVoidVerified(latestOrder.id||latestOrder.orderNo,reason,{id:verified.id,name:verified.name||'總控'});
+    const result=await saveAssignedOrderVoidVerified(latestOrder.id||latestOrder.orderNo,reason,{id:verified.id,name:verified.name||'總控',kind:verified.kind});
     if(!result.ok){
       alert(result.message||'已掛業績作廢未完成');
       reopenRefundDialog();

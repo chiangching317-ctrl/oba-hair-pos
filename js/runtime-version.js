@@ -181,7 +181,7 @@
   }
   function installWriteGuards(){
     [
-      'saveState','saveStatePatch','saveCheckoutOrderVerified','saveAssignedOrderVerified',
+      'saveState','saveStatePatch','saveCheckoutOrderVerified','saveAssignedOrderVerified','saveRefundOrderVerified','saveAssignedOrderVoidVerified',
       'assignCurrentOrder','executeRefundWithPin','clockIn','clockOut','submitRedeem',
       'saveExpenseEntry','deleteExpense','addCustomExpenseCategory','saveJeanManagementShareRate',
       'savePayrollTrialInput','syncPayrollLocalToCloud','previewFormalPayroll','closeFormalPayroll','reopenFormalPayroll',
