@@ -146,7 +146,16 @@ $('#btnConfirmPay').onclick=async()=>{
   CHECKOUT_SNAPSHOT=null;
   CURRENT_CASHIER=null;
   localStorage.setItem(KEY,JSON.stringify(state));
-  renderCashier();renderAssign();renderReport();updateCashierDisplay();
   $('#payDialog').close();
+  renderCashier();renderAssign();renderReport();updateCashierDisplay();
+  if(order?.id && typeof setActiveTab==='function'){
+    setActiveTab('assign');
+    const assignInput=$('#assignOrderNo');
+    if(assignInput){
+      assignInput.value=order.id;
+      assignInput.dispatchEvent(new Event('input',{bubbles:true}));
+      setTimeout(()=>assignInput.focus(),80);
+    }
+  }
   openReceipt(order)
 }
