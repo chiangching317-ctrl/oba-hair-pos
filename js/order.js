@@ -149,12 +149,8 @@ function orderItemCommissionBase(order,item,index){
 }
 function orderPerformanceSnapshot(order){
   if(!order) return 0;
+  if(isRedeemOrder(order)) return 0;
   if(Object.prototype.hasOwnProperty.call(order,'performanceTotal')&&Number.isFinite(Number(order.performanceTotal))) return Number(order.performanceTotal);
-  if(isRedeemOrder(order)){
-    const metaValue=Number(order.redeemMeta?.sourcePrice||0);
-    if(metaValue>0) return metaValue;
-    return (order.items||[]).reduce((sum,item)=>sum+Number(item?.sourcePrice||item?.originalPrice||item?.price||0),0);
-  }
   return Number(order.total||0);
 }
 function commissionRateForItem(staff,item){
