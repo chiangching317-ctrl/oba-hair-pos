@@ -6,6 +6,34 @@ let cloudResetting=false; // V11.0.45：清空歸零時暫停 pull，避免雲�
 let devEnvironmentBlocked=false;
 let devBootstrapReady=false;
 let credentialWriteGuardReady=false;
+// Per-page, per-session hints only. Never use these to authorize a transaction.
+let cloudStateEpoch=0;
+let cloudLoadedVersion=null;
+let cloudLastFullReadAt=0;
+let cloudBackgroundTask=null;
+let cloudSyncTimer=null;
+let cloudFullReads=0;
+// Backend/manual writers have not all been audited for updated_at maintenance.
+// Keep a bounded reconciliation instead of trusting that hint indefinitely.
+const CLOUD_FULL_AUDIT_MS=300000;
+const CLOUD_BACKGROUND_TIMEOUT_MS=30000;
+function invalidateCloudReadHint(){
+  cloudStateEpoch+=1;
+  cloudLoadedVersion=null;
+}
+function singleCloudRowVersion(rows){
+  // Preserve legacy lastResetAt selection: ambiguous/duplicate rows need a full pull.
+  if(!Array.isArray(rows)||rows.length!==1)return null;
+  const row=rows[0];
+  if(row?.id!==CLOUD_ROW_ID||typeof row.updated_at!=='string'||!row.updated_at||!Number.isFinite(Date.parse(row.updated_at)))return null;
+  return JSON.stringify([row.id,row.updated_at]);
+}
+function canRunCloudBackgroundSync(){
+  return devBootstrapReady&&!devEnvironmentBlocked&&!document.hidden&&
+    !!window.OBA_ACCESS_SESSION?.token&&!cloudSaving&&!cloudResetting&&
+    !ITEM_DIRTY&&!STAFF_DIRTY&&!isManageEditing()&&
+    !((typeof isCheckoutInProgress==='function')&&isCheckoutInProgress());
+}
 const PULL_FAIL_LOG_KEY=String(window.OBA_RUNTIME_CONFIG?.storageKeys?.pullFailLog||'');
 if(!PULL_FAIL_LOG_KEY)throw new Error('OBA_RUNTIME_STORAGE_CONFIG_INVALID');
 function cloudEnvironmentName(){
@@ -39,7 +67,11 @@ function recordDevPullFail(reason,error=null){
     console.warn('PULL_FAIL 紀錄寫入失敗',logError);
   }
 }
-function resetCloudClientForAccessSession(){cloudClient=null}
+function resetCloudClientForAccessSession(){
+  cloudClient=null;
+  invalidateCloudReadHint();
+  cloudLastFullReadAt=0;
+}
 function getCloudClient(allowAnonymous=false){
   if(cloudClient) return cloudClient;
   if(!window.supabase || !SUPABASE_URL || !SUPABASE_KEY) return null;
@@ -87,7 +119,7 @@ function normalizeCloudState(data){
   if(merged.staff.length&&!merged.staff.find(s=>s.owner)) merged.staff[0].owner=true;
   return stripPlaintextCredentials(merged);
 }
-async function pullCloudState(){
+async function pullCloudState(background=null){
   const localStateBeforePull=state;
   const localStateRawBeforePull=localStorage.getItem(KEY);
   const hadCloudResetAtBeforePull=Object.prototype.hasOwnProperty.call(window,'OBA_DEV_CLOUD_LAST_RESET_AT');
@@ -101,14 +133,29 @@ async function pullCloudState(){
     recordDevPullFail('CLOUD_CLIENT_UNAVAILABLE');
     return false;
   }
+  invalidateCloudReadHint();
+  const readEpoch=cloudStateEpoch;
+  const readSession=window.OBA_ACCESS_SESSION;
+  let applyingSnapshot=false;
+  cloudFullReads+=1;
+  const backgroundStillCurrent=()=>!background||(
+    !background.signal.aborted&&readEpoch===cloudStateEpoch&&
+    readSession===window.OBA_ACCESS_SESSION&&state===localStateBeforePull&&
+    canRunCloudBackgroundSync()
+  );
   try{
     // V11.0.47：抓多筆 main row，避免 Supabase 曾經有 duplicated main row 時拉到舊 orders。
-    const { data, error } = await client
+    let query = client
       .from(CLOUD_TABLE)
       .select('id,data,updated_at')
       .eq('id', CLOUD_ROW_ID)
       .order('updated_at', { ascending:false })
       .limit(20);
+
+    if(background)query=query.abortSignal(background.signal);
+    const { data, error } = await query;
+    // Editing, checkout or logout may have happened during this request.
+    if(!backgroundStillCurrent())return false;
 
     if(error){
       recordDevPullFail('SUPABASE_READ_ERROR',error);
@@ -141,6 +188,7 @@ async function pullCloudState(){
         const localCartSnapshot = keepCheckout ? clone(state.cart || []) : null;
         const localPendingPaySnapshot = keepCheckout ? (state.pendingPay || '') : '';
         const localPendingCheckoutSnapshot = keepCheckout ? clone(state.pendingCheckoutCart || null) : null;
+        applyingSnapshot=true;
         state = normalizeCloudState(chosen.data);
         if(keepCheckout){
           state.cart = Array.isArray(localCartSnapshot) ? localCartSnapshot : [];
@@ -157,6 +205,10 @@ async function pullCloudState(){
           state.pendingPay = '';
         }
         localStorage.setItem(KEY, JSON.stringify(state));
+        if(readEpoch===cloudStateEpoch&&readSession===window.OBA_ACCESS_SESSION){
+          cloudLoadedVersion=singleCloudRowVersion(data);
+          cloudLastFullReadAt=Date.now();
+        }
         console.log('雲端資料已載入（已避開舊 main row）', chosen.updated_at, 'rows=', rows.length);
         return true;
       }
@@ -166,6 +218,7 @@ async function pullCloudState(){
     recordDevPullFail('MAIN_ROW_NOT_FOUND');
     return false;
   }catch(err){
+    if(!applyingSnapshot&&!backgroundStillCurrent())return false;
     state=localStateBeforePull;
     try{
       if(localStateRawBeforePull===null) localStorage.removeItem(KEY);
@@ -177,6 +230,8 @@ async function pullCloudState(){
     else delete window.OBA_DEV_CLOUD_LAST_RESET_AT;
     recordDevPullFail('SUPABASE_READ_EXCEPTION',err);
     return false;
+  }finally{
+    cloudFullReads-=1;
   }
 }
 async function saveState(forceCloud=false){
@@ -189,6 +244,7 @@ async function saveState(forceCloud=false){
   if(!credentialWriteGuardReady){console.error('DEV credential 防回寫護欄尚未確認，已阻止雲端 saveState');return}
   if(cloudSaving && !forceCloud) return;
   cloudSaving=true;
+  invalidateCloudReadHint();
   try{
     const payload = {
       id:CLOUD_ROW_ID,
@@ -254,6 +310,7 @@ async function saveCheckoutOrderVerified(orderDraft){
   if(cloudSaving) return {ok:false,message:'系統正在同步，購物車已保留，請稍候再試'};
 
   cloudSaving=true;
+  invalidateCloudReadHint();
   try{
     const maxAttempts=3;
     for(let attempt=1;attempt<=maxAttempts;attempt++){
@@ -355,6 +412,7 @@ async function saveAssignedOrderVerified(orderId, assignment, assignLog){
   if(cloudSaving) return {ok:false, message:'系統正在同步，請稍候再試'};
 
   cloudSaving=true;
+  invalidateCloudReadHint();
   try{
     const maxAttempts=3;
     for(let attempt=1;attempt<=maxAttempts;attempt++){
@@ -456,6 +514,7 @@ async function saveRefundOrderVerified(orderId, reason, actor){
   if(cloudSaving) return {ok:false,message:'系統正在同步，請稍候再試'};
 
   cloudSaving=true;
+  invalidateCloudReadHint();
   try{
     const maxAttempts=3;
     for(let attempt=1;attempt<=maxAttempts;attempt++){
@@ -583,6 +642,7 @@ async function saveAssignedOrderVoidVerified(orderId, reason, actor){
   if(cloudSaving) return {ok:false,message:'系統正在同步，請稍候再試'};
 
   cloudSaving=true;
+  invalidateCloudReadHint();
   try{
     const maxAttempts=3;
     for(let attempt=1;attempt<=maxAttempts;attempt++){
@@ -725,6 +785,7 @@ async function saveStatePatch(patchFields){
   if(!credentialWriteGuardReady){console.error('DEV credential 防回寫護欄尚未確認，已阻止局部雲端存檔');return false}
   if(cloudSaving) return false;
   cloudSaving=true;
+  invalidateCloudReadHint();
   try{
     const { data, error } = await client
       .from(CLOUD_TABLE)
@@ -759,7 +820,7 @@ async function saveStatePatch(patchFields){
       .from(CLOUD_TABLE)
       .update(payload)
       .eq('id', CLOUD_ROW_ID)
-      .select('id,data,updated_at');
+      .select('id,updated_at');
 
     if(updateResult.error){
       console.log('局部存檔 update 失敗', updateResult.error);
@@ -828,19 +889,56 @@ async function bootstrapDevCloudState(){
   devBootstrapReady=true;
   return true;
 }
+function runCloudBackgroundSync(){
+  if(cloudBackgroundTask)return cloudBackgroundTask;
+  if(cloudFullReads||!canRunCloudBackgroundSync())return Promise.resolve(false);
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),CLOUD_BACKGROUND_TIMEOUT_MS);
+  const epoch=cloudStateEpoch;
+  const session=window.OBA_ACCESS_SESSION;
+  const snapshot=state;
+  const task=(async()=>{
+    try{
+      const client=getCloudClient();
+      if(!client)return false;
+      const {data,error}=await client.from(CLOUD_TABLE)
+        .select('id,updated_at').eq('id',CLOUD_ROW_ID)
+        .order('updated_at',{ascending:false}).limit(20)
+        .abortSignal(controller.signal);
+      if(controller.signal.aborted||cloudFullReads||epoch!==cloudStateEpoch||session!==window.OBA_ACCESS_SESSION||state!==snapshot||!canRunCloudBackgroundSync())return false;
+      if(error){recordDevPullFail('SUPABASE_READ_ERROR',error);return false;}
+      const version=singleCloudRowVersion(data);
+      const elapsed=Date.now()-cloudLastFullReadAt;
+      const auditDue=elapsed<0||elapsed>=CLOUD_FULL_AUDIT_MS;
+      if(version===null||version!==cloudLoadedVersion||auditDue){
+        const ok=await pullCloudState({signal:controller.signal});
+        if(!ok)return false;
+      }
+      // Preserve existing clock/report/expense refresh behavior. Independent
+      // expense RPC data is not versioned by main.updated_at.
+      refreshAllScreens();
+      return true;
+    }catch(error){
+      recordDevPullFail('BACKGROUND_SYNC_EXCEPTION',error);
+      return false;
+    }finally{
+      clearTimeout(timeout);
+    }
+  })();
+  cloudBackgroundTask=task;
+  // The lock lasts until the underlying request settles, including an abort.
+  task.finally(()=>{if(cloudBackgroundTask===task)cloudBackgroundTask=null;});
+  return task;
+}
 async function startCloudSync(skipInitialPull=false){
   if(!devBootstrapReady){
     console.warn('DEV 尚未完成安全啟動，不開始背景同步');
     return;
   }
-  if(!skipInitialPull){
-    const ok=await pullCloudState();
-    if(ok) refreshAllScreens();
-  }
-  setInterval(async()=>{
-    if(!devBootstrapReady || devEnvironmentBlocked) return;
-    if(ITEM_DIRTY || STAFF_DIRTY || isManageEditing() || ((typeof isCheckoutInProgress === 'function') && isCheckoutInProgress())){ console.log('資料正在編輯或開單中，暫停雲端覆蓋'); return; }
-    const ok=await pullCloudState();
-    if(ok) refreshAllScreens();
-  },15000);
+  if(cloudSyncTimer!==null)return;
+  cloudSyncTimer=setInterval(runCloudBackgroundSync,15000);
+  document.addEventListener('visibilitychange',runCloudBackgroundSync);
+  window.addEventListener('focus',runCloudBackgroundSync);
+  window.addEventListener('online',runCloudBackgroundSync);
+  if(!skipInitialPull)await runCloudBackgroundSync();
 }
