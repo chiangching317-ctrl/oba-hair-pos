@@ -148,14 +148,12 @@ $('#btnConfirmPay').onclick=async()=>{
   localStorage.setItem(KEY,JSON.stringify(state));
   $('#payDialog').close();
   renderCashier();renderAssign();renderReport();updateCashierDisplay();
-  if(order?.id && typeof setActiveTab==='function'){
-    setActiveTab('assign');
-    const assignInput=$('#assignOrderNo');
-    if(assignInput){
-      assignInput.value=order.id;
-      assignInput.dispatchEvent(new Event('input',{bubbles:true}));
-      setTimeout(()=>assignInput.focus(),80);
-    }
+  // Set the checkout destination before printing; a late print callback must
+  // never move the next operator or bypass phone / assign-only restrictions.
+  if(order?.id && typeof setActiveTab==='function' &&
+     typeof isPhoneDevice==='function' && !isPhoneDevice() &&
+     typeof isAssignOnlyDevice==='function' && !isAssignOnlyDevice()){
+    setActiveTab('cashier');
   }
   await openReceipt(order,{autoPrint:true});
 }
