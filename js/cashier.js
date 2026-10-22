@@ -157,5 +157,5 @@ $('#btnConfirmPay').onclick=async()=>{
       setTimeout(()=>assignInput.focus(),80);
     }
   }
-  openReceipt(order)
+  await openReceipt(order,{autoPrint:true});
 }
