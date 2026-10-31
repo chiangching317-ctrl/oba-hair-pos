@@ -62,7 +62,7 @@ function payrollRoleCapabilities(model=OBA_PAYROLL.pageModel){
   const recoveryReopenReady=owner&&closed&&['conflict','local-review'].includes(model?.source||'')&&model?.consistency?.valid===true&&!OBA_PAYROLL.localDraftDirty;
   const staffSynced=staff&&!OBA_PAYROLL.localDraftDirty&&!!OBA_PAYROLL.lastPayload&&OBA_PAYROLL.lastPayload===payrollPayloadText();
   const blockedSource=['loading','conflict','local-review','error'].includes(model?.source||'');
-  return {boss,owner,staff,authorityReady,draftReady,staffSynced,canEditDraft:!recoveryOnly&&!blockedSource&&!closed&&!boss&&(owner||staff),canSync:!closed&&!boss&&draftReady,canPreview:!boss&&(authorityReady||staffSynced),canClose:!closed&&!boss&&(authorityReady||staffSynced)&&!!OBA_PAYROLL.previewContext,canReopen:!boss&&(authorityReady&&closed||recoveryReopenReady||staffSynced)};
+  return {boss,owner,staff,authorityReady,draftReady,staffSynced,canEditDraft:!OBA_PAYROLL.busy&&!recoveryOnly&&!blockedSource&&!closed&&!boss&&(owner||staff),canSync:!closed&&!boss&&draftReady,canPreview:!boss&&(authorityReady||staffSynced),canClose:!closed&&!boss&&(authorityReady||staffSynced)&&!!OBA_PAYROLL.previewContext,canReopen:!boss&&(authorityReady&&closed||recoveryReopenReady||staffSynced)};
 }
 function payrollConsistency(totals,employees,expenses=[]){
   const salarySum=(employees||[]).reduce((sum,row)=>sum+payrollModelNumber(row.actualSalary),0);
@@ -101,7 +101,7 @@ function loadPayrollDraftMeta(){
 }
 function savePayrollDraftMeta(monthValue,domains){
   const month=payrollTrialMonth(monthValue),all=loadPayrollDraftMeta();
-  all[month]={dirty:true,domains:Array.from(new Set((domains||[]).map(String))),updatedAt:new Date().toISOString(),runtimeVersion:String(window.OBA_RUNTIME_CONFIG?.version||'11.1.81')};
+  all[month]={...all[month],dirty:true,domains:Array.from(new Set((domains||[]).map(String))),updatedAt:new Date().toISOString(),runtimeVersion:String(window.OBA_RUNTIME_CONFIG?.version||'11.1.81')};
   localStorage.setItem(OBA_PAYROLL_DRAFT_META_KEY,JSON.stringify(all));
 }
 function clearPayrollDraftMeta(monthValue){
@@ -191,19 +191,24 @@ function shouldPreservePayrollAuthorityView(){
   const model=OBA_PAYROLL.pageModel;
   return isPayrollAuthorityViewer()&&(['loading','authority','conflict','local-review','error'].includes(model?.source||'')||(model?.source==='draft'&&model?.draft?.recoveryOnly===true));
 }
-function hydratePayrollLocalDraftFromAuthority(model,confirmedExpenses=null){
-  if(!['authority','local-review'].includes(model?.source||'')||model.consistency?.valid!==true)return false;
+function mirrorPayrollManualInputs(model){
   const month=model.month;
   const inputs=loadPayrollTrialInputs();inputs[month]={};
   (model.employees||[]).forEach(row=>{inputs[month][String(row.staffId)]={advance:payrollModelNumber(row.advance),materialAdvance:payrollModelNumber(row.materialAdvance),insurance:payrollModelNumber(row.insuranceSelf),annualBonus:payrollModelNumber(row.annualBonus)};});
   savePayrollTrialInputs(inputs);
   const rates=loadJeanManagementShareRates();rates[month]=Number(model.totals?.managementShareRate||0);localStorage.setItem(JEAN_MANAGEMENT_SHARE_RATE_KEY,JSON.stringify(rates));
+}
+function hydratePayrollLocalDraftFromAuthority(model,confirmedExpenses=null){
+  if(!['authority','local-review'].includes(model?.source||'')||model.consistency?.valid!==true)return false;
+  const month=model.month;
+  mirrorPayrollManualInputs(model);
   const otherMonths=loadExpenses().filter(row=>!String(row.date||'').startsWith(month));
   const monthExpenses=(confirmedExpenses||model.expenses||[]).map(row=>({id:String(row.expenseId||''),date:String(row.expenseDate||''),category:String(row.category||''),amount:payrollModelNumber(row.amount),note:String(row.note||''),createdAt:new Date().toISOString()}));
   saveExpenses([...monthExpenses,...otherMonths]);
   return true;
 }
 function markPayrollLocalDraft(domain='employeeInputs'){
+  if(OBA_PAYROLL.busy)return false;
   if(window.OBA_ACCESS_SESSION?.kind==='boss')return false;
   const current=OBA_PAYROLL.pageModel;
   if(payrollMonthClosed(current)){
@@ -221,7 +226,35 @@ function markPayrollLocalDraft(domain='employeeInputs'){
   setPayrollPageModel(buildDraftPayrollPageModel(month,(current?.sourceRevision||0)+1));
   return true;
 }
+function payrollPendingDraft(month){
+  const meta=loadPayrollDraftMeta()[month];
+  if(!meta?.dirty)return null;
+  const current=OBA_PAYROLL.pageModel;
+  if(current?.month===month&&current.source==='draft'&&!current.draft?.recoveryOnly)return current;
+  if(meta.snapshot)return meta.snapshot;
+  // Older versions recorded a dirty marker without a snapshot.
+  if((meta.domains||[]).some(domain=>['employeeInputs','managementShareRate'].includes(domain)))
+    return buildDraftPayrollPageModel(month,(current?.sourceRevision||0)+1);
+  return null;
+}
+function preservePayrollDraft(authorityModel){
+  const pending=payrollPendingDraft(authorityModel.month);
+  if(!pending)return false;
+  OBA_PAYROLL.localDraftDirty=true;
+  const closed=payrollMonthClosed(authorityModel);
+  setPayrollPageModel({...pending,period:authorityModel.period,authority:authorityModel.authority,
+    source:closed?'error':'draft',sourceRevision:(OBA_PAYROLL.pageModel?.sourceRevision||0)+1,
+    error:closed?{message:'雲端月份已月結；本機薪資草稿已保留，請先確認月份狀態。',details:[]}:null});
+  payrollStatus(closed?'雲端月份已月結，本機草稿未覆蓋。':'已保留尚未確認儲存的本機薪資草稿；雲端資料未覆蓋人工調整。',closed?'error':'dirty');
+  return true;
+}
 function setPayrollPageModel(model){
+  // Persist the complete draft before a page change or reload can lose its context.
+  if(model?.source==='draft'&&!model.draft?.recoveryOnly&&OBA_PAYROLL.localDraftDirty){
+    const all=loadPayrollDraftMeta();
+    all[model.month]={...all[model.month],dirty:true,snapshot:{...model,authority:null},updatedAt:new Date().toISOString()};
+    localStorage.setItem(OBA_PAYROLL_DRAFT_META_KEY,JSON.stringify(all));
+  }
   if(['loading','conflict','local-review','error'].includes(model?.source||'')){OBA_PAYROLL.preview=null;OBA_PAYROLL.previewContext=null;renderFormalPreview(null);}
   OBA_PAYROLL.pageModel=model;OBA_PAYROLL.authorityResult=model?.authority?.rawResult||null;OBA_PAYROLL.authorityMonth=model?.source==='authority'?model.month:'';
   renderPayrollPage(model);return model;
@@ -346,6 +379,23 @@ async function authorizePayrollAction(label='正式薪資月結'){
   OBA_PAYROLL.action={token:String(result.token||''),expiresAt:String(result.expiresAt||''),name:String(result.name||'')};
   payrollStatus(`已授權：${OBA_PAYROLL.action.name||'操作者'}（短期授權只存在本頁記憶體）`,'saved');renderPayrollControls(OBA_PAYROLL.pageModel); return true;
 }
+function payrollStaffReadbackMatches(preview,model){
+  // preview has no expense rows or period: verify payroll values without
+  // presenting it as the owner-only authority overview.
+  if(preview?.month!==model.month||!Array.isArray(preview.employees)||preview.employees.length!==model.employees.length)return false;
+  const fields=['advance','materialAdvance','insuranceSelf','annualBonus','actualSalary'];
+  const numeric=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
+  const rows=new Map();
+  for(const row of preview.employees){
+    const id=String(row?.staffId||'');
+    if(!id||rows.has(id)||!fields.every(field=>numeric(row[field])))return false;
+    rows.set(id,row);
+  }
+  if(!model.employees.every(row=>fields.every(field=>rows.has(row.staffId)&&payrollModelNumber(rows.get(row.staffId)[field])===payrollModelNumber(row[field]))))return false;
+  const totals=['grossSales','refunds','generalExpenses','companyInsurance','staffSalaryCost','profitBeforeManagementShare','managementShare','finalProfit'];
+  return totals.every(field=>numeric(preview[field])&&payrollModelNumber(preview[field])===payrollModelNumber(model.totals[field]))
+    &&numeric(preview.managementShareRate)&&Number(preview.managementShareRate)===Number(model.totals.managementShareRate);
+}
 async function syncPayrollLocalToCloud(){
   const model=OBA_PAYROLL.pageModel;
   if(OBA_PAYROLL.busy)return false;
@@ -370,31 +420,48 @@ async function syncPayrollLocalToCloud(){
   if(model.month!==payrollCurrentMonth()){payrollStatus('試算月份與畫面月份不一致，未執行儲存','error');return false;}
   if(model.consistency?.valid!==true){payrollStatus('薪資試算一致性檢查失敗，禁止儲存','error');return false;}
   const expectedEvidence=payrollSyncEvidence(model);
+  const savingKind=window.OBA_ACCESS_SESSION?.kind;
+  const staffSave=savingKind==='staff';
   const summary=`月份 ${model.month}\n員工輸入 ${(model.employees||[]).length} 人\n支出 ${(model.expenses||[]).length} 筆／${money(model.expenseSummary?.monthTotal)}\n員工實發 ${money(model.totals?.staffSalaryCost)}\n最終淨損益 ${money(model.totals?.finalProfit)}`;
   if(!confirm(`即將儲存以下薪資試算至${payrollCloudEnvironmentName()}雲端：\n${summary}\n\n確定繼續？`))return false;
   if(!(await authorizePayrollAction()))return false;
   const currentModel=OBA_PAYROLL.pageModel;
   if(payrollMonthClosed(currentModel)||currentModel?.source!=='draft'||!OBA_PAYROLL.localDraftDirty||currentModel?.month!==model.month){payrollStatus(payrollMonthClosed(currentModel)?closedPayrollMessage():'薪資試算狀態已改變，未執行儲存','error');return false;}
-  OBA_PAYROLL.busy=true; payrollStatus(`正在安全儲存薪資試算至${payrollCloudEnvironmentName()}雲端…`);
+  if(payrollSyncEvidence(currentModel)!==expectedEvidence){payrollStatus('薪資草稿已改變，請重新確認後儲存。','error');return false;}
+  OBA_PAYROLL.busy=true;
+  renderPayrollPage(model);
   const payload=payrollLocalPayload(model);
-  const result=await payrollRpc('oba_payroll_import_local_v1',{p_payload:payload,p_action_token:OBA_PAYROLL.action.token});
-  OBA_PAYROLL.busy=false;
-  if(!result.ok){payrollStatus(payrollFailure(result),'error');return false;}
-  OBA_PAYROLL.lastPayload=JSON.stringify(payload); OBA_PAYROLL.preview=null;
-  try{localStorage.setItem(OBA_PAYROLL_LOCAL_MIGRATION_KEY,JSON.stringify({completedAt:new Date().toISOString(),expenseCount:Number(result.expenseCount||0),employeeInputCount:Number(result.employeeInputCount||0)}));}catch(_error){}
-  payrollStatus(`薪資試算已儲存：支出 ${result.expenseCount||0} 筆、員工輸入 ${result.employeeInputCount||0} 筆`,'saved');
-  if(isPayrollAuthorityViewer()){
-    const confirmed=await loadPayrollAuthorityOverview();
-    if(!confirmed){OBA_PAYROLL.localDraftDirty=true;payrollStatus('儲存要求已送出，但尚未確認雲端權威結果；禁止月結前確認與完成月結','error');return false;}
-    if(OBA_PAYROLL.pageModel?.source!=='authority'||payrollSyncEvidence(OBA_PAYROLL.pageModel)!==expectedEvidence){
-      OBA_PAYROLL.localDraftDirty=true;
-      const failed={...OBA_PAYROLL.pageModel,source:'error',consistency:{valid:false,errors:['儲存後查回的雲端人工薪資／支出／分潤資料與本機試算不一致']},error:{message:'儲存後的雲端權威資料與本機薪資試算不一致，禁止月結前確認與完成月結。',details:['請重新查詢並核對資料，不要重複儲存。']},sourceRevision:(OBA_PAYROLL.pageModel?.sourceRevision||0)+1};
-      setPayrollPageModel(failed);payrollStatus('儲存要求已送出，但雲端查回驗證不一致；禁止月結前確認與完成月結','error');return false;
+  payrollStatus(`正在儲存並確認${payrollCloudEnvironmentName()}雲端薪資試算…`);
+  try{
+    const result=await payrollRpc('oba_payroll_import_local_v1',{p_payload:payload,p_action_token:OBA_PAYROLL.action.token});
+    if(!result.ok){payrollStatus(payrollFailure(result),'error');return false;}
+    // An RPC acknowledgement is not proof that the manual adjustments persisted.
+    const readback=staffSave
+      ?await payrollRpc('oba_payroll_preview_v1',{p_month:model.month,p_action_token:OBA_PAYROLL.action.token})
+      :await payrollRpc('oba_payroll_overview_readonly_v1',{p_month:model.month});
+    const verified=!staffSave&&readback?.ok&&readback.readOnly===true?buildAuthorityPayrollPageModel(readback,(model.sourceRevision||0)+1):null;
+    const matches=staffSave?readback?.ok===true&&payrollStaffReadbackMatches(readback.preview,model)
+      :verified?.source==='authority'&&verified.month===model.month&&payrollSyncEvidence(verified)===expectedEvidence&&JSON.stringify(verified.employees.map(row=>[row.staffId,row.actualSalary]).sort())===JSON.stringify(model.employees.map(row=>[row.staffId,row.actualSalary]).sort())&&verified.totals.staffSalaryCost===model.totals.staffSalaryCost;
+    if(!matches){
+      payrollStatus('儲存要求已送出，但雲端查回失敗或資料不一致；本機草稿已保留，尚未確認儲存成功。','error');return false;
     }
-    payrollStatus(`薪資試算已儲存並確認雲端權威資料：支出 ${result.expenseCount||0} 筆、員工輸入 ${result.employeeInputCount||0} 筆`,'saved');
-  }else{
-    OBA_PAYROLL.localDraftDirty=false;
-    payrollStatus(`薪資試算已儲存：支出 ${result.expenseCount||0} 筆、員工輸入 ${result.employeeInputCount||0} 筆；請再進行月結前確認`,'saved');
+    if(window.OBA_ACCESS_SESSION?.kind!==savingKind||OBA_PAYROLL.pageModel!==model||payrollCurrentMonth()!==model.month||payrollSyncEvidence(OBA_PAYROLL.pageModel)!==expectedEvidence){
+      payrollStatus('儲存期間草稿或月份已改變；目前草稿已保留，請重新確認。','error');return false;
+    }
+    // Mirror only verified values, then clear the durable pending marker.
+    if(staffSave)mirrorPayrollManualInputs(model);
+    if(!staffSave&&!hydratePayrollLocalDraftFromAuthority(verified))throw new Error('無法保留查回的薪資資料');
+    clearPayrollDraftMeta(model.month);
+    OBA_PAYROLL.localDraftDirty=false;OBA_PAYROLL.lastPayload=staffSave?payrollPayloadText():JSON.stringify(payload);OBA_PAYROLL.preview=null;
+    setPayrollPageModel(staffSave?{...model,authority:null,draft:{...model.draft,dirty:false},sourceRevision:(model.sourceRevision||0)+1}:verified);
+    payrollStatus('薪資試算已儲存並通過雲端查回一致性確認。','saved');
+  }catch(error){
+    payrollStatus(`尚未確認儲存成功，本機草稿保留：${error?.message||String(error)}`,'error');return false;
+  }finally{
+    OBA_PAYROLL.busy=false;
+    const status=document.getElementById('payrollFormalStatus'),statusText=status?.textContent,statusClass=status?.className;
+    renderPayrollPage(OBA_PAYROLL.pageModel);renderPayrollControls(OBA_PAYROLL.pageModel);
+    if(status){status.textContent=statusText;status.className=statusClass;}
   }
   return true;
 }
@@ -469,6 +536,7 @@ function renderPayrollAuthorityOverview(result){
   }
   const authorityModel=buildAuthorityPayrollPageModel(result,revision);
   if(authorityModel.source!=='authority')return setPayrollPageModel(authorityModel);
+  if(preservePayrollDraft(authorityModel))return OBA_PAYROLL.pageModel;
   const conflict=payrollExpenseConflict(authorityModel);
   if(conflict){
     if(!conflict.differingIds.length&&conflict.localOnly.length&&conflict.authorityOnly.length&&payrollExpenseRowsSameContent(conflict.localOnly,conflict.authorityOnly)&&typeof mirrorConfirmedExpenseMonth==='function'){
@@ -516,7 +584,7 @@ async function loadPayrollAuthorityOverview(options={}){
   if(activeLoad&&!activeLoad.settled)abortPayrollAuthorityLoad(activeLoad,'replaced');
   const requestSeq=++OBA_PAYROLL.requestSeq;
   const requestId=++OBA_PAYROLL.authorityRequestSerial;
-  if(!options.background)beginPayrollAuthorityLoad(month);
+  if(!options.background&&!payrollPendingDraft(month))beginPayrollAuthorityLoad(month);
   payrollAuthorityOverviewStatus(options.background?`正在背景確認${payrollCloudEnvironmentName()}雲端權威薪資損益…`:`正在讀取${payrollCloudEnvironmentName()}雲端權威薪資損益…`);
   const controller=typeof AbortController==='function'?new AbortController():null;
   const load={month,requestSeq,requestId,controller,promise:null,startedAt:Date.now(),deadlineAt:Date.now()+PAYROLL_AUTHORITY_LOAD_TIMEOUT_MS,settled:false,aborted:false,timedOut:false,abortReason:'',timeoutId:null};
@@ -543,6 +611,7 @@ async function loadPayrollAuthorityOverview(options={}){
         return false;
       }
       const model=renderPayrollAuthorityOverview(result);
+      if(model?.source==='draft'){return false;}
       if(model?.source==='conflict'){
         payrollAuthorityOverviewStatus('偵測到本機與雲端支出不一致；未修改任何資料，請先檢視本機支出 recovery。','error');return false;
       }
